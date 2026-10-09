@@ -255,22 +255,16 @@ func _run() -> void:
 		var ground_tris: int = tres * tres * 2
 		var tarr: Array = tmesh.surface_get_arrays(0)
 		var tidx: Array = tarr[Mesh.ARRAY_INDEX]
-		var stray := 0
-		var skirt_tris := 0
-		for r in range(ground_tris, tidx.size() / 3):
-			skirt_tris += 1
-			for q in 3:
-				if int(tidx[r * 3 + q]) < tn * tn:
-					stray += 1
-		check("saia do terreno usa os seus próprios vértices", stray == 0,
-			"%d de %d índices perdidos" % [stray, skirt_tris * 3])
+		# desde que a franja cinzenta foi removida, a malha do chunk é SÓ chão:
+		# o número de triângulos tem de bater certo com a grelha, sem sobras.
+		check("chunk sem saia (só a grelha do chão)", tidx.size() / 3 == ground_tris,
+			"%d triângulos, esperados %d" % [int(tidx.size() / 3), ground_tris])
 		# winding: o chão aponta para cima, a saia para fora do chunk
 		var tabb: AABB = tmesh.get_aabb()
 		var centre := Vector3(tabb.position.x + tabb.size.x * 0.5, 0.0,
 			tabb.position.z + tabb.size.z * 0.5)
 		var tverts: Array = tarr[Mesh.ARRAY_VERTEX]
 		var down := 0
-		var outward := 0
 		for r in tidx.size() / 3:
 			var a: Vector3 = tverts[int(tidx[r * 3])]
 			var b: Vector3 = tverts[int(tidx[r * 3 + 1])]
@@ -279,17 +273,9 @@ func _run() -> void:
 			if gn.length_squared() < 1e-12:
 				continue
 			gn = gn.normalized()
-			if r < ground_tris:
-				if gn.y <= 0.0:
-					down += 1
-			else:
-				var mid := (a + b + cc) / 3.0
-				var away := Vector3(mid.x - centre.x, 0.0, mid.z - centre.z)
-				if away.length_squared() > 1e-8 and gn.dot(away.normalized()) > 0.0:
-					outward += 1
+			if gn.y <= 0.0:
+				down += 1
 		check("chão tem as faces viradas para cima", down == 0, "%d viradas ao contrário" % down)
-		check("saia tem as faces viradas para dentro (cull_back esconde-a)",
-			outward == 0, "%d ainda viradas para fora" % outward)
 	else:
 		check("terreno tem geometria", false, "nenhuma mesh de terreno encontrada")
 
@@ -302,16 +288,18 @@ func _run() -> void:
 	# jogo precisa disso: a água ficou opaca e o céu é um skybox opaco.
 	var leaky: Array = []
 	for path in ["res://shaders/toon_terrain.gdshader", "res://shaders/toon_foliage.gdshader",
-			"res://shaders/anime_sky.gdshader", "res://shaders/stylized_water.gdshader"]:
+			"res://shaders/anime_sky.gdshader"]:
 		var code := _strip_comments(str(FileAccess.get_file_as_string(path)))
 		if "ALPHA" in code:
 			leaky.append(str(path).get_file())
-	check("nenhum shader escreve ALPHA (passe transparente)", leaky.is_empty(), ", ".join(leaky))
+	check("só a água pode ser transparente (céu/terreno/folhagem opacos)",
+		leaky.is_empty(), ", ".join(leaky))
+	var wcode := _strip_comments(str(FileAccess.get_file_as_string("res://shaders/stylized_water.gdshader")))
+	check("água usa blend_mix (não additive/alpha que lavaria a cor)", "blend_mix" in wcode)
 
 	# o Compatibility reconstrói a profundidade com NDC -1..1 e reverse-z; o
 	# Forward+ com NDC 0..1. Um shader que leia a profundidade dá resultados
 	# diferentes nos dois — e a exportação web corre em Compatibility.
-	var wcode := _strip_comments(str(FileAccess.get_file_as_string("res://shaders/stylized_water.gdshader")))
 	check("água não depende da textura de profundidade",
 		"depth_texture" not in wcode and "INV_PROJECTION_MATRIX" not in wcode)
 

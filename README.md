@@ -7,6 +7,34 @@ Sandbox de sobrevivência em primeira pessoa, com mundo procedural, estilo anime
 
 ---
 
+## Ver com os olhos (o rasterizador por software)
+
+O sandbox não tem GPU nem browser, e foi exactamente isso que fez cada bug
+visual custar uma ronda de "o utilizador descreve, o agente adivinha". Para
+acabar com a adivinhação existe um par de ferramentas:
+
+```bash
+# 1. o motor corre headless e serializa a geometria REAL (malhas, transformações,
+#    normais e cores de vértice) — tests/shot.gd
+node shot.mjs . -- shot [--view x,y,z] [--look x,y,z]
+
+# 2. tools/render_shot.py rasteriza esses dados com a MESMA matemática dos
+#    shaders e escreve um PNG que se pode abrir/ler
+venv/bin/python tools/render_shot.py shot.bin -o shot.png
+venv/bin/python tools/render_shot.py shot.bin --audit     # relatório de contrato
+```
+
+O `--audit` imprime, por material, quantos vértices/triângulos existem, o AABB
+no mundo, se há cor de vértice preta, triângulos degenerados e winding
+incoerente com a normal. Foi assim que se viu, pela primeira vez, a franja
+cinzenta da saia e o terreno sólido debaixo do jogador — sem browser.
+
+Não é o renderer do Godot (sem sombras/SSAO/MSAA), mas responde às perguntas de
+geometria e shading que estavam por responder: "esta face aponta para onde?",
+"vê-se através disto?", "que cor sai daqui?".
+
+---
+
 ## Jogar agora
 
 ```bash
@@ -45,13 +73,14 @@ O projeto tem o seu próprio teste — é o que corre antes de se dizer que algo
 cd /home/user/Blessed && ./tools/check.sh
 ```
 
-Último resultado: **58 ok, 0 falhas** (`SELFTEST_PASS`).
+Último resultado: **60 ok, 0 falhas** (`SELFTEST_PASS`).
 
-Há duas sondas, ambas a correr o jogo a sério dentro do motor:
+Há três sondas, todas a correr o jogo a sério dentro do motor:
 
 ```bash
-./tools/check.sh                                              # 53 verificações, PASS/FAIL
+./tools/check.sh                                              # 60 verificações, PASS/FAIL
 godot --headless --path . --quit-after 3000 -- diag           # números, não opiniões
+node shot.mjs . -- shot                                       # despeja a geometria real
 ```
 
 O `tests/diag.gd` imprime o que o ecrã mostra sem olhar para o ecrã: a direção
@@ -71,16 +100,18 @@ O que o `tests/selftest.gd` cobre:
 - noite: fase detetada, luz a zero, criatura gerada; dia: luz a 0.89
 - NPC: cadeia canónica completa, confiança sobe ao falar, ≥3 tópicos, resposta certa
 - i18n: PT e EN diferentes, formatação com parâmetros
-- os materiais opacos não escrevem `ALPHA` (escrever `ALPHA` num shader espacial
-  põe o material no passe transparente — foi isso que fez as casas parecerem
-  um raio X)
+- só a água pode ser transparente: céu, terreno e folhagem **não** escrevem
+  `ALPHA` (escrever `ALPHA` num shader espacial põe o material no passe
+  transparente — foi isso que fez as casas parecerem um raio X); a água é a
+  única superfície transparente e usa `blend_mix`, sem depender da textura de
+  profundidade (que difere entre Forward+ e Compatibility)
 - a vista de depuração troca de materiais nos dois sentidos e constrói a cena
   de diagnóstico
 - comandos: comando inexistente recusado
 - save/load: round-trip de inventário e hora
-- geometria do terreno: o chão com as faces para cima, a saia com as faces para
-  fora e — regressão real que isto apanhou — a saia a usar os seus próprios
-  vértices em vez dos do canto do chunk
+- geometria do terreno: o chão com as faces para cima e o chunk **sem saia** —
+  a franja vertical que desenhava os limites dos chunks foi removida (ver
+  abaixo), e o número de triângulos tem de bater certo com a grelha
 - mapa de entrada: as 22 acções existem e têm teclas (o `[input]` é vazio de propósito —
   `Game._ready()` constrói-o em runtime, por isso isto tinha de ser verificado)
 - os 4 traços do prólogo alteram mesmo números: alcance 4.20 → 5.67 m, trabalho ×1.45,

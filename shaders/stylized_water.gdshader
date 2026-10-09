@@ -18,13 +18,22 @@ shader_type spatial;
 //    água era lixo. Sem a textura de profundidade o mesmo shader dá o mesmo
 //    resultado nos dois renderers.
 //
-// A espuma de margem passa a vir das bandas de onda, não da profundidade real.
-render_mode depth_draw_opaque, cull_back, diffuse_toon;
+// A água é a ÚNICA superfície transparente que sobra no jogo (céu, terreno e
+// folhagem são opacos). Uma única superfície transparente por cima de um mundo
+// opaco ordena-se bem: não há o "raio X" que várias superfícies transparentes
+// sobrepostas causavam. Por isso pode usar blend_mix + ALPHA com segurança.
+//
+// Continua SEM hint_depth_texture: a reconstrução da profundidade difere entre
+// Forward+ (NDC 0..1) e Compatibility (NDC -1..1, reverse-z desde o 4.3), e a
+// exportação web corre em Compatibility. Sem ela, o mesmo shader dá o mesmo
+// resultado nos dois renderers.
+render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_toon;
 
 uniform vec4 deep_color : source_color = vec4(0.10, 0.36, 0.52, 1.0);
 uniform vec4 shallow_color : source_color = vec4(0.34, 0.78, 0.82, 1.0);
 uniform vec4 foam_color : source_color = vec4(0.94, 0.98, 1.00, 1.0);
 uniform vec4 sky_tint : source_color = vec4(0.62, 0.82, 1.00, 1.0);
+uniform float alpha : hint_range(0.0, 1.0) = 0.82;
 uniform float wave_speed : hint_range(0.0, 4.0) = 0.55;
 uniform float wave_scale : hint_range(0.5, 40.0) = 9.0;
 uniform float sun_glow : hint_range(0.0, 2.0) = 0.6;
@@ -47,20 +56,20 @@ void fragment() {
 	vec2 p = v_world.xz * wave_scale * 0.1;
 	float w = wave(p, t) * 0.5 + 0.5;
 
-	// bandas duras — é o "traço" do desenho
-	float band = floor(w * 4.0) / 4.0;
-	vec3 col = mix(shallow_color.rgb, deep_color.rgb, band);
-	col = mix(col, col * 1.22 + vec3(0.05), step(0.75, w) * 0.5);
+	// bandas suaves — é o "traço" do desenho, mas sem pontilhar
+	float band = floor(w * 3.0) / 3.0;
+	vec3 col = mix(shallow_color.rgb, deep_color.rgb, band * 0.85);
 
-	// crista de espuma nas bandas mais altas
-	col = mix(col, foam_color.rgb, step(0.93, w) * 0.7);
+	// espuma só nas cristas mais altas, esbatida (nada de bolinhas duras)
+	col = mix(col, foam_color.rgb, smoothstep(0.86, 1.0, w) * 0.25);
 
-	// reflexo falso: brilho onde a normal aponta ao sol
-	vec3 n = normalize(NORMAL + vec3(band * 0.12, 0.0, (1.0 - band) * 0.12));
-	float glow = pow(max(dot(reflect(-VIEW, n), normalize(sun_dir)), 0.0), 18.0);
+	// reflexo falso: brilho largo onde a normal aponta ao sol
+	vec3 n = normalize(NORMAL + vec3(w * 0.15 - 0.075, 0.0, (1.0 - w) * 0.15 - 0.075));
+	float glow = pow(max(dot(reflect(-VIEW, n), normalize(sun_dir)), 0.0), 24.0);
 	col += sky_tint.rgb * glow * sun_glow;
 
 	ALBEDO = col;
-	ROUGHNESS = 0.15;
-	SPECULAR = 0.6;
+	ALPHA = alpha;
+	ROUGHNESS = 0.12;
+	SPECULAR = 0.7;
 }

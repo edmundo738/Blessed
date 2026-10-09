@@ -43,7 +43,7 @@ func _ready() -> void:
 	# (fora do .pck; servem para medir o jogo a sério, não para jogar)
 	for arg in all_args:
 		var s_arg := str(arg)
-		if s_arg in ["selftest", "diag"]:
+		if s_arg in ["selftest", "diag", "shot"]:
 			_start_probe(s_arg)
 			break
 

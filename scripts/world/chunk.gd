@@ -111,71 +111,15 @@ func _build_ground(o: Vector2, with_collision: bool) -> void:
 			st.add_index(a); st.add_index(c); st.add_index(b)
 			st.add_index(a); st.add_index(d); st.add_index(c)
 
-	# 3) saia: parede vertical à volta do chunk, esconde as fendas entre chunks
-	#    de LOD diferente. (Usa índices como o resto — misturar indexado com
-	#    não-indexado na mesma superfície é inválido.)
-	#
-	#    Antes as normais eram Vector3.DOWN e a ordem dos índices era fixa:
-	#    em dois dos quatro lados a face ficava virada para DENTRO do chunk e
-	#    era cortada pelo cull_back, e onde aparecia estava às escuras porque a
-	#    normal apontava para baixo. Agora a normal aponta para fora e a ordem
-	#    dos índices decide-se pelo sinal, como MeshKit.tri faz.
-	var cx := o.x + SIZE * 0.5
-	var cz := o.y + SIZE * 0.5
-	# O índice base da saia conta-se à mão, num Array de um elemento.
-	# Dois motivos, ambos medidos em tests/diag.gd:
-	#   • `st.get_vertex_count()` devolve 0 aqui, e com isso os 384 triângulos
-	#     da saia apontavam todos para os vértices 0..3 (o canto do chunk);
-	#   • uma lambda GDScript captura variáveis POR VALOR, por isso
-	#     `skirt_base += 4` dentro dela não avança nada lá fora. O Array é uma
-	#     referência e por isso o contador persiste.
-	var skirt_base := [n * n]
-	var skirt := func(i0: int, j0: int, i1: int, j1: int) -> void:
-		var x0 := o.x + i0 * step
-		var z0 := o.y + j0 * step
-		var x1 := o.x + i1 * step
-		var z1 := o.y + j1 * step
-		var h0: float = heights[j0 * n + i0]
-		var h1: float = heights[j1 * n + i1]
-		var base: int = int(skirt_base[0])
-		skirt_base[0] = base + 4
-		# A saia aponta para DENTRO do chunk, não para fora.
-		# Apontar para fora fazia dela uma faixa cinzenta de 1-2 m à volta de
-		# cada chunk, visível do chunk vizinho (e como cada chunk tem a sua,
-		# via-se "dos dois lados"). Para dentro, o cull_back esconde-a e só
-		# aparece através de uma costura — que é a única coisa que ela tem de
-		# fazer: tapar a fenda entre chunks com LOD diferente.
-		var inward := Vector3(cx - (x0 + x1) * 0.5, 0.0, cz - (z0 + z1) * 0.5)
-		if inward.length_squared() < 1e-6:
-			inward = Vector3(0, 0, 1)
-		inward = inward.normalized()
-		st.set_color(Color(0.36, 0.33, 0.30))
-		st.set_normal(inward)
-		st.add_vertex(Vector3(x0, h0, z0))                 # 0 = topo, início
-		st.set_color(Color(0.30, 0.27, 0.25))
-		st.set_normal(inward)
-		st.add_vertex(Vector3(x1, h1, z1))                 # 1 = topo, fim
-		st.set_color(Color(0.24, 0.22, 0.20))
-		st.set_normal(inward)
-		st.add_vertex(Vector3(x1, h1 - SKIRT, z1))         # 2 = base, fim
-		st.set_color(Color(0.30, 0.27, 0.25))
-		st.set_normal(inward)
-		st.add_vertex(Vector3(x0, h0 - SKIRT, z0))         # 3 = base, início
-		var t0 := Vector3(x0, h0, z0)
-		var t1 := Vector3(x1, h1, z1)
-		var b1 := Vector3(x1, h1 - SKIRT, z1)
-		var flip := (t1 - t0).cross(b1 - t0).dot(inward) < 0.0
-		if flip:
-			st.add_index(base + 0); st.add_index(base + 2); st.add_index(base + 1)
-			st.add_index(base + 0); st.add_index(base + 3); st.add_index(base + 2)
-		else:
-			st.add_index(base + 0); st.add_index(base + 1); st.add_index(base + 2)
-			st.add_index(base + 0); st.add_index(base + 2); st.add_index(base + 3)
-	for k in res:
-		skirt.call(k, 0, k + 1, 0)
-		skirt.call(k, res, k + 1, res)
-		skirt.call(0, k, 0, k + 1)
-		skirt.call(res, k, res, k + 1)
+	# 3) SEM SAIA.
+	#    A saia (parede vertical à volta do chunk) foi removida. Medida com
+	#    tools/render_shot.py (o rasterizador por software que dá olhos a este
+	#    projecto): de qualquer ângulo baixo ou debaixo de água, a saia aparecia
+	#    como uma franja de dentes cinzentos nos limites dos chunks — exactamente
+	#    o "faixas verticais que acompanham o terreno" reportado. Apontá-la para
+	#    fora ou para dentro só trocava o ângulo em que fazia lixo; a única forma
+	#    de a franja desaparecer é não a desenhar. As costuras entre LODs ficam
+	#    tapadas pelo próprio overlap das grelhas vizinhas (passo partilhado).
 
 	var mesh := st.commit()
 	mesh.surface_set_material(0, mats.terrain)
