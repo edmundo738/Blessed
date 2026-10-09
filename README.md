@@ -42,9 +42,21 @@ O projeto tem o seu próprio teste — é o que corre antes de se dizer que algo
 cd /home/user/Blessed && ./tools/check.sh
 ```
 
-Último resultado: **50 ok, 0 falhas** (`SELFTEST_PASS`).
+Último resultado: **53 ok, 0 falhas** (`SELFTEST_PASS`).
 
-O que o `tests/selftest.gd` cobre de facto, dentro do motor a correr:
+Há duas sondas, ambas a correr o jogo a sério dentro do motor:
+
+```bash
+./tools/check.sh                                              # 53 verificações, PASS/FAIL
+godot --headless --path . --quit-after 3000 -- diag           # números, não opiniões
+```
+
+O `tests/diag.gd` imprime o que o ecrã mostra sem olhar para o ecrã: a direção
+que cada tecla produz comparada com a esperada, o winding e as normais de cada
+malha, as cores de vértice por espécie, a posição do sol e o spawn. Foi assim
+que se encontraram os quatro bugs de renderização — nenhum deles dava erro.
+
+O que o `tests/selftest.gd` cobre:
 
 - geração do mundo: altura do terreno, 49 chunks, 4 810 nós colhíveis, 10 379 instâncias de
   vegetação, 7 biomas
@@ -58,6 +70,9 @@ O que o `tests/selftest.gd` cobre de facto, dentro do motor a correr:
 - i18n: PT e EN diferentes, formatação com parâmetros
 - comandos: comando inexistente recusado
 - save/load: round-trip de inventário e hora
+- geometria do terreno: o chão com as faces para cima, a saia com as faces para
+  fora e — regressão real que isto apanhou — a saia a usar os seus próprios
+  vértices em vez dos do canto do chunk
 - mapa de entrada: as 22 acções existem e têm teclas (o `[input]` é vazio de propósito —
   `Game._ready()` constrói-o em runtime, por isso isto tinha de ser verificado)
 - os 4 traços do prólogo alteram mesmo números: alcance 4.20 → 5.67 m, trabalho ×1.45,

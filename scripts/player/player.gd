@@ -149,10 +149,19 @@ func _smooth_look(delta: float) -> void:
 
 
 # ── direção pedida ────────────────────────────────────────────────────────
+## Direção pedida, em espaço LOCAL do jogador.
+##
+## Convenção Godot: a câmara e o jogador olham para **-Z**. Por isso
+## "para a frente" é z NEGATIVO. Antes isto estava trocado nos dois eixos:
+## usava +Z como frente (W andava para trás) e get_axis("move_right",
+## "move_left") devolve +1 quando se carrega em A (A andava para a direita).
+## tests/diag.gd mede isto tecla a tecla — ver "A. CONTROLOS".
 func _wish_direction() -> Vector3:
-	var f := Input.get_axis("move_back", "move_forward")
-	var s := Input.get_axis("move_right", "move_left")
-	var v := Vector3(s, 0.0, f)
+	# get_axis(negativo, positivo) = força(positivo) - força(negativo).
+	# A ordem dos argumentos importa: trocá-la inverte o eixo.
+	var lr := Input.get_axis("move_left", "move_right")    # D → +1, A → -1
+	var fb := Input.get_axis("move_back", "move_forward")  # W → +1, S → -1
+	var v := Vector3(lr, 0.0, -fb)
 	return v.normalized() if v.length_squared() > 0.0001 else Vector3.ZERO
 
 
@@ -176,7 +185,7 @@ func _move_land(delta: float, wish: Vector3) -> void:
 	# sprint só com fôlego e a andar para a frente
 	var has_stamina := stamina > 2.0
 	sprinting = Input.is_action_pressed("sprint") and not crouching \
-		and wish.z > 0.2 and has_stamina and is_on_floor()
+		and wish.z < -0.2 and has_stamina and is_on_floor()  # frente é -Z
 	var target_speed := WALK
 	if sprinting:
 		target_speed = SPRINT

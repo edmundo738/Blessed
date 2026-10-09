@@ -108,8 +108,25 @@ func _build_ground(o: Vector2, with_collision: bool) -> void:
 			st.add_index(a); st.add_index(c); st.add_index(b)
 			st.add_index(a); st.add_index(d); st.add_index(c)
 
-	# 3) saia: esconde as fendas entre chunks de LOD diferente
-	#    (usa índices como o resto — misturar indexado com não-indexado é inválido)
+	# 3) saia: parede vertical à volta do chunk, esconde as fendas entre chunks
+	#    de LOD diferente. (Usa índices como o resto — misturar indexado com
+	#    não-indexado na mesma superfície é inválido.)
+	#
+	#    Antes as normais eram Vector3.DOWN e a ordem dos índices era fixa:
+	#    em dois dos quatro lados a face ficava virada para DENTRO do chunk e
+	#    era cortada pelo cull_back, e onde aparecia estava às escuras porque a
+	#    normal apontava para baixo. Agora a normal aponta para fora e a ordem
+	#    dos índices decide-se pelo sinal, como MeshKit.tri faz.
+	var cx := o.x + SIZE * 0.5
+	var cz := o.y + SIZE * 0.5
+	# O índice base da saia conta-se à mão, num Array de um elemento.
+	# Dois motivos, ambos medidos em tests/diag.gd:
+	#   • `st.get_vertex_count()` devolve 0 aqui, e com isso os 384 triângulos
+	#     da saia apontavam todos para os vértices 0..3 (o canto do chunk);
+	#   • uma lambda GDScript captura variáveis POR VALOR, por isso
+	#     `skirt_base += 4` dentro dela não avança nada lá fora. O Array é uma
+	#     referência e por isso o contador persiste.
+	var skirt_base := [n * n]
 	var skirt := func(i0: int, j0: int, i1: int, j1: int) -> void:
 		var x0 := o.x + i0 * step
 		var z0 := o.y + j0 * step
@@ -117,21 +134,35 @@ func _build_ground(o: Vector2, with_collision: bool) -> void:
 		var z1 := o.y + j1 * step
 		var h0: float = heights[j0 * n + i0]
 		var h1: float = heights[j1 * n + i1]
-		var base: int = st.get_vertex_count()
+		var base: int = int(skirt_base[0])
+		skirt_base[0] = base + 4
+		# para fora = do meio da aresta para longe do centro do chunk
+		var outward := Vector3((x0 + x1) * 0.5 - cx, 0.0, (z0 + z1) * 0.5 - cz)
+		if outward.length_squared() < 1e-6:
+			outward = Vector3(0, 0, -1)
+		outward = outward.normalized()
 		st.set_color(Color(0.36, 0.33, 0.30))
-		st.set_normal(Vector3.DOWN)
-		st.add_vertex(Vector3(x0, h0, z0))
+		st.set_normal(outward)
+		st.add_vertex(Vector3(x0, h0, z0))                 # 0 = topo, início
 		st.set_color(Color(0.30, 0.27, 0.25))
-		st.set_normal(Vector3.DOWN)
-		st.add_vertex(Vector3(x1, h1, z1))
+		st.set_normal(outward)
+		st.add_vertex(Vector3(x1, h1, z1))                 # 1 = topo, fim
 		st.set_color(Color(0.24, 0.22, 0.20))
-		st.set_normal(Vector3.DOWN)
-		st.add_vertex(Vector3(x1, h1 - SKIRT, z1))
+		st.set_normal(outward)
+		st.add_vertex(Vector3(x1, h1 - SKIRT, z1))         # 2 = base, fim
 		st.set_color(Color(0.30, 0.27, 0.25))
-		st.set_normal(Vector3.DOWN)
-		st.add_vertex(Vector3(x0, h0 - SKIRT, z0))
-		st.add_index(base + 0); st.add_index(base + 2); st.add_index(base + 1)
-		st.add_index(base + 0); st.add_index(base + 3); st.add_index(base + 2)
+		st.set_normal(outward)
+		st.add_vertex(Vector3(x0, h0 - SKIRT, z0))         # 3 = base, início
+		var t0 := Vector3(x0, h0, z0)
+		var t1 := Vector3(x1, h1, z1)
+		var b1 := Vector3(x1, h1 - SKIRT, z1)
+		var flip := (t1 - t0).cross(b1 - t0).dot(outward) < 0.0
+		if flip:
+			st.add_index(base + 0); st.add_index(base + 2); st.add_index(base + 1)
+			st.add_index(base + 0); st.add_index(base + 3); st.add_index(base + 2)
+		else:
+			st.add_index(base + 0); st.add_index(base + 1); st.add_index(base + 2)
+			st.add_index(base + 0); st.add_index(base + 2); st.add_index(base + 3)
 	for k in res:
 		skirt.call(k, 0, k + 1, 0)
 		skirt.call(k, res, k + 1, res)

@@ -165,6 +165,11 @@ func _run() -> void:
 	check("fome baixa abranda", surv.speed_multiplier() <= 1.0)
 
 	# ── 8. ciclo dia/noite e criaturas ────────────────────────────────────
+	# O NightDirector não gera criaturas a menos de 10 m de uma fogueira (é o
+	# comportamento correcto). O jogador pode ter nascido ao pé da aldeia, por
+	# isso afastamo-lo para o meio do mato durante esta secção.
+	var saved_pos: Vector3 = main.player.global_position
+	main.player.global_position = _dry_spot(main.player.global_position, 70.0)
 	Game.hour = 23.0
 	Game.phase = Game.current_phase()
 	check("noite detetada", Game.is_night())
@@ -179,6 +184,7 @@ func _run() -> void:
 			break
 		await _frames(1)
 	check("a noite traz criaturas", had_creature, "n=%d" % night.creatures.size())
+	main.player.global_position = saved_pos
 	Game.hour = 12.0
 	Game.phase = Game.current_phase()
 	check("dia detetado", not Game.is_night() and Game.daylight() > 0.3,
@@ -226,6 +232,65 @@ func _run() -> void:
 	check("load repõe inventário", inv.count("stone") == stone_before,
 		"stone=%d" % inv.count("stone"))
 	check("load repõe a hora", absf(Game.hour - 9.5) < 0.5, "hour=%.2f" % Game.hour)
+
+	# ── geometria do terreno: a saia não pode ser degenerada ─────────────
+	# (regressão real: get_vertex_count() devolvia 0 e os 384 triângulos da
+	#  saia apontavam todos para os vértices 0..3 do canto do chunk)
+	var tchunk: Node3D = null
+	var tmesh: Mesh = null
+	for c in main.world.get_children():
+		if not (c is Node3D):
+			continue
+		for mi in c.get_children():
+			if mi is MeshInstance3D and (mi as MeshInstance3D).mesh != null \
+					and (mi as MeshInstance3D).mesh.get_surface_count() > 0:
+				tchunk = c
+				tmesh = (mi as MeshInstance3D).mesh
+				break
+		if tmesh:
+			break
+	if tmesh:
+		var tres: int = Chunk.RES[clampi(int(tchunk.get("lod")), 0, Chunk.RES.size() - 1)]
+		var tn: int = tres + 1
+		var ground_tris: int = tres * tres * 2
+		var tarr: Array = tmesh.surface_get_arrays(0)
+		var tidx: Array = tarr[Mesh.ARRAY_INDEX]
+		var stray := 0
+		var skirt_tris := 0
+		for r in range(ground_tris, tidx.size() / 3):
+			skirt_tris += 1
+			for q in 3:
+				if int(tidx[r * 3 + q]) < tn * tn:
+					stray += 1
+		check("saia do terreno usa os seus próprios vértices", stray == 0,
+			"%d de %d índices perdidos" % [stray, skirt_tris * 3])
+		# winding: o chão aponta para cima, a saia para fora do chunk
+		var tabb: AABB = tmesh.get_aabb()
+		var centre := Vector3(tabb.position.x + tabb.size.x * 0.5, 0.0,
+			tabb.position.z + tabb.size.z * 0.5)
+		var tverts: Array = tarr[Mesh.ARRAY_VERTEX]
+		var down := 0
+		var inward := 0
+		for r in tidx.size() / 3:
+			var a: Vector3 = tverts[int(tidx[r * 3])]
+			var b: Vector3 = tverts[int(tidx[r * 3 + 1])]
+			var cc: Vector3 = tverts[int(tidx[r * 3 + 2])]
+			var gn := (b - a).cross(cc - a)
+			if gn.length_squared() < 1e-12:
+				continue
+			gn = gn.normalized()
+			if r < ground_tris:
+				if gn.y <= 0.0:
+					down += 1
+			else:
+				var mid := (a + b + cc) / 3.0
+				var away := Vector3(mid.x - centre.x, 0.0, mid.z - centre.z)
+				if away.length_squared() > 1e-8 and gn.dot(away.normalized()) <= 0.0:
+					inward += 1
+		check("chão tem as faces viradas para cima", down == 0, "%d viradas ao contrário" % down)
+		check("saia tem as faces viradas para fora", inward == 0, "%d viradas ao contrário" % inward)
+	else:
+		check("terreno tem geometria", false, "nenhuma mesh de terreno encontrada")
 
 	# ── mapa de entrada ───────────────────────────────────────────────────
 	# project.godot não tem [input]: o mapa é construído em runtime por
@@ -320,3 +385,15 @@ func _action_has_mouse(action: String) -> bool:
 		if ev is InputEventMouseButton:
 			return (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT
 	return false
+
+
+## Um ponto seco e plano a `dist` de `from` — para isolar um teste do resto do mundo.
+func _dry_spot(from: Vector3, dist: float) -> Vector3:
+	var ter: Terrain = main.world.terrain
+	for i in 64:
+		var a := float(i) / 64.0 * TAU
+		var x := from.x + cos(a) * dist
+		var z := from.z + sin(a) * dist
+		if not ter.is_water(x, z) and ter.slope(x, z) < 0.35:
+			return Vector3(x, ter.height(x, z) + 1.0, z)
+	return from + Vector3(dist, 0, 0)

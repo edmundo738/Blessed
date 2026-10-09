@@ -114,7 +114,10 @@ func _build_water() -> void:
 func update_time(hour: float, daylight: float, phase: String) -> void:
 	var dir := Game.sun_direction()
 	sun.rotation = Vector3(0, 0, 0)
-	sun.look_at_from_position(dir * 200.0, Vector3.ZERO, Vector3.UP)
+	# `dir` é a direção para onde a luz VIAJA (já vem negada em Game.sun_direction()).
+	# O nó tem de ficar do lado OPOSTO, senão o sol nasce debaixo do terreno e
+	# ilumina tudo por baixo — foi isso que deixou o chão às escuras.
+	sun.look_at_from_position(-dir * 200.0, Vector3.ZERO, Vector3.UP)
 	sun.light_color = Game.sun_color()
 	var night := 1.0 - daylight
 	sun.light_energy = lerpf(1.35, 0.22, night)

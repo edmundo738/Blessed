@@ -37,15 +37,20 @@ func _ready() -> void:
 	print("BLESSED pronto. seed=", Game.world_seed)
 	var all_args := OS.get_cmdline_args() + OS.get_cmdline_user_args()
 
-	if "selftest" in all_args:
-		_start_selftest()
+	# sondas de desenvolvimento: `-- selftest`, `-- diag`, …
+	# (fora do .pck; servem para medir o jogo a sério, não para jogar)
+	for arg in all_args:
+		var s_arg := str(arg)
+		if s_arg in ["selftest", "diag"]:
+			_start_probe(s_arg)
+			break
 
 
-## Arranca o self-test (fora do .pck; só em desenvolvimento).
-func _start_selftest() -> void:
-	var path := "res://tests/selftest.gd"
+## Arranca uma sonda de desenvolvimento (tests/<nome>.gd).
+func _start_probe(which: String) -> void:
+	var path := "res://tests/%s.gd" % which
 	if not ResourceLoader.exists(path):
-		print("SELFTEST_FAIL: tests/selftest.gd em falta")
+		print("SELFTEST_FAIL: %s em falta" % path)
 		get_tree().quit(1)
 		return
 	var st: Node = load(path).new()
@@ -81,11 +86,42 @@ func _build_world() -> void:
 	village.build()
 
 
+## Onde se nasce.
+##
+## A aldeia é a referência visual do mundo, por isso nasce-se a ~20-32 m do
+## centro: perto o bastante para ver as cabanas, longe o bastante para não
+## ficar dentro do anel das fogueiras (o NightDirector não gera criaturas a
+## menos de 10 m de uma luz, e nascer encostado a uma tornava a primeira noite
+## impossível de avaliar). Antes o spawn saía à volta da ORIGEM, a ~96 m das
+## casas — não se via rigorosamente nada.
+func _pick_spawn() -> Vector3:
+	var ter: Terrain = world.terrain
+	var vc: Vector2 = ter.village_center()
+	var lit: Array = structures.lit_positions()
+	var fallback := ter.find_spawn(vc, 24.0)
+	for rr in [20.0, 26.0, 32.0]:
+		var ring: float = float(rr)
+		for i in 32:
+			var a := float(i) / 32.0 * TAU
+			var x: float = vc.x + cos(a) * ring
+			var z: float = vc.y + sin(a) * ring
+			if ter.slope(x, z) >= 0.35 or ter.is_water(x, z):
+				continue
+			var near_fire := false
+			for lp in lit:
+				if (lp as Vector3).distance_to(Vector3(x, 0, z)) < 14.0:
+					near_fire = true
+					break
+			if near_fire:
+				continue
+			return Vector3(x, ter.height(x, z), z)
+	return fallback
+
+
 func _build_player() -> void:
 	player = Player.new()
 	world.add_child(player)
-	var spawn := world.terrain.find_spawn(Vector2.ZERO, 46.0)
-	player.global_position = spawn + Vector3(0, 1.0, 0)
+	player.global_position = _pick_spawn() + Vector3(0, 1.0, 0)
 
 	survival = Survival.new()
 	player.add_child(survival)

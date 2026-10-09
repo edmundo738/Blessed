@@ -257,23 +257,16 @@ func _add_struct(id: String, mesh: ArrayMesh, size: Vector3, solid: bool, light:
 
 ## Desloca uma malha (não há forma direta em ArrayMesh, por isso reconstrói).
 static func _offset(mesh: ArrayMesh, off: Vector3) -> ArrayMesh:
+	## Desloca uma malha sem lhe perder nada.
+	##
+	## A versão anterior reconstruía a superfície à mão e lia as cores com
+	## `int(order[k])`. As malhas do MeshKit NÃO são indexadas, por isso `order`
+	## caía no array de vértices e `int(Vector3)` devolve 0: todas as copas
+	## ficavam com a cor do vértice 0 — na prática, pretas. `append_from` copia
+	## vértices, normais, cores, UV e índices e aplica a transformação.
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var arr := mesh.surface_get_arrays(0)
-	var verts: Array = arr[Mesh.ARRAY_VERTEX]
-	var norms: Variant = arr[Mesh.ARRAY_NORMAL]
-	var cols: Variant = arr[Mesh.ARRAY_COLOR]
-	var idx: Variant = arr[Mesh.ARRAY_INDEX]
-	var order: Array = (idx as Array) if (idx != null and not (idx as Array).is_empty()) else verts
-	var has_n: bool = norms != null and (norms as Array).size() == verts.size()
-	var has_c: bool = cols != null and (cols as Array).size() == verts.size()
-	for k in order.size():
-		var vi := int(order[k])
-		if has_c:
-			st.set_color((cols as Array)[vi])
-		if has_n:
-			st.set_normal((norms as Array)[vi])
-		st.add_vertex((verts[vi] as Vector3) + off)
+	st.append_from(mesh, 0, Transform3D(Basis.IDENTITY, off))
 	return st.commit()
 
 

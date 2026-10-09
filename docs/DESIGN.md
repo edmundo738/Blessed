@@ -171,7 +171,32 @@ Cada passo ensina uma mecânica e desbloqueia o seguinte. Contadores via `Game.b
 
 ---
 
-## 10. O que está por fazer
+## 10. Quatro bugs que só se viam a jogar
+
+Todos medidos com `tests/diag.gd`, todos silenciosos (nenhum dava erro):
+
+| Sintoma | Causa medida | Correcção |
+|---|---|---|
+| W/S/A/D todos ao contrário (dot = −1.00) | `Vector3(s, 0, f)` usava **+Z** como frente; em Godot a frente é **−Z**. E `get_axis` recebe (negativo, positivo) — trocar a ordem inverte o eixo | `_wish_direction()` reescrito, medido tecla a tecla |
+| Chão às escuras, céu normal | `world.gd` punha o sol em `dir * 200` quando `dir` é a direção para onde a luz **viaja**: o nó ficava a **−67 m**, a iluminar o mundo por baixo | `-dir * 200` |
+| Árvores pretas | `_offset()` lia as cores com `int(order[k])`; as malhas não são indexadas, `int(Vector3)` devolve 0 e **todas as copas ficavam pretas** | `SurfaceTool.append_from` |
+| Não se viam casas | o spawn saía à volta da **origem**, a ~96 m da aldeia | `_pick_spawn()`: 20-32 m do centro, fora do anel das fogueiras |
+
+E um quinto que estava lá desde o início: `st.get_vertex_count()` devolve 0, por
+isso os **384 triângulos da saia do terreno apontavam todos para os vértices 0-3**
+do canto do chunk. Lixo degenerado, mais 768 vértices órfãos por chunk.
+
+Duas lições que ficam como regra:
+
+- **`:=` sobre qualquer expressão dinâmica é erro de parse em Godot 4.7**, não um
+  aviso. Inclui `for x in [1.0, 2.0]` (o `x` é Variant) e qualquer acesso a um
+  `Node` não tipado.
+- **Uma lambda GDScript captura variáveis por valor.** `contador += 1` dentro
+  dela não avança nada lá fora — usar um Array de um elemento.
+
+---
+
+## 11. O que está por fazer
 
 Por ordem de prioridade, com a razão:
 
