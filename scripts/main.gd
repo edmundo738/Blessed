@@ -37,6 +37,18 @@ func _ready() -> void:
 		int(floor(player.global_position.z / Chunk.SIZE))), world.radius())
 	_build_debug_view()
 	print("BLESSED pronto. seed=", Game.world_seed)
+	# carimbo de build + renderer efectivo: para saber, olhando para o ecrã ou
+	# para a consola do browser, EXACTAMENTE que código está a correr.
+	var stamp := ""
+	if FileAccess.file_exists("res://build_info"):
+		stamp = str(FileAccess.get_file_as_string("res://build_info")).strip_edges()
+	if stamp == "":
+		stamp = "dev"
+	print("BUILD ", stamp)
+	print("RENDERER ", str(ProjectSettings.get_setting_with_override(
+		"rendering/renderer/rendering_method")), " | OS ", OS.get_name())
+	if hud != null:
+		hud.set_build(stamp)
 	var all_args := OS.get_cmdline_args() + OS.get_cmdline_user_args()
 
 	# sondas de desenvolvimento: `-- selftest`, `-- diag`, …

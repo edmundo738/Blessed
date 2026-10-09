@@ -16,6 +16,7 @@ var toast_label: Label
 var clock_label: Label
 var objective_label: Label
 var fps_label: Label
+var build_label: Label
 var fear_rect: ColorRect
 var hurt_rect: ColorRect
 var crosshair: Control
@@ -40,6 +41,11 @@ const BAR_ORDER := [
 	["sanity", Color(0.55, 0.86, 0.72)],
 	["blessing", Color(0.98, 0.92, 0.62)],
 ]
+
+
+func set_build(stamp: String) -> void:
+	if build_label != null:
+		build_label.text = "build %s" % stamp
 
 
 func _ready() -> void:
@@ -270,6 +276,18 @@ func _top() -> void:
 	fps_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.4))
 	fps_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(fps_label)
+
+	build_label = Label.new()
+	build_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	build_label.offset_left = -220
+	build_label.offset_right = -22
+	build_label.offset_top = 78
+	build_label.offset_bottom = 96
+	build_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	build_label.add_theme_font_size_override("font_size", 10)
+	build_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.35))
+	build_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(build_label)
 
 
 func _subtitle_ui() -> void:

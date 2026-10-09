@@ -116,8 +116,22 @@ def _excluded(rel: str, excludes: tuple[str, ...]) -> bool:
     return False
 
 
+def _build_stamp(root: str) -> str:
+    import subprocess, datetime
+    h = "dev"
+    try:
+        h = subprocess.run(["git", "-C", root, "rev-parse", "--short", "HEAD"],
+                           capture_output=True, text=True, check=True).stdout.strip()
+    except Exception:
+        pass
+    return "%s %s" % (h, datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%MZ"))
+
+
 def write_pck(root: str, dest: str, excludes: tuple[str, ...], engine=(4, 7, 2)) -> int:
     files = collect(root, excludes)
+    # carimbo de build: o jogo mostra-o no HUD e imprime-o na consola, para se
+    # saber SEMPRE que build esta a correr (acabam as rondas as cegas)
+    files.append(("build_info", None))
     if not files:
         raise SystemExit("pack_pck: nada para empacotar em %s" % root)
 
@@ -135,8 +149,11 @@ def write_pck(root: str, dest: str, excludes: tuple[str, ...], engine=(4, 7, 2))
         file_base = f.tell()
 
         for rel, abs_path in files:
-            with open(abs_path, "rb") as src:
-                data = src.read()
+            if abs_path is None:  # entrada virtual (build_info)
+                data = _build_stamp(root).encode("utf-8")
+            else:
+                with open(abs_path, "rb") as src:
+                    data = src.read()
             ofs = f.tell()
             f.write(data)
             f.write(b"\x00" * align(f.tell(), PCK_PADDING))
