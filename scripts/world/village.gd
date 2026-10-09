@@ -117,6 +117,7 @@ func _build_elder(c: Vector2, base: float) -> void:
 	if structures != null:
 		structures.place("campfire", Vector3(c.x + 1.2, base + 0.05, c.y + 1.2), 0.0, true)
 	var npc: Npc = load("res://scripts/entities/npc.gd").new()
+	npc.mats = mats
 	npc.id = "elder"
 	npc.display_key = "npc.elder.name"
 	npc.personality = {"warmth": 0.72, "curiosity": 0.55, "fear": 0.30, "talkative": 0.8}

@@ -270,7 +270,7 @@ func _run() -> void:
 			tabb.position.z + tabb.size.z * 0.5)
 		var tverts: Array = tarr[Mesh.ARRAY_VERTEX]
 		var down := 0
-		var inward := 0
+		var outward := 0
 		for r in tidx.size() / 3:
 			var a: Vector3 = tverts[int(tidx[r * 3])]
 			var b: Vector3 = tverts[int(tidx[r * 3 + 1])]
@@ -285,10 +285,11 @@ func _run() -> void:
 			else:
 				var mid := (a + b + cc) / 3.0
 				var away := Vector3(mid.x - centre.x, 0.0, mid.z - centre.z)
-				if away.length_squared() > 1e-8 and gn.dot(away.normalized()) <= 0.0:
-					inward += 1
+				if away.length_squared() > 1e-8 and gn.dot(away.normalized()) > 0.0:
+					outward += 1
 		check("chão tem as faces viradas para cima", down == 0, "%d viradas ao contrário" % down)
-		check("saia tem as faces viradas para fora", inward == 0, "%d viradas ao contrário" % inward)
+		check("saia tem as faces viradas para dentro (cull_back esconde-a)",
+			outward == 0, "%d ainda viradas para fora" % outward)
 	else:
 		check("terreno tem geometria", false, "nenhuma mesh de terreno encontrada")
 
@@ -296,14 +297,23 @@ func _run() -> void:
 	# (regressão real: toon_foliage escrevia ALPHA e, em Godot 4, isso põe o
 	#  material no passe transparente — árvores, erva e CASAS ficavam todas
 	#  translúcidas, a ver-se umas através das outras)
-	var opaque_shaders := ["res://shaders/toon_terrain.gdshader",
-		"res://shaders/toon_foliage.gdshader"]
+	# A doc do Godot: "out float ALPHA — If written to on any branch, the
+	# material will go through the transparent pipeline." Nenhum shader deste
+	# jogo precisa disso: a água ficou opaca e o céu é um skybox opaco.
 	var leaky: Array = []
-	for path in opaque_shaders:
+	for path in ["res://shaders/toon_terrain.gdshader", "res://shaders/toon_foliage.gdshader",
+			"res://shaders/anime_sky.gdshader", "res://shaders/stylized_water.gdshader"]:
 		var code := _strip_comments(str(FileAccess.get_file_as_string(path)))
 		if "ALPHA" in code:
 			leaky.append(str(path).get_file())
-	check("shaders opacos não escrevem ALPHA", leaky.is_empty(), ", ".join(leaky))
+	check("nenhum shader escreve ALPHA (passe transparente)", leaky.is_empty(), ", ".join(leaky))
+
+	# o Compatibility reconstrói a profundidade com NDC -1..1 e reverse-z; o
+	# Forward+ com NDC 0..1. Um shader que leia a profundidade dá resultados
+	# diferentes nos dois — e a exportação web corre em Compatibility.
+	var wcode := _strip_comments(str(FileAccess.get_file_as_string("res://shaders/stylized_water.gdshader")))
+	check("água não depende da textura de profundidade",
+		"depth_texture" not in wcode and "INV_PROJECTION_MATRIX" not in wcode)
 
 	# ── mapa de entrada ───────────────────────────────────────────────────
 	# project.godot não tem [input]: o mapa é construído em runtime por
@@ -373,6 +383,24 @@ func _run() -> void:
 		var val_normal: float = float(villager._interpret(percepts)["valence"])
 		check("traço quiet agrada mais aos outros", val_quiet > val_normal,
 			"%.3f vs %.3f" % [val_quiet, val_normal])
+
+	# ── nenhuma malha pode ficar sem material ─────────────────────────────
+	# (regressão real: o NPC não tinha material_override e aparecia com o
+	#  material PBR cinzento por omissão, a destoar de tudo o resto)
+	var bare: Array = []
+	var checked_nodes := 0
+	for grp in ["npcs"]:
+		for c in get_tree().get_nodes_in_group(grp):
+			for mi in (c as Node3D).get_children():
+				if mi is MeshInstance3D:
+					checked_nodes += 1
+					if (mi as MeshInstance3D).material_override == null and \
+							(mi as MeshInstance3D).get_surface_override_material(0) == null and \
+							((mi as MeshInstance3D).mesh == null or
+							(mi as MeshInstance3D).mesh.surface_get_material(0) == null):
+						bare.append(str((c as Node3D).name))
+	check("nenhuma malha fica sem material", bare.is_empty(),
+		"%d sem material (%s) de %d" % [bare.size(), ", ".join(bare), checked_nodes])
 
 	# ── vista de depuração (F1/F9): tem de funcionar quando o jogador carrega ─
 	var dbg: Node = main.debug_view

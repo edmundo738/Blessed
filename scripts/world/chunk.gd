@@ -139,27 +139,32 @@ func _build_ground(o: Vector2, with_collision: bool) -> void:
 		var h1: float = heights[j1 * n + i1]
 		var base: int = int(skirt_base[0])
 		skirt_base[0] = base + 4
-		# para fora = do meio da aresta para longe do centro do chunk
-		var outward := Vector3((x0 + x1) * 0.5 - cx, 0.0, (z0 + z1) * 0.5 - cz)
-		if outward.length_squared() < 1e-6:
-			outward = Vector3(0, 0, -1)
-		outward = outward.normalized()
+		# A saia aponta para DENTRO do chunk, não para fora.
+		# Apontar para fora fazia dela uma faixa cinzenta de 1-2 m à volta de
+		# cada chunk, visível do chunk vizinho (e como cada chunk tem a sua,
+		# via-se "dos dois lados"). Para dentro, o cull_back esconde-a e só
+		# aparece através de uma costura — que é a única coisa que ela tem de
+		# fazer: tapar a fenda entre chunks com LOD diferente.
+		var inward := Vector3(cx - (x0 + x1) * 0.5, 0.0, cz - (z0 + z1) * 0.5)
+		if inward.length_squared() < 1e-6:
+			inward = Vector3(0, 0, 1)
+		inward = inward.normalized()
 		st.set_color(Color(0.36, 0.33, 0.30))
-		st.set_normal(outward)
+		st.set_normal(inward)
 		st.add_vertex(Vector3(x0, h0, z0))                 # 0 = topo, início
 		st.set_color(Color(0.30, 0.27, 0.25))
-		st.set_normal(outward)
+		st.set_normal(inward)
 		st.add_vertex(Vector3(x1, h1, z1))                 # 1 = topo, fim
 		st.set_color(Color(0.24, 0.22, 0.20))
-		st.set_normal(outward)
+		st.set_normal(inward)
 		st.add_vertex(Vector3(x1, h1 - SKIRT, z1))         # 2 = base, fim
 		st.set_color(Color(0.30, 0.27, 0.25))
-		st.set_normal(outward)
+		st.set_normal(inward)
 		st.add_vertex(Vector3(x0, h0 - SKIRT, z0))         # 3 = base, início
 		var t0 := Vector3(x0, h0, z0)
 		var t1 := Vector3(x1, h1, z1)
 		var b1 := Vector3(x1, h1 - SKIRT, z1)
-		var flip := (t1 - t0).cross(b1 - t0).dot(outward) < 0.0
+		var flip := (t1 - t0).cross(b1 - t0).dot(inward) < 0.0
 		if flip:
 			st.add_index(base + 0); st.add_index(base + 2); st.add_index(base + 1)
 			st.add_index(base + 0); st.add_index(base + 3); st.add_index(base + 2)

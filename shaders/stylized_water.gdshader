@@ -1,19 +1,34 @@
 shader_type spatial;
-// Água estilizada: bandas de cor, espuma na margem e reflexo falso do céu.
-render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_toon;
+// Água estilizada — OPACA.
+//
+// Duas razões, ambas documentadas pela própria documentação do Godot:
+//
+// 1. Escrever ALPHA num shader espacial põe o material no passe TRANSPARENTE,
+//    onde a ordenação é por objecto e não por triângulo ("surfaces in the back
+//    appearing to be in front"). Este plano tem 1400x1400 m: uma superfície
+//    transparente deste tamanho é meio caminho andado para se ver o mundo
+//    através dela.
+//
+// 2. `hint_depth_texture` não serve aqui. A doc diz que materiais transparentes
+//    nem aparecem em hint_depth_texture, e a reconstrução da profundidade muda
+//    entre renderers: Forward+/Mobile usam NDC 0..1, o Compatibility usa
+//    NDC -1..1 — e desde o Godot 4.3 o depth buffer é "reverse-z", com o near
+//    em 1.0 em vez de 0.0. O código anterior usava a convenção do Forward+ e
+//    a exportação web corre em Compatibility, por isso a "profundidade" da
+//    água era lixo. Sem a textura de profundidade o mesmo shader dá o mesmo
+//    resultado nos dois renderers.
+//
+// A espuma de margem passa a vir das bandas de onda, não da profundidade real.
+render_mode depth_draw_opaque, cull_back, diffuse_toon;
 
 uniform vec4 deep_color : source_color = vec4(0.10, 0.36, 0.52, 1.0);
 uniform vec4 shallow_color : source_color = vec4(0.34, 0.78, 0.82, 1.0);
 uniform vec4 foam_color : source_color = vec4(0.94, 0.98, 1.00, 1.0);
 uniform vec4 sky_tint : source_color = vec4(0.62, 0.82, 1.00, 1.0);
-uniform float depth_range : hint_range(0.1, 12.0) = 3.0;
-uniform float foam_width : hint_range(0.05, 3.0) = 0.85;
 uniform float wave_speed : hint_range(0.0, 4.0) = 0.55;
 uniform float wave_scale : hint_range(0.5, 40.0) = 9.0;
-uniform float alpha : hint_range(0.0, 1.0) = 0.86;
 uniform float sun_glow : hint_range(0.0, 2.0) = 0.6;
 uniform vec3 sun_dir = vec3(-0.4, 0.8, 0.3);
-uniform sampler2D depth_tex : hint_depth_texture, filter_linear;
 
 varying vec3 v_world;
 
@@ -28,34 +43,24 @@ void vertex() {
 }
 
 void fragment() {
-	// profundidade real -> margens claras
-	float depth = texture(depth_tex, SCREEN_UV).r;
-	vec4 up = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, depth, 1.0);
-	up.xyz /= up.w;
-	float water_depth = clamp((VIEW_MATRIX[3].y - up.y) - VERTEX.z, 0.0, 20.0);
-
-	float k = clamp(water_depth / depth_range, 0.0, 1.0);
-	vec3 col = mix(shallow_color.rgb, deep_color.rgb, k);
-
-	// bandas de onda (o "traço" do desenho)
 	float t = TIME * wave_speed;
 	vec2 p = v_world.xz * wave_scale * 0.1;
 	float w = wave(p, t) * 0.5 + 0.5;
-	w = floor(w * 4.0) / 4.0;
-	col = mix(col, col * 1.22 + vec3(0.05), w * 0.5);
 
-	// espuma onde a água acaba
-	float shore = 1.0 - smoothstep(0.0, foam_width, water_depth);
-	float sparkle = step(0.72, fract(sin(dot(floor(v_world.xz * 6.0), vec2(12.9898, 78.233))) * 43758.5453));
-	col = mix(col, foam_color.rgb, clamp(shore * (0.55 + 0.45 * sparkle), 0.0, 1.0));
+	// bandas duras — é o "traço" do desenho
+	float band = floor(w * 4.0) / 4.0;
+	vec3 col = mix(shallow_color.rgb, deep_color.rgb, band);
+	col = mix(col, col * 1.22 + vec3(0.05), step(0.75, w) * 0.5);
+
+	// crista de espuma nas bandas mais altas
+	col = mix(col, foam_color.rgb, step(0.93, w) * 0.7);
 
 	// reflexo falso: brilho onde a normal aponta ao sol
-	vec3 n = normalize(NORMAL + vec3(w * 0.12, 0.0, (1.0 - w) * 0.12));
-	float glow = pow(max(dot(reflect(-VIEW, n), sun_dir), 0.0), 18.0);
+	vec3 n = normalize(NORMAL + vec3(band * 0.12, 0.0, (1.0 - band) * 0.12));
+	float glow = pow(max(dot(reflect(-VIEW, n), normalize(sun_dir)), 0.0), 18.0);
 	col += sky_tint.rgb * glow * sun_glow;
 
 	ALBEDO = col;
-	ALPHA = alpha;
-	ROUGHNESS = 0.12;
+	ROUGHNESS = 0.15;
 	SPECULAR = 0.6;
 }

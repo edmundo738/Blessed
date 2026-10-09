@@ -39,6 +39,7 @@ var alive := true
 var player: Node3D
 var world: Node3D
 var structures: Structures
+var mats: Materials
 
 var _mesh: MeshInstance3D
 var _rng := RandomNumberGenerator.new()
@@ -53,6 +54,11 @@ func _ready() -> void:
 func _build_body() -> void:
 	var body := MeshInstance3D.new()
 	body.mesh = _make_mesh()
+	# Sem material_override o Godot usa o material PBR por omissão: cinzento,
+	# sem bandas, a destoar de tudo o resto. As malhas do MeshKit já trazem cor
+	# de vértice, por isso o material toon chega.
+	if mats != null:
+		body.material_override = mats.structure
 	body.position = Vector3(0, 0.85, 0)
 	add_child(body)
 	_mesh = body

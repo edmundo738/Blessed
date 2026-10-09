@@ -110,5 +110,8 @@ void fragment() {
 	col = mix(col, hor, pow(1.0 - up, 7.0) * 0.6);
 
 	ALBEDO = col;
-	ALPHA = 1.0;
+	// Sem ALPHA: um domo de céu deve ser OPACO. Escrever ALPHA empurrava-o para
+	// o passe transparente, onde a ordenação é por objecto e não por triângulo.
+	// Com `depth_draw_never` + prioridade -100 ele desenha-se primeiro e nunca
+	// tapa nada — que é exactamente o que um skybox faz.
 }
