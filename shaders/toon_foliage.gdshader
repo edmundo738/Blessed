@@ -50,9 +50,12 @@ void fragment() {
 	ALBEDO = COLOR.rgb * v_tint;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;
-	if (v_fade <= 0.004) {
-		ALPHA = 0.0;
-	}
+	// NÃO escrever ALPHA aqui. Em Godot 4, escrever ALPHA num shader espacial
+	// põe o material no passe TRANSPARENTE — e este shader é partilhado pela
+	// folhagem, pela erva e pelas ESTRUTURAS, por isso as casas e as árvores
+	// ficavam todas translúcidas, a ver-se umas através das outras ("raio X").
+	// O desaparecimento à distância já está feito no vertex(): a instância
+	// encolhe até colapsar no pivot, o que chega para a fazer sumir.
 }
 
 void light() {

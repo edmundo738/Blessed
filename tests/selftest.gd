@@ -292,6 +292,19 @@ func _run() -> void:
 	else:
 		check("terreno tem geometria", false, "nenhuma mesh de terreno encontrada")
 
+	# ── nenhum material opaco pode escrever ALPHA ─────────────────────────
+	# (regressão real: toon_foliage escrevia ALPHA e, em Godot 4, isso põe o
+	#  material no passe transparente — árvores, erva e CASAS ficavam todas
+	#  translúcidas, a ver-se umas através das outras)
+	var opaque_shaders := ["res://shaders/toon_terrain.gdshader",
+		"res://shaders/toon_foliage.gdshader"]
+	var leaky: Array = []
+	for path in opaque_shaders:
+		var code := _strip_comments(str(FileAccess.get_file_as_string(path)))
+		if "ALPHA" in code:
+			leaky.append(str(path).get_file())
+	check("shaders opacos não escrevem ALPHA", leaky.is_empty(), ", ".join(leaky))
+
 	# ── mapa de entrada ───────────────────────────────────────────────────
 	# project.godot não tem [input]: o mapa é construído em runtime por
 	# Game._ready(). Se isto falhar, o jogo não responde a nenhuma tecla.
@@ -361,6 +374,37 @@ func _run() -> void:
 		check("traço quiet agrada mais aos outros", val_quiet > val_normal,
 			"%.3f vs %.3f" % [val_quiet, val_normal])
 
+	# ── vista de depuração (F1/F9): tem de funcionar quando o jogador carrega ─
+	var dbg: Node = main.debug_view
+	check("vista de depuração existe", dbg != null)
+	if dbg != null:
+		var first: MeshInstance3D = null
+		for c in main.world.get_children():
+			for mi in c.get_children():
+				if mi is MeshInstance3D and (mi as MeshInstance3D).mesh != null:
+					first = mi
+					break
+			if first:
+				break
+		var original = first.material_override if first else null
+		var had_shader: bool = first != null and first.get_surface_override_material(0) == null \
+			and first.mesh != null and first.mesh.surface_get_material(0) is ShaderMaterial
+		dbg.call("_toggle_basic")
+		var now_basic: bool = first != null and first.material_override is StandardMaterial3D
+		check("F9 troca para materiais básicos", now_basic,
+			"o terreno tinha material do jogo: %s" % str(had_shader))
+		dbg.call("_toggle_basic")
+		var restored: bool = first == null or first.material_override == original
+		check("F9 devolve os materiais do jogo", restored)
+		dbg.call("_build_rig")
+		var rig: Node3D = dbg.get("rig")
+		var rig_nodes := 0
+		if rig != null:
+			for c in rig.get_children():
+				rig_nodes += 1
+		check("F1 constrói a cena de diagnóstico", rig != null and rig_nodes >= 10,
+			"%d objectos" % rig_nodes)
+
 	# ── relatório ─────────────────────────────────────────────────────────
 	for l in lines:
 		print(l)
@@ -397,3 +441,22 @@ func _dry_spot(from: Vector3, dist: float) -> Vector3:
 		if not ter.is_water(x, z) and ter.slope(x, z) < 0.35:
 			return Vector3(x, ter.height(x, z) + 1.0, z)
 	return from + Vector3(dist, 0, 0)
+
+
+## Tira comentários // e /* */ para não contar falsos positivos em shader.
+func _strip_comments(src: String) -> String:
+	var out := ""
+	var i := 0
+	while i < src.length():
+		if src.substr(i, 2) == "//":
+			while i < src.length() and src[i] != "\n":
+				i += 1
+		elif src.substr(i, 2) == "/*":
+			i += 2
+			while i + 1 < src.length() and src.substr(i, 2) != "*/":
+				i += 1
+			i += 2
+		else:
+			out += src[i]
+			i += 1
+	return out

@@ -7,7 +7,10 @@ extends Node3D
 ## Nada aqui é guardado entre chunks: o mundo é sempre rederivado do Terrain.
 
 const SIZE := 48.0
-const SKIRT := 5.0
+## Altura da saia. Era 5.0: uma parede de 5 m à volta de cada chunk, visível
+## como uma grelha de muros. 1.2 m chega para tapar as costuras entre LODs e
+## lê-se como sombra de contacto, não como arquitectura.
+const SKIRT := 1.2
 const RES := [48, 24, 12]          # quads por lado em cada LOD
 const TREE_CELL := 3.0
 const ROCK_CELL := 6.0

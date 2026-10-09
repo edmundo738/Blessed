@@ -19,6 +19,7 @@ var creature_root: Node3D
 var hud: Hud
 var menus: Menus
 var prologo: Prologo
+var debug_view: Node
 
 var _cinema_t := 0.0
 
@@ -34,6 +35,7 @@ func _ready() -> void:
 	world.set_target(player.global_position)
 	world._update_chunks(Vector2i(int(floor(player.global_position.x / Chunk.SIZE)),
 		int(floor(player.global_position.z / Chunk.SIZE))), world.radius())
+	_build_debug_view()
 	print("BLESSED pronto. seed=", Game.world_seed)
 	var all_args := OS.get_cmdline_args() + OS.get_cmdline_user_args()
 
@@ -44,6 +46,16 @@ func _ready() -> void:
 		if s_arg in ["selftest", "diag"]:
 			_start_probe(s_arg)
 			break
+
+
+## F1/F3/F6/F7/F8/F9 — isolar problemas de renderização a jogar.
+func _build_debug_view() -> void:
+	debug_view = Node.new()
+	debug_view.set_script(load("res://scripts/ui/debug_view.gd"))
+	# setup ANTES de add_child: o add_child dispara _ready() imediatamente,
+	# e o _ready() precisa de `main` para chegar à árvore.
+	debug_view.call("setup", self)
+	add_child(debug_view)
 
 
 ## Arranca uma sonda de desenvolvimento (tests/<nome>.gd).

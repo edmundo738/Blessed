@@ -25,7 +25,10 @@ Abre `http://localhost:8080`, clica no ecrã e o rato é capturado.
 | `F` | interagir (falar, acender, dormir) |
 | `B` | modo construir · `R` rodar · roda do rato escolher peça |
 | `Tab` | mochila · `J` diário · `M` mapa · `Esc` pausa |
-| `1…9` | barra de atalhos · `G` largar item · `F5`/`F9` guardar / carregar |
+| `1…9` | barra de atalhos · `G` largar item · `F5` guardar |
+| `F1` | cena de diagnóstico (geometria conhecida, materiais básicos) |
+| `F9` | materiais do jogo ↔ `StandardMaterial3D` — isola shaders vs. geometria |
+| `F3`/`F6`/`F7`/`F8` | água · céu · sombras · meio-dia |
 
 O prólogo abre o jogo: escolhes o **nome**, o **corpo** (Ela/Ele) e uma **alma** — o que te
 ficou da vida anterior. Não é cosmético: cada alma muda números reais, medidos e testados
@@ -42,7 +45,7 @@ O projeto tem o seu próprio teste — é o que corre antes de se dizer que algo
 cd /home/user/Blessed && ./tools/check.sh
 ```
 
-Último resultado: **53 ok, 0 falhas** (`SELFTEST_PASS`).
+Último resultado: **58 ok, 0 falhas** (`SELFTEST_PASS`).
 
 Há duas sondas, ambas a correr o jogo a sério dentro do motor:
 
@@ -68,6 +71,11 @@ O que o `tests/selftest.gd` cobre:
 - noite: fase detetada, luz a zero, criatura gerada; dia: luz a 0.89
 - NPC: cadeia canónica completa, confiança sobe ao falar, ≥3 tópicos, resposta certa
 - i18n: PT e EN diferentes, formatação com parâmetros
+- os materiais opacos não escrevem `ALPHA` (escrever `ALPHA` num shader espacial
+  põe o material no passe transparente — foi isso que fez as casas parecerem
+  um raio X)
+- a vista de depuração troca de materiais nos dois sentidos e constrói a cena
+  de diagnóstico
 - comandos: comando inexistente recusado
 - save/load: round-trip de inventário e hora
 - geometria do terreno: o chão com as faces para cima, a saia com as faces para
