@@ -91,7 +91,7 @@ func _build_sky_dome() -> void:
 	sky_dome.material_override = mats.sky
 	sky_dome.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	sky_dome.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-	sky_dome.render_priority = -100
+	mats.sky.render_priority = -100
 	add_child(sky_dome)
 
 

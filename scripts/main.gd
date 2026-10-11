@@ -79,7 +79,7 @@ func _start_probe(which: String) -> void:
 		return
 	var st: Node = load(path).new()
 	st.call("setup", self)
-	add_child(st)
+	add_child.call_deferred(st)
 
 
 func _build_world() -> void:

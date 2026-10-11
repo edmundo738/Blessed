@@ -29,6 +29,10 @@ var _target_alpha := 1.0
 func _ready() -> void:
 	layer = 30
 	_build()
+	# sem isto o ecra fica preto com a pelicula a 86% e nenhuma frase
+	label.text = Loc.t(LINES[0])
+	_target_alpha = 1.0
+	_fade = 5.2
 	Sfx.play("blessing", -10.0)
 
 

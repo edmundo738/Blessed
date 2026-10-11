@@ -94,7 +94,10 @@ func _hut(p: Vector3, w: float, d: float, h: float, rot: float,
 	# fogueira pequena ao lado
 	if rng.randf() < 0.7:
 		var off := Vector3(rng.randf_range(-1, 1) * 2.0, 0, d * 0.5 + 1.4)
-		var lp := (body.global_transform * off)
+		# body ainda nao esta na arvore aqui: global_transform dava identidade
+		# e atirava as fogueiras todas para perto da origem. A posicao local do
+		# body ja e a da casa (o pai esta na origem), por isso soma direta.
+		var lp := body.position + off
 		structures.place("campfire", Vector3(lp.x, world.ground_height(lp.x, lp.z), lp.z),
 			0.0, rng.randf() < 0.6)
 

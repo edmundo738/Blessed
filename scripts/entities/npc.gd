@@ -104,9 +104,10 @@ func _append(st: SurfaceTool, mesh: ArrayMesh, off: Vector3, tint: Color = Color
 	var norms: Variant = arr[Mesh.ARRAY_NORMAL]
 	var cols: Variant = arr[Mesh.ARRAY_COLOR]
 	var idx: Variant = arr[Mesh.ARRAY_INDEX]
-	var order: Array = (idx as Array) if (idx != null and not (idx as Array).is_empty()) else verts
+	var indexed := idx != null and not (idx as Array).is_empty()
+	var order: Array = (idx as Array) if indexed else verts
 	for k in order.size():
-		var vi := int(order[k])
+		var vi := int(order[k]) if indexed else k
 		var c: Color = (cols as Array)[vi] if cols != null else Color.WHITE
 		st.set_color(c * tint)
 		if norms != null:

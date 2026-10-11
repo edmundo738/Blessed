@@ -212,7 +212,8 @@ func play_at(name: String, pos: Vector3, db: float = 0.0, pitch: float = 1.0) ->
 			p.stream = stream(name)
 			p.volume_db = db
 			p.pitch_scale = pitch
-			p.global_position = pos
+			if p.is_inside_tree():
+				p.global_position = pos
 			p.play()
 			return
 

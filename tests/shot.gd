@@ -32,6 +32,8 @@ const CHUNK: int = 4000  # caracteres por linha de base64
 
 var main: Node
 var _args: Array = []
+var _eye := Vector3()
+var _radius: float = 70.0
 
 
 func setup(m: Node) -> void:
@@ -126,6 +128,8 @@ func _run() -> void:
 	# ── recolhe as malhas ──────────────────────────────────────────────
 	# percorre a árvore toda a partir da raiz: o terreno, as estruturas, os NPCs
 	# e o jogador vivem em ramos diferentes.
+	_eye = eye
+	_radius = radius
 	var items: Array = []
 	_walk(main, eye, radius, items)
 
@@ -134,7 +138,12 @@ func _run() -> void:
 	var written := 0
 	var skipped := 0
 	for it in items:
-		if _write_mesh(buf, it):
+		var ok := false
+		if it is MultiMeshInstance3D:
+			ok = _write_multimesh(buf, it as MultiMeshInstance3D)
+		else:
+			ok = _write_mesh(buf, it as MeshInstance3D)
+		if ok:
 			written += 1
 		else:
 			skipped += 1
@@ -162,15 +171,17 @@ func _run() -> void:
 func _walk(node: Node, eye: Vector3, radius: float, out: Array) -> void:
 	if node == null:
 		return
+	if node is MultiMeshInstance3D:
+		var mmi := node as MultiMeshInstance3D
+		# MultiMesh nao tem AABB fiavel: inclui o no e filtra por instancia
+		# la no dump, pela distancia ao olho.
+		if mmi.multimesh != null and mmi.visible:
+			out.append(mmi)
+		return
 	if node is MeshInstance3D:
 		var mi := node as MeshInstance3D
 		if mi.mesh == null or not mi.visible:
 			return
-		# As malhas dos chunks estão em coordenadas do MUNDO com o nó na
-		# origem, por isso `global_position` é (0,0,0) e não diz nada sobre
-		# onde a geometria está. A distância tem de se medir pelo AABB
-		# transformado — foi exactamente esta armadilha que já tinha mordido
-		# o tests/diag.gd.
 		var bb: AABB = mi.global_transform * mi.get_aabb()
 		var d: float = _dist_point_aabb(eye, bb)
 		if d <= radius:
@@ -200,6 +211,67 @@ func _dist_point_aabb(p: Vector3, bb: AABB) -> float:
 	var dy := maxf(absf(p.y - c.y) - h.y, 0.0)
 	var dz := maxf(absf(p.z - c.z) - h.z, 0.0)
 	return Vector3(dx, dy, dz).length()
+
+
+## Expande um MultiMesh (relva/arvores) e junta as instancias proximas numa
+## unica malha, com a tinta da instancia como cor de vertice. Limitado para o
+## dump nao crescer sem limite.
+func _write_multimesh(buf: StreamPeerBuffer, mi: MultiMeshInstance3D) -> bool:
+	var mm: MultiMesh = mi.multimesh
+	if mm == null or mm.mesh == null or mm.instance_count == 0:
+		return false
+	var arr: Array = mm.mesh.surface_get_arrays(0)
+	var lv: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var ln: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+	var lidx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+	if lv.size() == 0:
+		return false
+	var gt := mi.global_transform
+	var verts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	var cols := PackedColorArray()
+	var idx := PackedInt32Array()
+	var maxv := 24000
+	var used := 0
+	for i in mm.instance_count:
+		if used + lv.size() > maxv:
+			break
+		var it := gt * mm.get_instance_transform(i)
+		if it.origin.distance_to(_eye) > _radius + 8.0:
+			continue
+		var tint := mm.get_instance_custom_data(i)
+		var base := used
+		for v in lv.size():
+			verts.append(it * lv[v])
+			norms.append((it.basis * (ln[v] if ln.size() == lv.size() else Vector3.UP)).normalized())
+			cols.append(Color(tint.r, tint.g, tint.b, 1.0) if tint != Color(0,0,0,0) else Color.WHITE)
+		if lidx.size() > 0:
+			for q in lidx.size():
+				idx.append(base + int(lidx[q]))
+		else:
+			for q in lv.size():
+				idx.append(base + q)
+		used += lv.size()
+	if used == 0:
+		return false
+	var mat_name := "toon_foliage.gdshader"
+	_put_fixed(buf, mi.name, 32)
+	_put_fixed(buf, mat_name, 32)
+	buf.put_32(0)
+	var b := gt.basis
+	buf.put_float(b.x.x); buf.put_float(b.x.y); buf.put_float(b.x.z)
+	buf.put_float(b.y.x); buf.put_float(b.y.y); buf.put_float(b.y.z)
+	buf.put_float(b.z.x); buf.put_float(b.z.y); buf.put_float(b.z.z)
+	buf.put_float(0.0); buf.put_float(0.0); buf.put_float(0.0)
+	buf.put_32(verts.size())
+	for v in verts.size():
+		buf.put_float(verts[v].x); buf.put_float(verts[v].y); buf.put_float(verts[v].z)
+		buf.put_float(norms[v].x); buf.put_float(norms[v].y); buf.put_float(norms[v].z)
+		buf.put_float(cols[v].r); buf.put_float(cols[v].g); buf.put_float(cols[v].b)
+	buf.put_32(idx.size())
+	for q in idx.size():
+		buf.put_32(int(idx[q]))
+	return true
 
 
 func _write_mesh(buf: StreamPeerBuffer, mi: MeshInstance3D) -> bool:

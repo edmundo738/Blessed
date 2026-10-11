@@ -9,7 +9,12 @@ TMP="$(mktemp -d)"
 cd "$TMP"
 npm pack "@ringozz/godot-web-wasm32@$VERSION" >/dev/null
 tar -xzf ./*.tgz
-cp package/* "$DIR"/
+# os binários vivem em package/gen/ com nomes longos; normalizamos para
+# godot.js / godot.wasm, que e o que o harness procura
+cp package/gen/godot.web.template_release.wasm32.nothreads.js "$DIR/godot.js"
+cp package/gen/godot.web.template_release.wasm32.nothreads.wasm "$DIR/godot.wasm"
+cp package/gen/audio.worklet.js "$DIR/" 2>/dev/null || true
+cp package/gen/audio.position.worklet.js "$DIR/" 2>/dev/null || true
 rm -rf "$TMP"
 echo "motor web instalado em $DIR"
 ls -1 "$DIR"

@@ -334,9 +334,9 @@ func _make_multimesh(id: String, b: Dictionary) -> void:
 	mm.mesh = mesh
 	mm.instance_count = t.size()
 	for i in t.size():
-		mm.instance_set_transform(i, t[i])
+		mm.set_instance_transform(i, t[i])
 		var tint: Color = c[i]
-		mm.instance_set_custom_data(i, Color(tint.r, tint.g, tint.b, float(b["fade"])))
+		mm.set_instance_custom_data(i, Color(tint.r, tint.g, tint.b, float(b["fade"])))
 	b["mm"] = mm
 	var inst := MultiMeshInstance3D.new()
 	inst.multimesh = mm
@@ -362,9 +362,9 @@ func _grass_multimesh(t: Array, c: Array) -> void:
 	mm.instance_count = t.size()
 	var fade: float = [30.0, 55.0, 85.0][clampi(grass_quality, 0, 2)]
 	for i in t.size():
-		mm.instance_set_transform(i, t[i])
+		mm.set_instance_transform(i, t[i])
 		var col: Color = c[i]
-		mm.instance_set_custom_data(i, Color(col.r, col.g, col.b, fade))
+		mm.set_instance_custom_data(i, Color(col.r, col.g, col.b, fade))
 	var inst := MultiMeshInstance3D.new()
 	inst.multimesh = mm
 	inst.material_override = mats.grass
@@ -400,7 +400,7 @@ func hide_harvest(n: Dictionary) -> void:
 	var i := int(n.get("bindex", -1))
 	if i < 0 or i >= mm.instance_count:
 		return
-	mm.instance_set_transform(i, Transform3D(
+	mm.set_instance_transform(i, Transform3D(
 		Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO), n["pos"]))
 
 
