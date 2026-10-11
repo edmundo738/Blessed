@@ -212,15 +212,21 @@ func _handle_use(delta: float) -> void:
 				if holding and not _was_holding:
 					structures.light(e)
 					Sfx.play("craft", -10.0, 1.3)
-			else:
+			elif holding:
 				_hold_work(delta, 0.9)
 				if progress >= 1.0:
 					Game.request("remove_structure", {"entry": e})
 					progress = 0.0
+			else:
+				progress = 0.0
 		"harvest":
-			_hold_work(delta, 1.0)
-			if progress >= 1.0:
-				_harvest_done()
+			# exige o botao de usar: so olhar NAO colhe (fim do loot automatico)
+			if holding:
+				_hold_work(delta, 1.0)
+				if progress >= 1.0:
+					_harvest_done()
+					progress = 0.0
+			else:
 				progress = 0.0
 	_hold = holding
 	_was_holding = holding

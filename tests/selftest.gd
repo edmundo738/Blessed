@@ -108,6 +108,15 @@ func _run() -> void:
 		"devia ter sido recusado")
 	inv.slots = saved
 
+	# B-03 (respawn): colhido fica colhido ate ao timer; save/load preserva.
+	var hk := Vector3(12.0, 5.0, 12.0)
+	world.mark_harvested({"pos": hk, "species": "oak", "kind": "wood"})
+	check("recurso colhido fica indisponivel", world.is_harvested(hk, "oak"))
+	check("estado de colheita guarda-se", int(world.save_data().get("harvest_state", {}).size()) >= 1)
+	Game.day += 15
+	check("madeira volta apos ~14 dias", not world.is_harvested(hk, "oak"), "devia regenerar")
+	Game.day -= 15
+
 	# ── 5. construir ──────────────────────────────────────────────────────
 	inv.add("campfire", 1)
 	var camp_slot := -1

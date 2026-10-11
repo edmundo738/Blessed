@@ -27,6 +27,7 @@ var species: SpeciesKit
 var mats: Materials
 
 ## Nós colhíveis deste chunk: {pos, kind, species, hp, node}
+var world: Node = null                # definido pelo World; usado para respawn
 var harvest_nodes: Array = []
 
 var _mesh_inst: MeshInstance3D
@@ -185,6 +186,8 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 			var sp: SpeciesKit.Species = species.trees[id]
 			var s := rng.randf_range(sp.scale_range.x, sp.scale_range.y)
 			var y := h + sp.y_offset * s
+			if world != null and world.is_harvested(Vector3(x, h, z), id):
+				continue
 			var xform := Transform3D(Basis(Vector3.UP, rng.randf() * TAU)
 				.scaled(Vector3(s, s * rng.randf_range(0.9, 1.15), s)),
 				Vector3(x, y, z))
@@ -220,6 +223,8 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 			if id.is_empty():
 				continue
 			var sp: SpeciesKit.Species = species.rocks[id]
+			if sp.harvest != "" and world != null and world.is_harvested(Vector3(x, h, z), id):
+				continue
 			var s := rng.randf_range(sp.scale_range.x, sp.scale_range.y)
 			var xform := Transform3D(Basis(Vector3.UP, rng.randf() * TAU)
 				.scaled(Vector3(s, s * rng.randf_range(0.7, 1.1), s)),
@@ -254,6 +259,8 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 			if id.is_empty():
 				continue
 			var sp: SpeciesKit.Species = species.plants[id]
+			if world != null and world.is_harvested(Vector3(x, h, z), id):
+				continue
 			var s := rng.randf_range(sp.scale_range.x, sp.scale_range.y)
 			var bi := _add(buckets, id, Transform3D(Basis(Vector3.UP, rng.randf() * TAU)
 				.scaled(Vector3(s, s, s)), Vector3(x, h + sp.y_offset * s, z)),

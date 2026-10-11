@@ -13,6 +13,11 @@ var species: SpeciesKit
 var mats: Materials
 
 var chunks: Dictionary = {}          # Vector2i -> Chunk
+var harvest_state := {}              # key -> tempo absoluto (s de jogo) em que volta
+# B-03: respawn estilo Minecraft — minérios/arvores longos, plantas curto.
+const RESPAWN_DAYS := {"wood": 14.0, "stone": 21.0, "iron": 30.0, "flint": 21.0,
+	"fiber": 2.0, "berry": 2.0, "plant": 1.5}
+const RESPAWN_DEFAULT := 7.0
 var _pool: Array = []
 var _target := Vector3.ZERO
 var _last_center := Vector2i(999999, 999999)
@@ -212,6 +217,7 @@ func _take_chunk(key: Vector2i, lod: int) -> Chunk:
 		ch.species = species
 		ch.mats = mats
 		ch.grass_quality = grass_quality
+		ch.world = self
 		add_child(ch)
 	else:
 		ch = _pool.pop_back()
@@ -221,6 +227,27 @@ func _take_chunk(key: Vector2i, lod: int) -> Chunk:
 	ch.lod = lod
 	ch.grass_quality = grass_quality
 	return ch
+
+
+func _now() -> float:
+	return (Game.day - 1) * Game.DAY_SECONDS + Game.hour / 24.0 * Game.DAY_SECONDS
+
+
+func harvest_key(pos: Vector3, species: String) -> String:
+	return "%d|%d|%d|%s" % [roundi(pos.x * 10.0), roundi(pos.y * 10.0), roundi(pos.z * 10.0), species]
+
+
+func mark_harvested(n: Dictionary) -> void:
+	var k := harvest_key(n["pos"] as Vector3, str(n.get("species", "")))
+	var days: float = RESPAWN_DAYS.get(str(n.get("kind", "")), RESPAWN_DEFAULT)
+	harvest_state[k] = _now() + days * Game.DAY_SECONDS
+
+
+func is_harvested(pos: Vector3, species: String) -> bool:
+	var k := harvest_key(pos, species)
+	if not harvest_state.has(k):
+		return false
+	return _now() < float(harvest_state[k])
 
 
 ## Nós colhíveis perto de um ponto (o sistema de interação usa isto).
@@ -273,6 +300,7 @@ func save_data() -> Dictionary:
 
 
 func load_data(_d: Dictionary) -> void:
+	harvest_state = _d.get("harvest_state", {}) if _d.get("harvest_state") is Dictionary else {}
 	for key in chunks.keys():
 		(chunks[key] as Chunk).release()
 	chunks.clear()
