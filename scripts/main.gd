@@ -82,25 +82,43 @@ func _start_probe(which: String) -> void:
 	add_child.call_deferred(st)
 
 
+## Instancia uma cena editavel (.tscn) se existir; senao usa o fallback em codigo.
+## E assim que o jogo deixa de ser so-codigo: cada sistema pode virar uma cena que
+## editas no Godot (nodes). Aditivo: sem a cena, comporta-se exatamente como antes.
+func _sys(scene_path: String, fallback: Callable) -> Node:
+	if ResourceLoader.exists(scene_path):
+		var packed = load(scene_path)
+		if packed != null:
+			var inst = packed.instantiate()
+			if inst != null:
+				return inst
+	return fallback.call()
+
+
+func _fx_fallback() -> Node:
+	var n := Node3D.new()
+	n.set_script(load("res://scripts/world/fx.gd"))
+	return n
+
+
 func _build_world() -> void:
-	world = World.new()
+	world = _sys("res://scenes/world.tscn", func(): return World.new()) as World
 	add_child(world)
 
-	structures = Structures.new()
+	structures = _sys("res://scenes/structures.tscn", func(): return Structures.new()) as Structures
 	structures.species = world.species
 	structures.mats = world.mats
 	add_child(structures)
 	structures.setup(world.species, world.mats)
 
-	fx = Node3D.new()
-	fx.set_script(load("res://scripts/world/fx.gd"))
+	fx = _sys("res://scenes/fx.tscn", _fx_fallback) as Node3D
 	add_child(fx)
 
 	npc_root = Node3D.new()
 	npc_root.name = "Npcs"
 	add_child(npc_root)
 
-	village = Village.new()
+	village = _sys("res://scenes/village.tscn", func(): return Village.new()) as Village
 	village.world = world
 	village.structures = structures
 	village.npc_root = npc_root
@@ -143,7 +161,7 @@ func _pick_spawn() -> Vector3:
 
 
 func _build_player() -> void:
-	player = Player.new()
+	player = _sys("res://scenes/player.tscn", func(): return Player.new()) as Player
 	world.add_child(player)
 	player.global_position = _pick_spawn() + Vector3(0, 1.0, 0)
 
@@ -179,7 +197,7 @@ func _build_systems() -> void:
 
 
 func _build_ui() -> void:
-	hud = Hud.new()
+	hud = _sys("res://scenes/hud.tscn", func(): return Hud.new()) as Hud
 	hud.inv = inv
 	hud.interaction = interaction
 	hud.survival = survival

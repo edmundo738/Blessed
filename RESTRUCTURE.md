@@ -10,11 +10,27 @@ cena `.tscn` só é usada quando existe. Nada parte.
 
 | Sistema | Estado | Onde |
 |---|---|---|
+| **Sistemas do jogo** (World, Player, Structures, Village, Fx, Hud) | ✅ cada um é uma **cena `.tscn`** instanciada com fallback | `scenes/*.tscn` → `main.gd::_sys` |
 | **Estruturas** (house, campfire, …) | ✅ prefab `.tscn` com fallback | `scenes/structures/<id>.tscn` → `structures.gd::_spawn` |
 | Itens / receitas / props | ✅ data-driven (`.tres`/JSON) | `content/` → `Mods` (ver `MODDING.md`) |
 | Ambiente / iluminação | ⏳ a mover para cena | (próximo) `scenes/environment.tscn` |
 | Céu / água | ⏳ a mover para cena | (próximo) |
 | Aldeia → **ruínas** | ⏳ prefabs + conteúdo | (próximo) |
+
+## Já funciona: o jogo é scene-based (com fallback)
+O `main.gd` agora instancia **cenas** em vez de só `.new()`:
+`scenes/world.tscn`, `player.tscn`, `structures.tscn`, `village.tscn`, `fx.tscn`,
+`hud.tscn`. Cada uma tem o nó raiz + o script. O helper `_sys(cena, fallback)`
+usa a cena se ela existir/carregar; senão, cai no código (não parte nada).
+
+**O que isto te dá:** podes abrir cada `.tscn` no editor e **acrescentar/editar
+nós** (luzes, meshes, partículas, a tua geometria). O próximo nível é ir movendo
+para dentro das cenas o que o código ainda constrói em `_ready()` (ambiente, sol,
+água, câmara, etc.), sistema a sistema — é isso que torna "tudo em nodes".
+
+>Nota: por enquanto as cenas têm só o nó raiz; o resto ainda é construído em
+> código no `_ready()`. Abre a cena, arrasta os nós que quiseres controlar — e
+> diz-me quais para eu remover a construção procedural correspondente.
 
 ## Já funciona: estruturas editáveis
 1. Vê o **id** da estrutura em `scripts/world/species.gd`.
