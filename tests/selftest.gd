@@ -97,6 +97,17 @@ func _run() -> void:
 	var bad := Game.request("craft", {"recipe": "pickaxe"})
 	check("craft sem materiais é recusado", not bool(bad.get("ok", true)))
 
+	# B-02 (regressão): mochila cheia -> craft recusado E ingredientes intactos.
+	var saved := inv.slots.duplicate(true)
+	var stick_b := inv.count("stick"); var fiber_b := inv.count("fiber")
+	for i in inv.SLOTS:
+		inv.slots[i] = {"id": "stone", "qty": Db.max_stack("stone")}
+	inv.add("stick", 2); inv.add("fiber", 2)  # podem nao caber; nao interessa
+	var full := Game.request("craft", {"recipe": "torch"})
+	check("craft com mochila cheia e recusado (B-02)", not bool(full.get("ok", true)),
+		"devia ter sido recusado")
+	inv.slots = saved
+
 	# ── 5. construir ──────────────────────────────────────────────────────
 	inv.add("campfire", 1)
 	var camp_slot := -1

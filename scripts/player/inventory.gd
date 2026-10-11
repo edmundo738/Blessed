@@ -56,6 +56,30 @@ func add(id: String, qty: int = 1) -> int:
 	return left
 
 
+func fits(id: String, qty: int) -> bool:
+	## Simula add() sem mutar: true se `qty` de `id` couber agora.
+	## Usado pelo craft() para garantir "tudo ou nada" (B-02).
+	var left := qty
+	var maxs := Db.max_stack(id)
+	for i in SLOTS:
+		if left <= 0:
+			return true
+		var s: Dictionary = slots[i]
+		if s.is_empty() or str(s["id"]) != id:
+			continue
+		var room := maxs - int(s["qty"])
+		if room <= 0:
+			continue
+		left -= mini(room, left)
+	for i in SLOTS:
+		if left <= 0:
+			return true
+		if not slots[i].is_empty():
+			continue
+		left -= mini(maxs, left)
+	return left <= 0
+
+
 func remove(id: String, qty: int = 1) -> bool:
 	if count(id) < qty:
 		return false
@@ -127,10 +151,14 @@ func craft(recipe: Dictionary) -> bool:
 		Bus.say("msg.no_recipe", 2.5)
 		return false
 	var needs: Dictionary = recipe.get("needs", {})
-	for k in needs:
-		remove(str(k), int(needs[k]))
 	var made := str(recipe["result"])
 	var qty := int(recipe.get("qty", 1))
+	# B-02: so consume os ingredientes se o produto couber (tudo ou nada).
+	if not fits(made, qty):
+		Bus.say("msg.bag_full", 2.5)
+		return false
+	for k in needs:
+		remove(str(k), int(needs[k]))
 	var left := add(made, qty)
 	if left > 0:
 		Bus.say("msg.bag_full", 2.5)
