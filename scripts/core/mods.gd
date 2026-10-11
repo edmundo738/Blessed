@@ -30,6 +30,7 @@ var items := {}        # id -> Dictionary (override de Db.item)
 var recipes := []      # receitas adicionais
 var props := {}        # id -> {mesh=caminho, scale=...}
 var loaded := []       # nomes dos mods carregados
+var tres_loaded := 0   # recursos .tres carregados
 
 
 func _ready() -> void:
@@ -38,15 +39,39 @@ func _ready() -> void:
 	_scan("user://mods")
 	print("[Mods] %d mod(s): %s | items=%d recipes=%d props=%d" % [
 		loaded.size(), ", ".join(loaded) if not loaded.is_empty() else "nenhum",
-		items.size(), recipes.size(), props.size()])
+		items.size(), recipes.size(), props.size() + tres_loaded])
 
 
 func _scan(base: String) -> void:
 	var d := DirAccess.open(base)
 	if d == null:
 		return
+	_load_resources(base)
 	for entry in d.get_directories():
-		_load(base.path_join(entry))
+		var sub := base.path_join(entry)
+		_load(sub)
+		_load_resources(sub)
+
+
+## Carrega Recursos (.tres) editados no Inspector: ItemDef / RecipeDef / PropDef.
+## E o caminho "sem GDScript": crias o .tres no editor, preenches os campos e pronto.
+func _load_resources(path: String) -> void:
+	var d := DirAccess.open(path)
+	if d == null:
+		return
+	for f in d.get_files():
+		if f.get_extension() != "tres":
+			continue
+		var res = load(path.path_join(f))
+		if res is ItemDef:
+			items[res.id] = {"kind": res.kind, "stack": res.stack, "icon": res.icon, "name": res.display_name}
+			tres_loaded += 1
+		elif res is RecipeDef:
+			recipes.append({"id": res.id, "result": res.result, "qty": res.qty, "needs": res.needs, "station": res.station})
+			tres_loaded += 1
+		elif res is PropDef:
+			props[res.id] = {"mesh": res.mesh, "scale": res.scale}
+			tres_loaded += 1
 
 
 func _load(path: String) -> void:

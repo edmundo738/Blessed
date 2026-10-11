@@ -85,3 +85,35 @@ queres e eu ligo, ou segue o padrão: ler de `Mods.prop(id)` e instanciar o `.gl
   (o `Mods` ignora `mod.json` inválidos e avisa).
 - Mantém os ids únicos para não colidir com o conteúdo base.
 - `.glb` só funcionam em `res://content/` (importados pelo editor).
+
+---
+
+## Editar no Godot (Inspector) — sem GDScript e sem JSON
+
+Para quem prefere o editor, há **Recursos (`.tres`)** com campos `@export` que se
+criam e editam visualmente no **Inspector**. É o caminho mais fácil.
+
+### Criar um item/receita/objeto no editor
+1. No painel **FileSystem**, entra em `content/` (ou cria `content/o_meu_mod/`).
+2. Botão direito → **New Resource…**.
+3. Escolhe **ItemDef**, **RecipeDef** ou **PropDef**.
+4. Preenche os campos no **Inspector** e guarda como `.tres` dentro de `content/`.
+
+O `Mods` carrega automaticamente qualquer `.tres` destes tipos que esteja em
+`res://content/` (raiz ou subpastas).
+
+### Campos (visíveis no Inspector)
+- **ItemDef**: `id`, `kind`, `stack`, `icon`, `display_name`.
+- **RecipeDef**: `id`, `result`, `qty`, `needs` (dicionário id→quantidade), `station`.
+- **PropDef**: `id`, `mesh` (**arrasta aqui o `.glb` do Blender**), `scale`.
+
+### Objetos do Blender sem código
+1. Exporta do Blender como `.glb` para `content/<mod>/`.
+2. Cria um **PropDef** e **arrasta o `.glb` para o campo `mesh`** no Inspector.
+3. Pronto — fica registado em `Mods.prop(id)` (a instanciação no mundo é o passo
+   seguinte, em `structures.gd`).
+
+### JSON vs `.tres`
+- **`.tres` (Inspector)**: mais fácil, sem texto, ideal para quem usa o editor.
+- **`mod.json`**: melhor para版本amento/edição em massa e para `user://mods/`.
+- Podes usar os dois; o `Mods` carrega ambos.
