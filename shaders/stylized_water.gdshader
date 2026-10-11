@@ -36,7 +36,7 @@ uniform vec4 sky_tint : source_color = vec4(0.62, 0.82, 1.00, 1.0);
 uniform float alpha : hint_range(0.0, 1.0) = 0.82;
 uniform float wave_speed : hint_range(0.0, 4.0) = 0.55;
 uniform float wave_scale : hint_range(0.5, 40.0) = 9.0;
-uniform float sun_glow : hint_range(0.0, 2.0) = 0.6;
+uniform float sun_glow : hint_range(0.0, 2.0) = 0.30;
 uniform vec3 sun_dir = vec3(-0.4, 0.8, 0.3);
 
 varying vec3 v_world;
@@ -68,11 +68,11 @@ void fragment() {
 
 	// reflexo largo do sol (brilho de agua, nao um holofote)
 	vec3 n = normalize(NORMAL + vec3((w - 0.5) * 0.2, 0.0, (0.5 - w) * 0.2));
-	float glow = pow(max(dot(reflect(-VIEW, n), normalize(sun_dir)), 0.0), 32.0);
-	col += sky_tint.rgb * glow * sun_glow;
+	float glint = pow(max(dot(reflect(-VIEW, n), normalize(sun_dir)), 0.0), 240.0);
+	col += sky_tint.rgb * glint * sun_glow;
 
 	ALBEDO = col;
 	ALPHA = alpha;
 	ROUGHNESS = 0.12;
-	SPECULAR = 0.7;
+	SPECULAR = 0.35;
 }
