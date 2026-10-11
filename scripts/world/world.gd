@@ -289,7 +289,9 @@ func _apply_settings() -> void:
 		sun.shadow_enabled = shadows_enabled
 		sun.directional_shadow_max_distance = [60.0, 120.0, 200.0][clampi(int(Game.settings["shadows"]), 0, 2)]
 	if environment:
-		environment.glow_enabled = int(Game.settings["film_grain"]) >= 0
+		# B-01: glow e um toggle proprio; film_grain ja nao o forca (condicao era sempre verdadeira)
+		environment.glow_enabled = bool(Game.settings.get("glow", true))
+		environment.glow_intensity = clampf(float(Game.settings.get("glow_intensity", 0.40)), 0.0, 1.0)
 	for ch in chunks.values():
 		(ch as Chunk).grass_quality = grass_quality
 	_last_center = Vector2i(999999, 999999)
