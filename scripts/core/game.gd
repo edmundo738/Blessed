@@ -201,8 +201,10 @@ func daylight() -> float:
 		return smooth(DAWN.x, DAWN.y, h)
 	if h > DAY_END.x:
 		return 1.0 - smooth(DAY_END.x, DAY_END.y, h)
-	# meio do dia: curva suave com pico às 13h
-	return clampf(1.0 - absf(h - 13.0) / 9.0, 0.35, 1.0)
+	# dia pleno: sol totalmente acima do horizonte -> 1.0 continuo.
+	# (antes era um triangulo que caia a ~0.44 nas fronteiras, mas dawn termina em 1.0
+	#  e dusk comeca em 1.0 -> dava um salto de brilho "claro/escuro do nada" as 8h e 18h)
+	return 1.0
 
 
 func is_night() -> bool:
