@@ -70,7 +70,7 @@ func _build_environment() -> void:
 	environment.glow_strength = 0.9
 	environment.glow_bloom = 0.08
 	environment.adjustment_enabled = true
-	environment.adjustment_saturation = 1.12
+	environment.adjustment_saturation = 1.04
 	env_node = WorldEnvironment.new()
 	env_node.environment = environment
 	env_node.name = "WorldEnvironment"

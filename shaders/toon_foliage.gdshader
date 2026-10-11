@@ -5,7 +5,7 @@ render_mode specular_disabled, cull_disabled;
 
 uniform vec4 shadow_tint : source_color = vec4(0.52, 0.56, 0.88, 1.0);
 uniform float bands : hint_range(1.0, 8.0) = 3.0;
-uniform float band_soft : hint_range(0.0, 1.0) = 0.12;
+uniform float band_soft : hint_range(0.0, 1.0) = 0.40;
 uniform float rim_strength : hint_range(0.0, 1.0) = 0.40;
 uniform float rim_power : hint_range(0.5, 8.0) = 2.5;
 uniform float light_gain : hint_range(0.2, 3.0) = 1.10;

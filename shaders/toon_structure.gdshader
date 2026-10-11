@@ -8,13 +8,13 @@ render_mode specular_disabled, cull_disabled;
 uniform vec3 sun_dir = vec3(-0.4, 0.8, 0.3);
 uniform vec4 shadow_tint : source_color = vec4(0.54, 0.56, 0.86, 1.0);
 uniform float bands : hint_range(1.0, 8.0) = 4.0;
-uniform float band_soft : hint_range(0.0, 1.0) = 0.16;
+uniform float band_soft : hint_range(0.0, 1.0) = 0.55;
 uniform float rim_strength : hint_range(0.0, 1.0) = 0.26;
 uniform float rim_power : hint_range(0.5, 8.0) = 3.0;
 uniform float light_gain : hint_range(0.2, 3.0) = 1.05;
 uniform float ambient_gain : hint_range(0.0, 2.0) = 0.88;
 uniform float plank_scale : hint_range(0.0, 12.0) = 5.0;
-uniform float plank_strength : hint_range(0.0, 0.6) = 0.18;
+uniform float plank_strength : hint_range(0.0, 0.6) = 0.10;
 
 varying vec3 v_obj;
 
@@ -27,10 +27,6 @@ void fragment() {
 	float py = fract(v_obj.y * plank_scale);
 	float line = smoothstep(0.0, 0.06, py) * smoothstep(0.0, 0.06, 1.0 - py);
 	float grain = mix(1.0 - plank_strength, 1.0, line);
-	// variacao por celula: quebra a repeticao sem ruido evidente
-	vec2 cell = floor(v_obj.xz * plank_scale);
-	float nz = fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453);
-	grain *= mix(0.94, 1.0, nz);
 	ALBEDO = COLOR.rgb * grain;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;

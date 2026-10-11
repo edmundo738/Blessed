@@ -75,13 +75,13 @@ void fragment() {
 
 	// sol
 	float sd = max(dot(d, normalize(sun_dir)), 0.0);
-	col += vec3(1.0, 0.93, 0.72) * smoothstep(1.0 - sun_size, 1.0 - sun_size * 0.25, sd) * daylight;
+	col += vec3(1.0, 0.96, 0.84) * smoothstep(1.0 - sun_size * 1.6, 1.0 - sun_size * 0.3, sd) * daylight;
 	col += vec3(1.0, 0.70, 0.42) * pow(sd, 48.0) * glow_strength * 0.5;
 
 	// lua
 	vec3 moon_dir = -normalize(sun_dir);
 	float md = max(dot(d, moon_dir), 0.0);
-	col += vec3(0.85, 0.90, 1.00) * smoothstep(0.9975, 0.9995, md) * (1.0 - daylight);
+	col += vec3(0.92, 0.95, 1.00) * smoothstep(0.9955, 0.9985, md) * (1.0 - daylight);
 	col += vec3(0.55, 0.65, 0.95) * pow(md, 220.0) * (1.0 - daylight) * 0.6;
 
 	// estrelas

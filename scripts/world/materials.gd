@@ -72,7 +72,7 @@ func apply_time(sun_dir: Vector3, daylight: float, dusk: float) -> void:
 		Color(0.48, 0.52, 0.86).lerp(Color(0.18, 0.22, 0.48), night))
 	grass.set_shader_parameter("shadow_tint",
 		Color(0.45, 0.50, 0.82).lerp(Color(0.16, 0.20, 0.44), night))
-	terrain.set_shader_parameter("band_soft", lerpf(0.18, 0.55, night))
+	terrain.set_shader_parameter("band_soft", lerpf(0.45, 0.62, night))
 	terrain.set_shader_parameter("ambient_gain", lerpf(0.85, 0.42, night))
 	foliage.set_shader_parameter("ambient_gain", lerpf(0.90, 0.45, night))
 	grass.set_shader_parameter("ambient_gain", lerpf(0.90, 0.45, night))
