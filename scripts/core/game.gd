@@ -45,6 +45,7 @@ var settings := {
 	"grass_quality": 1,        # 0 baixo, 1 médio, 2 alto
 	"shadows": 1,              # 0 desligado, 1 normal, 2 alto
 	"head_bob": 1.0,
+	"quality": 1,              # 0 compativel, 1 equilibrado, 2 cinematografico
 	"glow": true,              # B-01: bloom independente (antes era forcado pelo film_grain)
 	"glow_intensity": 0.40,
 	"film_grain": 0.5,         # reservado: grão ainda nao implementado (nao controla o glow)

@@ -13,6 +13,7 @@ var species: SpeciesKit
 var mats: Materials
 
 var chunks: Dictionary = {}          # Vector2i -> Chunk
+var _rm := RenderingServer.get_current_rendering_method()  # forward_plus | mobile | gl_compatibility
 var harvest_state := {}              # key -> tempo absoluto (s de jogo) em que volta
 # B-03: respawn estilo Minecraft — minérios/arvores longos, plantas curto.
 const RESPAWN_DAYS := {"wood": 14.0, "stone": 21.0, "iron": 30.0, "flint": 21.0,
@@ -281,6 +282,41 @@ func is_in_water(p: Vector3) -> bool:
 	return terrain.height(p.x, p.z) < Terrain.SEA_LEVEL and p.y < Terrain.SEA_LEVEL + 0.6
 
 
+func _apply_quality() -> void:
+	## Iluminacao + atmosfera por perfil/renderizador.
+	## Volumetric fog e SSR so existem em Forward+; SSAO tambem em Compatibility.
+	if environment == null:
+		return
+	var q := int(Game.settings.get("quality", 1))
+	var fp := _rm == "forward_plus"
+	# tonemap cinematografico + exposicao controlada (contra os "brancos" V-02)
+	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	environment.tonemap_exposure = 0.98
+	environment.tonemap_white = 6.0
+	# profundidade atmosferica via depth fog (todos os renderers)
+	environment.fog_aerial_perspective = 0.45
+	# SSAO (profundidade de contacto): Forward+ e Compatibility; Mobile nao
+	if _rm != "mobile":
+		environment.ssao_enabled = q >= 1
+		environment.ssao_radius = 1.1
+		environment.ssao_intensity = 1.3
+	# nevoeiro volumetrico: SO Forward+
+	if fp and q >= 1:
+		environment.volumetric_fog_enabled = true
+		environment.volumetric_fog_density = 0.018
+		environment.volumetric_fog_albedo = Color(0.76, 0.83, 0.93)
+		environment.volumetric_fog_length = 96.0
+		environment.volumetric_fog_sky_affect = 0.4
+	else:
+		environment.volumetric_fog_enabled = false
+	# reflexos screen-space: SO Forward+, so perfil cinematografico
+	if fp and q >= 2:
+		environment.ssr_enabled = true
+		environment.ssr_max_steps = 64
+	else:
+		environment.ssr_enabled = false
+
+
 func _apply_settings() -> void:
 	view_distance = float(Game.settings["view_distance"])
 	grass_quality = int(Game.settings["grass_quality"])
@@ -294,6 +330,7 @@ func _apply_settings() -> void:
 		environment.glow_intensity = clampf(float(Game.settings.get("glow_intensity", 0.40)), 0.0, 1.0)
 	for ch in chunks.values():
 		(ch as Chunk).grass_quality = grass_quality
+	_apply_quality()
 	_last_center = Vector2i(999999, 999999)
 
 
