@@ -81,9 +81,9 @@ func _attach_light(entry: Dictionary) -> void:
 		return
 	var l := OmniLight3D.new()
 	l.light_color = Color(1.0, 0.74, 0.48)
-	l.light_energy = 1.25
+	l.light_energy = 1.0
 	l.omni_range = st.light
-	l.omni_attenuation = 2.4
+	l.omni_attenuation = 1.0
 	l.shadow_enabled = false
 	l.position = Vector3(0, st.size.y * 0.7 + 0.3, 0)
 	(entry["node"] as Node3D).add_child(l)

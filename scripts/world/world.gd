@@ -315,6 +315,18 @@ func _apply_quality() -> void:
 		environment.ssr_max_steps = 64
 	else:
 		environment.ssr_enabled = false
+	# profundidade de campo (DoF): da a "sensacao de profundidade" cinematografica.
+	# CameraAttributesPractical; so Forward+/Mobile (nao Compatibility).
+	if env_node != null:
+		if _rm != "gl_compatibility" and q >= 1:
+			var ca := CameraAttributesPractical.new()
+			ca.dof_blur_far_enabled = true
+			ca.dof_blur_far_distance = 55.0
+			ca.dof_blur_far_transition = 45.0
+			ca.dof_blur_amount = 0.06
+			env_node.camera_attributes = ca
+		else:
+			env_node.camera_attributes = null
 
 
 func _apply_settings() -> void:
