@@ -41,11 +41,12 @@ func _init() -> void:
 	grass.set_shader_parameter("wind_height", 0.75)
 	grass.set_shader_parameter("rim_strength", 0.5)
 
+	var sts: Shader = load("res://shaders/toon_structure.gdshader")
 	structure = ShaderMaterial.new()
-	structure.shader = fs
-	structure.set_shader_parameter("shadow_tint", Color(0.52, 0.54, 0.84))
-	structure.set_shader_parameter("wind_strength", 0.0)
-	structure.set_shader_parameter("rim_strength", 0.22)
+	structure.shader = sts
+	structure.set_shader_parameter("shadow_tint", Color(0.54, 0.56, 0.86))
+	structure.set_shader_parameter("bands", 4.0)
+	structure.set_shader_parameter("rim_strength", 0.26)
 
 	water = ShaderMaterial.new()
 	water.shader = ws
