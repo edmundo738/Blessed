@@ -41,31 +41,34 @@ uniform vec3 sun_dir = vec3(-0.4, 0.8, 0.3);
 
 varying vec3 v_world;
 
+// Tres oitavas em frequencias incomensuraveis: o resultado e uma ondulacao
+// organica, sem a grelha de "bolas" que dois sinus puros + floor() criavam.
 float wave(vec2 p, float t) {
-	return sin(p.x * 1.0 + t) * 0.5 + sin(p.y * 1.37 - t * 0.83) * 0.5;
+	return sin(p.x * 1.0 + t) * 0.5
+		+ sin(p.y * 0.83 - t * 0.7) * 0.3
+		+ sin((p.x + p.y) * 0.57 + t * 0.35) * 0.2;
 }
 
 void vertex() {
 	v_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	vec2 p = v_world.xz * 0.35;
-	VERTEX.y += wave(p, TIME * wave_speed) * 0.06;
+	vec2 p = v_world.xz * 0.12;   // marulho largo (~50 m), nao um ladrilho
+	VERTEX.y += wave(p, TIME * wave_speed) * 0.05;
 }
 
 void fragment() {
 	float t = TIME * wave_speed;
-	vec2 p = v_world.xz * wave_scale * 0.1;
-	float w = wave(p, t) * 0.5 + 0.5;
+	vec2 p = v_world.xz * 0.12;
+	float w = wave(p, t) * 0.5 + 0.5;   // suave, SEM floor() -> sem plateaus/bolas
 
-	// bandas suaves — é o "traço" do desenho, mas sem pontilhar
-	float band = floor(w * 3.0) / 3.0;
-	vec3 col = mix(shallow_color.rgb, deep_color.rgb, band * 0.85);
+	// profundo raso com transicao larga
+	vec3 col = mix(deep_color.rgb, shallow_color.rgb, smoothstep(0.25, 0.75, w) * 0.7);
 
-	// espuma só nas cristas mais altas, esbatida (nada de bolinhas duras)
-	col = mix(col, foam_color.rgb, smoothstep(0.86, 1.0, w) * 0.25);
+	// espuma fina e rara, apenas nas cristas mais altas
+	col = mix(col, foam_color.rgb, smoothstep(0.90, 0.98, w) * 0.12);
 
-	// reflexo falso: brilho largo onde a normal aponta ao sol
-	vec3 n = normalize(NORMAL + vec3(w * 0.15 - 0.075, 0.0, (1.0 - w) * 0.15 - 0.075));
-	float glow = pow(max(dot(reflect(-VIEW, n), normalize(sun_dir)), 0.0), 24.0);
+	// reflexo largo do sol (brilho de agua, nao um holofote)
+	vec3 n = normalize(NORMAL + vec3((w - 0.5) * 0.2, 0.0, (0.5 - w) * 0.2));
+	float glow = pow(max(dot(reflect(-VIEW, n), normalize(sun_dir)), 0.0), 32.0);
 	col += sky_tint.rgb * glow * sun_glow;
 
 	ALBEDO = col;

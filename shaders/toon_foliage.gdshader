@@ -1,7 +1,7 @@
 shader_type spatial;
 // Folhagem anime: vento no vértice + bandas de luz + tinta por instância.
 // INSTANCE_CUSTOM: xyz = tinta da instância, w = raio de desaparecimento (0 = não some).
-render_mode specular_disabled;
+render_mode specular_disabled, cull_disabled;
 
 uniform vec4 shadow_tint : source_color = vec4(0.52, 0.56, 0.88, 1.0);
 uniform float bands : hint_range(1.0, 8.0) = 3.0;

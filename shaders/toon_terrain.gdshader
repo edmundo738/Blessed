@@ -1,7 +1,7 @@
 shader_type spatial;
 // Terreno anime: bandas de luz analíticas + sombra projetada real do motor.
 // Funciona em Forward+ e em Compatibility (não usa nenhuma feature exclusiva).
-render_mode specular_disabled;
+render_mode specular_disabled, cull_disabled;
 
 uniform vec3 sun_dir = vec3(-0.4, 0.8, 0.3);
 uniform vec4 shadow_tint : source_color = vec4(0.56, 0.60, 0.90, 1.0);
@@ -46,5 +46,5 @@ void light() {
 	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), rim_power);
 	col += LIGHT_COLOR * rim * rim_strength * band;
 
-	DIFFUSE_LIGHT += col * LIGHT_COLOR * ambient_gain;
+	DIFFUSE_LIGHT += min(col, vec3(1.5)) * LIGHT_COLOR * ambient_gain;
 }

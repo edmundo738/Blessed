@@ -297,6 +297,18 @@ func _run() -> void:
 	var wcode := _strip_comments(str(FileAccess.get_file_as_string("res://shaders/stylized_water.gdshader")))
 	check("água usa blend_mix (não additive/alpha que lavaria a cor)", "blend_mix" in wcode)
 
+	# REGRESSÃO DO RAIO-X #2: as faces exteriores têm de ser desenhadas.
+	# Com cull_back, qualquer winding virado cortava a face de fora e o jogador
+	# via o interior (o sintoma reportado em terreno/casas/arvores).
+	# cull_disabled garante as duas faces, independente do renderer.
+	for path in ["res://shaders/toon_terrain.gdshader", "res://shaders/toon_foliage.gdshader"]:
+		var code := str(FileAccess.get_file_as_string(path))
+		check("faces exteriores visíveis (%s)" % str(path).get_file(),
+			"cull_disabled" in code)
+	# a água não pode voltar ao ladrilho de bolas (floor sobre sinus puros)
+	var frag := wcode.split("void fragment()")[1] if "void fragment()" in wcode else wcode
+	check("água sem grelha de bandas (sem floor no fragment)", "floor(" not in frag)
+
 	# o Compatibility reconstrói a profundidade com NDC -1..1 e reverse-z; o
 	# Forward+ com NDC 0..1. Um shader que leia a profundidade dá resultados
 	# diferentes nos dois — e a exportação web corre em Compatibility.
