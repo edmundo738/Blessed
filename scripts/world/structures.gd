@@ -54,6 +54,22 @@ func _spawn(entry: Dictionary) -> void:
 	if species == null or not species.structures.has(str(entry["id"])):
 		return
 	var st: SpeciesKit.Structure = species.structures[str(entry["id"])]
+	# ── Reestruturacao .tscn: um prefab editavel no editor tem prioridade. ──
+	# Se existir res://scenes/structures/<id>.tscn, usa-o (tu editas a cena no
+	# Godot, sem codigo). Senao, cai no procedural abaixo (nao parte nada).
+	var prefab := "res://scenes/structures/%s.tscn" % str(entry["id"])
+	if ResourceLoader.exists(prefab):
+		var packed = load(prefab)
+		if packed != null:
+			var inst = packed.instantiate()
+			if inst is Node3D:
+				(inst as Node3D).position = entry["pos"]
+				(inst as Node3D).rotation.y = float(entry["rot"])
+				add_child(inst)
+				entry["node"] = inst
+				if entry["lit"]:
+					_attach_light(entry)
+				return
 	var body := StaticBody3D.new()
 	body.position = entry["pos"]
 	body.rotation.y = float(entry["rot"])
