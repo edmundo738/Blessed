@@ -86,10 +86,15 @@ const OBJECTIVES := [
 
 
 func item(id: String) -> Dictionary:
+	if Mods.has_item(id):
+		return Mods.item(id)
 	return ITEMS.get(id, {})
 
 
 func item_name(id: String) -> String:
+	var custom = item(id).get("name", "")
+	if str(custom) != "":
+		return str(custom)
 	return Loc.t("item." + id)
 
 
@@ -109,7 +114,7 @@ func recipe(id: String) -> Dictionary:
 	for r in RECIPES:
 		if str(r["id"]) == id:
 			return r
-	return {}
+	return Mods.recipe(id)
 
 
 ## Receitas visíveis dado o que está por perto (`near` = ids de estações).
@@ -118,5 +123,9 @@ func recipes_for(near: Array = []) -> Array:
 	for r in RECIPES:
 		var st := str(r.get("station", ""))
 		if st.is_empty() or st in near:
+			out.append(r)
+	for r in Mods.all_recipes():
+		var st2 := str(r.get("station", ""))
+		if st2.is_empty() or st2 in near:
 			out.append(r)
 	return out

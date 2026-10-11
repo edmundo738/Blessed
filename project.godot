@@ -18,6 +18,7 @@ boot_splash/show_image=false
 
 Bus="*res://scripts/core/bus.gd"
 Loc="*res://scripts/core/loc.gd"
+Mods="*res://scripts/core/mods.gd"
 Db="*res://scripts/core/db.gd"
 Sfx="*res://scripts/core/sfx.gd"
 Game="*res://scripts/core/game.gd"
