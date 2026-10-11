@@ -115,5 +115,5 @@ O `Mods` carrega automaticamente qualquer `.tres` destes tipos que esteja em
 
 ### JSON vs `.tres`
 - **`.tres` (Inspector)**: mais fácil, sem texto, ideal para quem usa o editor.
-- **`mod.json`**: melhor para版本amento/edição em massa e para `user://mods/`.
+- **`mod.json`**: melhor para versionamento/edição em massa e para `user://mods/`.
 - Podes usar os dois; o `Mods` carrega ambos.
