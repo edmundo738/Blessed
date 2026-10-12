@@ -29,6 +29,7 @@ func _ready() -> void:
 	_build_world()
 	_build_player()
 	_build_systems()
+	_build_ambient()
 	_build_ui()
 	_starter_kit()
 	# o mundo à volta do spawn começa logo a existir
@@ -194,6 +195,18 @@ func _build_systems() -> void:
 	night.survival = survival
 	night.root = creature_root
 	add_child(night)
+
+
+func _build_ambient() -> void:
+	var amb := _sys("res://scenes/ambient_fx.tscn", _ambient_fallback)
+	amb.set("player", player)
+	add_child(amb)
+
+
+func _ambient_fallback() -> Node:
+	var n := Node3D.new()
+	n.set_script(load("res://scripts/world/ambient_fx.gd"))
+	return n
 
 
 func _build_ui() -> void:
