@@ -53,36 +53,44 @@ func _ready() -> void:
 #  CÉU / LUZ / ÁGUA
 # ══════════════════════════════════════════════════════════════════════════
 func _build_environment() -> void:
-	environment = Environment.new()
-	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color(0.55, 0.72, 0.92)
-	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color(0.62, 0.74, 0.92)
-	environment.ambient_light_energy = 0.9
-	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	environment.tonemap_exposure = 1.05
-	environment.fog_enabled = true
-	environment.fog_light_color = Color(0.72, 0.83, 0.95)
-	environment.fog_density = 0.0035
-	environment.fog_sky_affect = 0.35
-	environment.glow_enabled = true
-	environment.glow_intensity = 0.45
-	environment.glow_strength = 0.9
-	environment.glow_bloom = 0.08
-	environment.adjustment_enabled = true
-	environment.adjustment_saturation = 1.04
-	env_node = WorldEnvironment.new()
-	env_node.environment = environment
-	env_node.name = "WorldEnvironment"
-	add_child(env_node)
+	# Sol e WorldEnvironment vêm da CENA (world.tscn) se lá estiverem — assim
+	# podes editá-los como NODES no Godot. Senão, o código cria-os (igual a antes).
+	env_node = get_node_or_null("WorldEnvironment") as WorldEnvironment
+	if env_node == null:
+		env_node = WorldEnvironment.new()
+		env_node.name = "WorldEnvironment"
+		add_child(env_node)
+	environment = env_node.environment
+	if environment == null:
+		environment = Environment.new()
+		environment.background_mode = Environment.BG_COLOR
+		environment.background_color = Color(0.55, 0.72, 0.92)
+		environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		environment.ambient_light_color = Color(0.62, 0.74, 0.92)
+		environment.ambient_light_energy = 0.9
+		environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+		environment.tonemap_exposure = 1.05
+		environment.fog_enabled = true
+		environment.fog_light_color = Color(0.72, 0.83, 0.95)
+		environment.fog_density = 0.0035
+		environment.fog_sky_affect = 0.35
+		environment.glow_enabled = true
+		environment.glow_intensity = 0.45
+		environment.glow_strength = 0.9
+		environment.glow_bloom = 0.08
+		environment.adjustment_enabled = true
+		environment.adjustment_saturation = 1.04
+		env_node.environment = environment
 
-	sun = DirectionalLight3D.new()
-	sun.name = "Sun"
-	sun.light_energy = 1.25
-	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 120.0
-	sun.light_angular_distance = 1.2
-	add_child(sun)
+	sun = get_node_or_null("Sun") as DirectionalLight3D
+	if sun == null:
+		sun = DirectionalLight3D.new()
+		sun.name = "Sun"
+		sun.light_energy = 1.25
+		sun.shadow_enabled = true
+		sun.directional_shadow_max_distance = 120.0
+		sun.light_angular_distance = 1.2
+		add_child(sun)
 
 
 func _build_sky_dome() -> void:

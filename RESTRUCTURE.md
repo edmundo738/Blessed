@@ -17,6 +17,14 @@ cena `.tscn` só é usada quando existe. Nada parte.
 | Céu / água | ⏳ a mover para cena | (próximo) |
 | Aldeia → **ruínas** | ⏳ prefabs + conteúdo | (próximo) |
 
+## Progresso: nodes já movidos para cenas
+- **`world.tscn`** tem agora os nós **`Sun`** (DirectionalLight3D) e **`WorldEnvironment`**.
+  O `world.gd` usa-os da cena se existirem (senão cria-os — igual a antes). Podes
+  selecioná-los e afinar sombras/ambiente no Inspector.
+  >Nota: a COR/ENERGIA do sol e o nevoeiro/cor do ambiente são animados pelo código
+  > (ciclo dia/noite + perfil de qualidade), por isso esses valores específicos são
+  >  controlados em runtime; o que editas na cena é a configuração estática (sombras, etc.).
+
 ## Já funciona: o jogo é scene-based (com fallback)
 O `main.gd` agora instancia **cenas** em vez de só `.new()`:
 `scenes/world.tscn`, `player.tscn`, `structures.tscn`, `village.tscn`, `fx.tscn`,
