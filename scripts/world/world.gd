@@ -347,7 +347,7 @@ func _apply_settings() -> void:
 
 
 func save_data() -> Dictionary:
-	return {"seed": Game.world_seed}
+	return {"seed": Game.world_seed, "harvest_state": harvest_state}
 
 
 func load_data(_d: Dictionary) -> void:

@@ -20,7 +20,8 @@ const UP := Vector3.UP
 ## Triângulo com a winding corrigida para o lado de `hint`.
 static func tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, hint: Vector3) -> void:
 	var n := (b - a).cross(c - a)
-	if n.dot(hint) < 0.0:
+	# Godot: frente = sentido HORÁRIO; (b-a)x(c-a) é o normal anti-horário => inverter se aponta para `hint`
+	if n.dot(hint) > 0.0:
 		st.add_vertex(a); st.add_vertex(c); st.add_vertex(b)
 	else:
 		st.add_vertex(a); st.add_vertex(b); st.add_vertex(c)

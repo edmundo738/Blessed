@@ -293,7 +293,8 @@ func _run() -> void:
 			if gn.length_squared() < 1e-12:
 				continue
 			gn = gn.normalized()
-			if gn.y <= 0.0:
+			# Godot: frente = horário => normal (b-a)x(c-a) aponta para BAIXO quando a face olha para cima
+			if gn.y >= 0.0:
 				down += 1
 		check("chão tem as faces viradas para cima", down == 0, "%d viradas ao contrário" % down)
 	else:
@@ -320,8 +321,9 @@ func _run() -> void:
 	# REGRESSÃO DO RAIO-X #2: as faces exteriores têm de ser desenhadas.
 	# Com cull_back, qualquer winding virado cortava a face de fora e o jogador
 	# via o interior (o sintoma reportado em terreno/casas/arvores).
-	# cull_disabled garante as duas faces, independente do renderer.
-	for path in ["res://shaders/toon_terrain.gdshader", "res://shaders/toon_foliage.gdshader"]:
+	# (terreno e estruturas usam cull normal: o winding agora é o do Godot; só a
+	#  folhagem/relva, que são lâminas de dupla face, precisa de cull_disabled)
+	for path in ["res://shaders/toon_foliage.gdshader"]:
 		var code := str(FileAccess.get_file_as_string(path))
 		check("faces exteriores visíveis (%s)" % str(path).get_file(),
 			"cull_disabled" in code)

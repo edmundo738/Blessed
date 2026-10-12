@@ -109,8 +109,8 @@ func _build_ground(o: Vector2, with_collision: bool) -> void:
 			var b := j * n + i + 1
 			var c := (j + 1) * n + i + 1
 			var d := (j + 1) * n + i
-			st.add_index(a); st.add_index(c); st.add_index(b)
-			st.add_index(a); st.add_index(d); st.add_index(c)
+			st.add_index(a); st.add_index(b); st.add_index(c)
+			st.add_index(a); st.add_index(c); st.add_index(d)
 
 	# 3) SEM SAIA.
 	#    A saia (parede vertical à volta do chunk) foi removida. Medida com
@@ -338,10 +338,12 @@ func _make_multimesh(id: String, b: Dictionary) -> void:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_custom_data = true
+	mm.use_colors = true  # sem isto a cor de vértice é multiplicada por 0 => preto
 	mm.mesh = mesh
 	mm.instance_count = t.size()
 	for i in t.size():
 		mm.set_instance_transform(i, t[i])
+		mm.set_instance_color(i, Color.WHITE)
 		var tint: Color = c[i]
 		mm.set_instance_custom_data(i, Color(tint.r, tint.g, tint.b, float(b["fade"])))
 	b["mm"] = mm
@@ -365,11 +367,13 @@ func _grass_multimesh(t: Array, c: Array) -> void:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_custom_data = true
+	mm.use_colors = true  # sem isto a cor de vértice é multiplicada por 0 => preto
 	mm.mesh = mesh
 	mm.instance_count = t.size()
 	var fade: float = [30.0, 55.0, 85.0][clampi(grass_quality, 0, 2)]
 	for i in t.size():
 		mm.set_instance_transform(i, t[i])
+		mm.set_instance_color(i, Color.WHITE)
 		var col: Color = c[i]
 		mm.set_instance_custom_data(i, Color(col.r, col.g, col.b, fade))
 	var inst := MultiMeshInstance3D.new()

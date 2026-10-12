@@ -3,7 +3,7 @@ shader_type spatial;
 // A base de luz e IDENTICA ao toon_terrain (ja provada em Forward+ e Compatibility);
 // o que muda e o fragment(), que acrescenta pranchas e variacao para as casas nao
 // parecerem caixas de cor lisa. Sem vento, sem ALPHA (nunca vai para o passe transparente).
-render_mode specular_disabled, cull_disabled;
+render_mode specular_disabled;
 
 uniform vec3 sun_dir = vec3(-0.4, 0.8, 0.3);
 uniform vec4 shadow_tint : source_color = vec4(0.54, 0.56, 0.86, 1.0);
