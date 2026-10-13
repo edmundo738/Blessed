@@ -18,6 +18,14 @@ uniform float sway_pivot = 0.0;
 
 varying vec3 v_tint;
 varying float v_fade;
+varying float v_h;
+varying vec3 v_wp;
+
+float hash21(vec2 p) {
+	p = fract(p * vec2(123.34, 456.21));
+	p += dot(p, p + 45.32);
+	return fract(p.x * p.y);
+}
 
 void vertex() {
 	v_tint = mix(vec3(1.0), INSTANCE_CUSTOM.xyz, step(0.01, dot(INSTANCE_CUSTOM.xyz, vec3(1.0))));
@@ -25,6 +33,8 @@ void vertex() {
 
 	// vento: desloca proporcionalmente à altura no objeto
 	float h = clamp((VERTEX.y - sway_pivot) / max(wind_height, 0.001), 0.0, 1.0);
+	v_h = h;
+	v_wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	float ph = origin.x * 0.31 + origin.z * 0.23 + TIME * wind_speed;
 	vec2 sway = vec2(sin(ph), cos(ph * 0.77)) * wind_strength * h * h;
 	VERTEX.x += sway.x;
@@ -47,7 +57,12 @@ void vertex() {
 }
 
 void fragment() {
-	ALBEDO = COLOR.rgb * v_tint;
+	// AO na base (mais escuro em baixo) + grão fino => folhagem com textura, não lisa
+	float grain = hash21(v_wp.xz * 6.0) * 0.5 + hash21(v_wp.xz * 23.0) * 0.5;
+	vec3 leaf = COLOR.rgb * v_tint;
+	leaf *= mix(0.58, 1.06, v_h);            // base em sombra
+	leaf *= 0.88 + 0.24 * grain;             // grão
+	ALBEDO = leaf;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;
 	// NÃO escrever ALPHA aqui. Em Godot 4, escrever ALPHA num shader espacial
