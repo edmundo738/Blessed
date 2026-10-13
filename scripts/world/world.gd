@@ -67,7 +67,7 @@ func _build_environment() -> void:
 		environment.background_color = Color(0.55, 0.72, 0.92)
 		environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 		environment.ambient_light_color = Color(0.62, 0.74, 0.92)
-		environment.ambient_light_energy = 0.9
+		environment.ambient_light_energy = 0.6
 		environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 		environment.tonemap_exposure = 1.05
 		environment.fog_enabled = true
@@ -75,9 +75,9 @@ func _build_environment() -> void:
 		environment.fog_density = 0.0035
 		environment.fog_sky_affect = 0.35
 		environment.glow_enabled = true
-		environment.glow_intensity = 0.45
+		environment.glow_intensity = 0.2
 		environment.glow_strength = 0.9
-		environment.glow_bloom = 0.08
+		environment.glow_bloom = 0.0
 		environment.adjustment_enabled = true
 		environment.adjustment_saturation = 1.04
 		env_node.environment = environment
@@ -131,10 +131,20 @@ func update_time(hour: float, daylight: float, phase: String) -> void:
 	# `dir` é a direção para onde a luz VIAJA (já vem negada em Game.sun_direction()).
 	# O nó tem de ficar do lado OPOSTO, senão o sol nasce debaixo do terreno e
 	# ilumina tudo por baixo — foi isso que deixou o chão às escuras.
-	sun.look_at_from_position(-dir * 200.0, Vector3.ZERO, Vector3.UP)
-	sun.light_color = Game.sun_color()
 	var night := 1.0 - daylight
-	sun.light_energy = lerpf(1.35, 0.22, night)
+	# Uma só DirectionalLight faz de sol de dia e de lua de noite: quando o sol
+	# desce do horizonte a energia chega a 0 e a luz passa para a posição da lua
+	# (oposta), azulada e fraca — assim a noite tem luz direcional e sombras
+	# vindas da lua, em vez de o sol a iluminar o chão por baixo.
+	var sun_elev := (-dir).normalized().y
+	if sun_elev > -0.02:
+		sun.look_at_from_position(-dir * 200.0, Vector3.ZERO, Vector3.UP)
+		sun.light_color = Game.sun_color()
+		sun.light_energy = 1.3 * clampf((sun_elev + 0.02) / 0.27, 0.0, 1.0)
+	else:
+		sun.look_at_from_position(dir * 200.0, Vector3.ZERO, Vector3.UP)
+		sun.light_color = Color(0.55, 0.66, 1.0)
+		sun.light_energy = 0.30 * clampf((dir.normalized().y - 0.02) / 0.3, 0.0, 1.0)
 	sun.visible = true
 
 	var dusk := 0.0
@@ -142,7 +152,7 @@ func update_time(hour: float, daylight: float, phase: String) -> void:
 		dusk = clampf(1.0 - absf(daylight - 0.45) * 3.0, 0.0, 1.0)
 	mats.apply_time(dir, daylight, dusk)
 
-	environment.ambient_light_energy = lerpf(0.85, 0.30, night)
+	environment.ambient_light_energy = lerpf(0.58, 0.26, night)
 	environment.fog_light_color = Color(0.72, 0.83, 0.95).lerp(Color(0.07, 0.09, 0.18), night)
 	environment.fog_light_color = environment.fog_light_color.lerp(Color(1.0, 0.62, 0.42), dusk * 0.5)
 	environment.fog_density = lerpf(0.0032, 0.0062, night)

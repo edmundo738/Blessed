@@ -29,13 +29,13 @@ const BIOME_COUNT := 7
 
 ## Paleta anime: cores saturadas e limpas, sem texturas.
 const BIOME_COLOR := [
-	Color(0.93, 0.86, 0.66),  # areia
-	Color(0.42, 0.78, 0.36),  # prado
-	Color(0.20, 0.55, 0.30),  # floresta
-	Color(0.96, 0.70, 0.82),  # bosque de cerejeiras
-	Color(0.55, 0.54, 0.62),  # rocha
-	Color(0.94, 0.96, 1.00),  # neve
-	Color(0.32, 0.60, 0.42),  # pântano
+	Color(0.80, 0.72, 0.54),  # areia
+	Color(0.34, 0.50, 0.24),  # prado
+	Color(0.16, 0.38, 0.22),  # floresta
+	Color(0.74, 0.52, 0.55),  # bosque de cerejeiras
+	Color(0.46, 0.45, 0.47),  # rocha
+	Color(0.86, 0.89, 0.94),  # neve
+	Color(0.27, 0.43, 0.32),  # pântano
 ]
 
 ## Posição da aldeia (definida em relação ao spawn).

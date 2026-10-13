@@ -47,7 +47,7 @@ var settings := {
 	"head_bob": 1.0,
 	"quality": 1,              # 0 compativel, 1 equilibrado, 2 cinematografico
 	"glow": true,              # B-01: bloom independente (antes era forcado pelo film_grain)
-	"glow_intensity": 0.40,
+	"glow_intensity": 0.18,
 	"film_grain": 0.5,         # reservado: grão ainda nao implementado (nao controla o glow)
 	"subtitles": true,
 	"horror": 1.0,             # 0 suave … 2 implacável
@@ -223,7 +223,14 @@ func sun_color() -> Color:
 
 func sun_direction() -> Vector3:
 	# O sol nasce a este (+X) e põe-se a oeste (-X).
-	var t := clampf((hour - 5.5) / 13.0, -0.2, 1.2)
+	# Dia (5.5h→18.5h) percorre 0→π; a noite (18.5h→5.5h) continua π→2π, por isso
+	# o sol fica abaixo do horizonte e a LUA (posição oposta) cruza o céu de noite.
+	var t: float
+	if hour >= 5.5 and hour <= 18.5:
+		t = (hour - 5.5) / 13.0
+	else:
+		var hh := hour + 24.0 if hour < 5.5 else hour
+		t = 1.0 + (hh - 18.5) / 11.0
 	var ang := PI * t
 	var dir := Vector3(cos(ang), sin(ang) * 0.9 + 0.12, 0.28).normalized()
 	return -dir  # direção "para onde aponta" a luz

@@ -9,7 +9,7 @@ uniform float bands : hint_range(1.0, 8.0) = 3.0;
 uniform float band_soft : hint_range(0.0, 1.0) = 0.45;
 uniform float rim_strength : hint_range(0.0, 1.0) = 0.30;
 uniform float rim_power : hint_range(0.5, 8.0) = 3.0;
-uniform float light_gain : hint_range(0.2, 3.0) = 1.05;
+uniform float light_gain : hint_range(0.2, 3.0) = 0.82;
 uniform float ambient_gain : hint_range(0.0, 2.0) = 0.85;
 
 varying vec3 v_world;
