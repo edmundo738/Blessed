@@ -25,7 +25,11 @@ const B_GROVE := 3
 const B_ROCK := 4
 const B_SNOW := 5
 const B_MARSH := 6
-const BIOME_COUNT := 7
+const B_DESERT := 7
+const B_BADLANDS := 8
+const B_SAVANNA := 9
+const B_DIRT := 10
+const BIOME_COUNT := 11
 
 ## Paleta anime: cores saturadas e limpas, sem texturas.
 const BIOME_COLOR := [
@@ -36,6 +40,10 @@ const BIOME_COLOR := [
 	Color(0.46, 0.45, 0.47),  # rocha
 	Color(0.86, 0.89, 0.94),  # neve
 	Color(0.27, 0.43, 0.32),  # pântano
+	Color(0.87, 0.75, 0.47),  # deserto (dunas)
+	Color(0.71, 0.39, 0.21),  # badlands (laranja ferrugem)
+	Color(0.60, 0.56, 0.27),  # savana (erva seca)
+	Color(0.40, 0.30, 0.21),  # terra nua
 ]
 
 ## Posição da aldeia (definida em relação ao spawn).
@@ -52,6 +60,8 @@ var n_temp: FastNoiseLite
 var n_grove: FastNoiseLite
 var n_river: FastNoiseLite
 var n_tint: FastNoiseLite
+var n_warp: FastNoiseLite
+var n_erosion: FastNoiseLite
 
 
 func _init(p_seed: int = 1) -> void:
@@ -66,6 +76,8 @@ func _init(p_seed: int = 1) -> void:
 	n_grove = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.0062, 2, 0.5, 2.0, p_seed + 7)
 	n_river = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.0026, 4, 0.5, 2.4, p_seed + 8)
 	n_tint = _noise(FastNoiseLite.TYPE_PERLIN, 0.09, 2, 0.5, 2.0, p_seed + 9)
+	n_warp = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.0009, 2, 0.5, 2.0, p_seed + 10)
+	n_erosion = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.0019, 3, 0.5, 2.0, p_seed + 11)
 
 
 func _noise(t: FastNoiseLite.NoiseType, freq: float, oct: int, gain: float,
@@ -105,15 +117,24 @@ func height(x: float, z: float) -> float:
 
 ## Terreno "cru", sem rio/caminho/aldeia.
 func _land(x: float, z: float, detail: bool = true) -> float:
-	var c := n_continent.get_noise_2d(x, z)
-	# média positiva: queremos um mundo maioritariamente acima do mar,
-	# com lagos e rios nos vales (e não um oceano com ilhas).
-	var h := c * 21.0 + 7.0
-	var m := clampf((n_mask.get_noise_2d(x, z) + 0.18) * 1.5, 0.0, 1.0)
-	var ridge := clampf(n_mountain.get_noise_2d(x, z), 0.0, 1.0)
-	h += pow(ridge, 2.3) * 96.0 * m * m
+	# DOMAIN WARPING: desloca as coordenadas com um ruído antes de amostrar =>
+	# formas orgânicas e menos repetitivas (técnica dos terrenos AAA).
+	var wx := n_warp.get_noise_2d(x, z) * 70.0
+	var wz := n_warp.get_noise_2d(x + 311.7, z - 177.3) * 70.0
+	var c := n_continent.get_noise_2d(x + wx, z + wz)
+	# média positiva: mundo maioritariamente acima do mar, com lagos nos vales.
+	var h := c * 24.0 + 6.0
+	# EROSION: 0 = escarpado/montanhoso, 1 = plano/suave (estilo Minecraft 1.18).
+	var er := clampf(n_erosion.get_noise_2d(x, z) * 0.5 + 0.5, 0.0, 1.0)
+	var m := clampf((n_mask.get_noise_2d(x + wx, z + wz) + 0.18) * 1.5, 0.0, 1.0)
+	var ridge := clampf(n_mountain.get_noise_2d(x + wx, z + wz), 0.0, 1.0)
+	# montanhas mais dramáticas onde a erosão é baixa
+	var mount_amp := 118.0 * (1.0 - er * 0.72)
+	h += pow(ridge, 2.2) * mount_amp * m * m
+	# onde a erosão é alta, puxa para colinas suaves
+	h = lerpf(h, c * 14.0 + 5.0, er * 0.35)
 	if detail:
-		h += n_detail.get_noise_2d(x, z) * 1.7
+		h += n_detail.get_noise_2d(x, z) * (1.2 + (1.0 - er) * 1.6)
 	else:
 		h += n_detail.get_noise_2d(x, z) * 0.45
 	return h
@@ -177,21 +198,33 @@ func biome_weights_s(x: float, z: float, h: float, sl: float, out: PackedFloat32
 	var moist := n_moist.get_noise_2d(x, z)
 	var temp := n_temp.get_noise_2d(x, z) - h * 0.0055
 	var above := h - SEA_LEVEL
+	# clima normalizado 0..1 — t: 0 frio, 1 quente; m: 0 seco, 1 húmido
+	var t := clampf(temp * 1.3 + 0.5, 0.0, 1.0)
+	var m := clampf(moist * 1.3 + 0.5, 0.0, 1.0)
+	var grove_n := n_grove.get_noise_2d(x, z)
+	var tint_n := n_tint.get_noise_2d(x, z)
+	var flat := 1.0 - _smooth(0.40, 0.70, sl)   # biomas de superfície só em terreno plano
 
 	for i in BIOME_COUNT:
 		out[i] = 0.0
 
-	# Os limiares abaixo foram calibrados contra os quantis reais dos ruídos
-	# (ver tools/): humidade p50=0.0 p90=0.42, bosque p75=0.29, declive p90=0.61.
-	out[B_SNOW] = _smooth(28.0, 46.0, h) * 1.3 + _smooth(0.44, 0.64, -temp) * 0.7
-	out[B_ROCK] = _smooth(0.34, 0.66, sl) * 1.5 + _smooth(22.0, 34.0, h) * 0.5
+	# altitude / declive (independentes do clima)
 	out[B_SAND] = 1.0 - _smooth(-0.3, 1.8, above)
-	out[B_MARSH] = _smooth(0.32, 0.52, moist) * (1.0 - _smooth(1.0, 3.0, above)) * 1.6
-	out[B_GROVE] = _smooth(0.20, 0.42, n_grove.get_noise_2d(x, z)) \
-		* _smooth(0.00, 0.30, moist) * (1.0 - _smooth(6.0, 22.0, h)) * 1.8
-	out[B_FOREST] = _smooth(-0.02, 0.16, moist) * (1.0 - _smooth(0.36, 0.56, moist)) \
-		* (1.0 - _smooth(14.0, 30.0, h)) * 1.7
-	out[B_MEADOW] = 1.0
+	out[B_SNOW] = _smooth(28.0, 46.0, h) * 1.3 + _smooth(0.34, 0.10, t) * 0.7
+	out[B_ROCK] = _smooth(0.34, 0.66, sl) * 1.5 + _smooth(22.0, 34.0, h) * 0.5
+
+	# clima (Whittaker): quente+seco => deserto/badlands; quente+médio => savana;
+	# húmido => floresta/pântano; temperado => prado; seco+temperado => terra nua.
+	out[B_MARSH] = _smooth(0.62, 0.82, m) * (1.0 - _smooth(1.0, 3.0, above)) * 1.7
+	out[B_DESERT] = _smooth(0.60, 0.80, t) * (1.0 - _smooth(0.34, 0.54, m)) * flat * 1.7
+	out[B_BADLANDS] = _smooth(0.68, 0.88, t) * (1.0 - _smooth(0.20, 0.40, m)) \
+		* _smooth(0.10, 0.40, grove_n) * flat * 1.6
+	out[B_SAVANNA] = _smooth(0.52, 0.72, t) * _smooth(0.30, 0.48, m) * (1.0 - _smooth(0.52, 0.70, m)) * flat * 1.5
+	out[B_DIRT] = (1.0 - _smooth(0.40, 0.60, m)) * _smooth(0.36, 0.56, t) * _smooth(0.15, 0.45, tint_n) * flat * 1.1
+	out[B_GROVE] = _smooth(0.20, 0.42, grove_n) * _smooth(0.48, 0.68, m) * (1.0 - _smooth(6.0, 22.0, h)) * 1.6
+	out[B_FOREST] = _smooth(0.56, 0.76, m) * _smooth(0.28, 0.56, t) * (1.0 - _smooth(14.0, 30.0, h)) * 1.8
+	# prado: base, mas suprimido em clima quente+seco (para o deserto/savana lerem bem)
+	out[B_MEADOW] = 1.0 - 0.72 * _smooth(0.58, 0.84, t) * (1.0 - _smooth(0.30, 0.52, m))
 
 	var total := 0.0
 	for i in BIOME_COUNT:

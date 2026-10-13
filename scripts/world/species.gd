@@ -299,6 +299,10 @@ static func tree_density(biome: int) -> float:
 		Terrain.B_ROCK: return 0.25
 		Terrain.B_SNOW: return 0.35
 		Terrain.B_SAND: return 0.05
+		Terrain.B_DESERT: return 0.04
+		Terrain.B_BADLANDS: return 0.02
+		Terrain.B_SAVANNA: return 0.6
+		Terrain.B_DIRT: return 0.1
 	return 0.2
 
 
@@ -312,4 +316,8 @@ static func grass_density(biome: int) -> float:
 		Terrain.B_ROCK: return 0.08
 		Terrain.B_SNOW: return 0.05
 		Terrain.B_SAND: return 0.04
+		Terrain.B_DESERT: return 0.06
+		Terrain.B_BADLANDS: return 0.03
+		Terrain.B_SAVANNA: return 0.40
+		Terrain.B_DIRT: return 0.12
 	return 0.2
