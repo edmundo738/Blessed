@@ -165,7 +165,6 @@ func _build_settings() -> void:
 	_option("settings.shadows", "shadows",
 		["settings.off", "settings.medium", "settings.high"])
 	_slider("settings.head_bob", "head_bob", 0.0, 1.5, 0.1)
-	_slider("settings.film_grain", "film_grain", 0.0, 1.0, 0.1)
 	_slider("settings.horror", "horror", 0.0, 2.0, 0.1)
 	_toggle("settings.invert_y", "invert_y")
 	_toggle("settings.subtitles", "subtitles")

@@ -212,7 +212,8 @@ func _run() -> void:
 
 	# ── 9. NPC ────────────────────────────────────────────────────────────
 	var npcs := get_tree().get_nodes_in_group("npcs")
-	check("aldeia tem habitante", npcs.size() > 0)
+	# As ruínas não têm habitantes humanos (decisão de design — NPCs removidos).
+	check("ruínas sem habitantes humanos (por design)", npcs.size() == 0)
 	if npcs.size() > 0:
 		var npc: Npc = npcs[0]
 		npc._tick()

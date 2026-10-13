@@ -128,10 +128,10 @@ Soma de ruídos, determinística a partir da semente:
 continente (21 m) → colinas → detalhe → vales de rio → caminho sinuoso
 ```
 
-Sete biomas decididos por altitude, humidade e temperatura: areia, prado, bosque, floresta,
-rocha, neve, pântano. Pesos medidos com a semente de referência:
-
-`prado 49 % · floresta 30 % · rocha 10 % · areia 8 % · bosque 2 % · pântano 1 % · neve 0 %`
+Onze biomas decididos por altitude, declive, humidade e temperatura: areia, prado, bosque,
+floresta, rocha, neve, pântano, deserto, badlands, savana e terra nua. A forma do terreno
+(domain warping + erosion) é desacoplada do bioma (estilo Minecraft 1.18); a distribuição
+exata depende da semente.
 
 (A neve está calibrada para aparecer só muito longe; com a semente atual não aparece na
 zona jogável.)
