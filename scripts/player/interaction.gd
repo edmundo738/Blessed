@@ -60,6 +60,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("interact") and building:
 		build_rot += PI * 0.25
 		Sfx.play("ui_click", -16.0, 0.9)
+	elif event.is_action_pressed("interact"):
+		Game.request("interact")
 
 
 func _process(delta: float) -> void:
@@ -188,7 +190,29 @@ func _can_interact(_a: Dictionary) -> bool:
 
 
 func _do_interact(_a: Dictionary) -> Dictionary:
-	return {"handled": true}
+	if focus.is_empty():
+		return {"handled": false}
+	match str(focus["kind"]):
+		"npc", "water":
+			_fire_once()
+		"structure":
+			var e: Dictionary = focus["ref"]
+			if str(e["id"]) == "campfire" and not bool(e.get("lit", false)):
+				structures.light(e)
+				Sfx.play("craft", -10.0, 1.3)
+			elif str(e["id"]) == "bed":
+				_rest_in_bed()
+	return {"handled": true, "ok": true}
+
+
+## Descansar na cama: repõe stats e avança até de manhã.
+func _rest_in_bed() -> void:
+	var to_morning := fmod(7.0 - Game.hour + 24.0, 24.0)
+	if to_morning > 12.0 or to_morning < 0.5:
+		to_morning = 6.0
+	survival.rest(to_morning, 1.0)
+	Sfx.play("ui_click", -10.0, 0.8)
+	Bus.say("prompt.rest", 2.5)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -212,6 +236,9 @@ func _handle_use(delta: float) -> void:
 				if holding and not _was_holding:
 					structures.light(e)
 					Sfx.play("craft", -10.0, 1.3)
+			elif str(e["id"]) == "bed":
+				if holding and not _was_holding:
+					_rest_in_bed()
 			elif holding:
 				_hold_work(delta, 0.9)
 				if progress >= 1.0:

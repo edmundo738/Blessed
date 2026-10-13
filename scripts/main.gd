@@ -299,6 +299,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		var id := inv.hotbar_id()
 		if id != "":
 			inv.remove(id, 1)
+			# larga no mundo (pickup recuperável) em vez de destruir
+			var di := load("res://scripts/world/dropped_item.gd").new() as Area3D
+			di.set("item_id", id)
+			di.set("amount", 1)
+			di.set("inv", inv)
+			di.set("player_ref", player)
+			add_child(di)
+			di.global_position = player.global_position - player.global_transform.basis.z * 1.3 + Vector3(0, 0.4, 0)
 	elif event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			inv.next_slot(-1)
