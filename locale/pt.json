@@ -31,6 +31,12 @@
   "settings.medium": "Média",
   "settings.high": "Alta",
   "settings.off": "Desligado",
+  "settings.quality": "Qualidade gráfica",
+  "settings.quality_low": "Compatível",
+  "settings.quality_med": "Equilibrada",
+  "settings.quality_high": "Cinematográfica",
+  "settings.glow": "Brilho (glow)",
+  "settings.glow_intensity": "Intensidade do brilho",
 
   "prologo.skip": "Pressiona [Espaço] para continuar · [Esc] para saltar",
   "prologo.name_prompt": "Como te chamavas antes?",

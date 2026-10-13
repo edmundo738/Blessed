@@ -31,6 +31,12 @@
   "settings.medium": "Medium",
   "settings.high": "High",
   "settings.off": "Off",
+  "settings.quality": "Graphics quality",
+  "settings.quality_low": "Compatible",
+  "settings.quality_med": "Balanced",
+  "settings.quality_high": "Cinematic",
+  "settings.glow": "Glow",
+  "settings.glow_intensity": "Glow intensity",
 
   "prologo.skip": "Press [Space] to continue · [Esc] to skip",
   "prologo.name_prompt": "What were you called before?",

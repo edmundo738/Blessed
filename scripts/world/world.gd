@@ -349,7 +349,14 @@ func _apply_quality() -> void:
 
 func _apply_settings() -> void:
 	view_distance = float(Game.settings["view_distance"])
-	grass_quality = int(Game.settings["grass_quality"])
+	var _new_grass := int(Game.settings["grass_quality"])
+	if _new_grass != grass_quality:
+		# a qualidade de relva mudou → liberta os chunks; são reconstruídos com a nova
+		# qualidade no próximo _update_chunks (aplica a mudança AO VIVO, não só em chunks novos)
+		for _k in chunks.keys():
+			(chunks[_k] as Chunk).release()
+		chunks.clear()
+	grass_quality = _new_grass
 	shadows_enabled = int(Game.settings["shadows"]) > 0
 	if sun:
 		sun.shadow_enabled = shadows_enabled
@@ -358,8 +365,6 @@ func _apply_settings() -> void:
 		# B-01: glow e um toggle proprio; film_grain ja nao o forca (condicao era sempre verdadeira)
 		environment.glow_enabled = bool(Game.settings.get("glow", true))
 		environment.glow_intensity = clampf(float(Game.settings.get("glow_intensity", 0.40)), 0.0, 1.0)
-	for ch in chunks.values():
-		(ch as Chunk).grass_quality = grass_quality
 	_apply_quality()
 	_last_center = Vector2i(999999, 999999)
 
@@ -370,6 +375,11 @@ func save_data() -> Dictionary:
 
 func load_data(_d: Dictionary) -> void:
 	harvest_state = _d.get("harvest_state", {}) if _d.get("harvest_state") is Dictionary else {}
+	# recria o gerador com a semente carregada (Game.load_game já atualizou Game.world_seed).
+	# Sem isto, o terreno continuava a ser gerado com a semente anterior ao carregar (dessincronização).
+	terrain = Terrain.new(Game.world_seed)
+	species = SpeciesKit.new(Game.world_seed)
+	Bus.world_reseeded.emit()
 	for key in chunks.keys():
 		(chunks[key] as Chunk).release()
 	chunks.clear()

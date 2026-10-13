@@ -128,6 +128,12 @@ func _build_world() -> void:
 	add_child(village)
 	village.build()
 
+	# ao carregar um jogo com outra semente, o mundo recria terrain/species;
+	# re-liga as referências em cache para não ficarem a apontar para o gerador antigo
+	Bus.world_reseeded.connect(func():
+		structures.species = world.species
+		village.species = world.species)
+
 
 ## Onde se nasce.
 ##

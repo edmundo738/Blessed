@@ -164,6 +164,10 @@ func _build_settings() -> void:
 		["settings.low", "settings.medium", "settings.high"])
 	_option("settings.shadows", "shadows",
 		["settings.off", "settings.medium", "settings.high"])
+	_option("settings.quality", "quality",
+		["settings.quality_low", "settings.quality_med", "settings.quality_high"])
+	_toggle("settings.glow", "glow")
+	_slider("settings.glow_intensity", "glow_intensity", 0.0, 1.0, 0.05)
 	_slider("settings.head_bob", "head_bob", 0.0, 1.5, 0.1)
 	_slider("settings.horror", "horror", 0.0, 2.0, 0.1)
 	_toggle("settings.invert_y", "invert_y")

@@ -98,7 +98,9 @@ func request(id: String, args: Dictionary = {}) -> Dictionary:
 	var result: Dictionary = {}
 	if c.run.is_valid():
 		result = c.run.call(args)
-	result["ok"] = not bool(result.get("failed", false))
+	# respeita um "ok" explícito do executor; só deriva de "failed" se não vier definido
+	if not result.has("ok"):
+		result["ok"] = not bool(result.get("failed", false))
 	Bus.command_resolved.emit(id, bool(result["ok"]), result)
 	return result
 

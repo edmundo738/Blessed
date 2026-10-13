@@ -63,6 +63,8 @@ signal toast(text_key: String, seconds: float)
 signal game_paused(paused: bool)
 signal locale_changed(code: String)
 signal settings_changed()
+## Emitido quando o mundo recria o gerador (terrain/species) após carregar um jogo com outra semente.
+signal world_reseeded()
 
 
 ## Atalho: emite uma mensagem de ecrã traduzível.

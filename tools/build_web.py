@@ -42,7 +42,12 @@ def main():
 	if godot:
 		r = subprocess.run([godot, "--headless", "--path", ROOT, "--quit-after", "3000", "--", "selftest"])
 		if r.returncode != 0:
-			print("\nO self-test falhou — a build continua, mas revê o output acima.")
+			if "--allow-fail" in sys.argv:
+				print("\n[build_web] Self-test FALHOU — --allow-fail ativo: a build continua, mas revê o output acima.")
+			else:
+				print("\n[build_web] Self-test FALHOU — a build foi ABORTADA.")
+				print("            Corrige o teste, ou força com: python tools/build_web.py --allow-fail")
+				return 1
 
 	# 3. pck
 	subprocess.run([sys.executable, os.path.join(ROOT, "tools", "pack_pck.py"), ROOT,

@@ -140,8 +140,9 @@ Chunks de 48 m com três níveis de detalhe; só o anel mais próximo tem `Heigh
 A vegetação vive em `MultiMeshInstance3D` com cor por instância. Números medidos no arranque:
 49 chunks, 4 810 nós colhíveis, 10 379 instâncias de vegetação, ~34 amostras de terreno/ms.
 
-**Nada é quadrado.** O terreno é uma malha irregular com *skirt*, as árvores são construídas
-a partir de uma tabela de espécies (tronco + copas) e o caminho é uma curva senoidal
+**Nada é quadrado.** O terreno é uma malha irregular **sem saia** (a parede vertical à volta
+de cada chunk foi removida — era visível de ângulos baixos e debaixo de água), as árvores são
+construídas a partir de uma tabela de espécies (tronco + copas) e o caminho é uma curva senoidal
 explícita, não uma textura.
 
 ---
