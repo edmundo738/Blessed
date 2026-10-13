@@ -1,7 +1,7 @@
 shader_type spatial;
 // Folhagem anime: vento no vértice + bandas de luz + tinta por instância.
 // INSTANCE_CUSTOM: xyz = tinta da instância, w = raio de desaparecimento (0 = não some).
-render_mode specular_disabled, cull_disabled;
+render_mode cull_disabled;
 
 uniform vec4 shadow_tint : source_color = vec4(0.52, 0.56, 0.88, 1.0);
 uniform float bands : hint_range(1.0, 8.0) = 3.0;
@@ -63,8 +63,8 @@ void fragment() {
 	leaf *= mix(0.58, 1.06, v_h);            // base em sombra
 	leaf *= 0.88 + 0.24 * grain;             // grão
 	ALBEDO = leaf;
-	ROUGHNESS = 1.0;
-	SPECULAR = 0.0;
+	ROUGHNESS = 0.68;   // folhas: leve brilho
+	SPECULAR = 0.5;
 	// NÃO escrever ALPHA aqui. Em Godot 4, escrever ALPHA num shader espacial
 	// põe o material no passe TRANSPARENTE — e este shader é partilhado pela
 	// folhagem, pela erva e pelas ESTRUTURAS, por isso as casas e as árvores
@@ -87,4 +87,10 @@ void light() {
 	col += LIGHT_COLOR * rim * rim_strength * (0.4 + band);
 
 	DIFFUSE_LIGHT += col * LIGHT_COLOR * ambient_gain * v_fade;
+
+	// brilho suave das folhas (PBR estilizado)
+	vec3 H = normalize(LIGHT + VIEW);
+	float ndh = max(dot(NORMAL, H), 0.0);
+	float spec = pow(ndh, 42.0) * 0.18;
+	SPECULAR_LIGHT += LIGHT_COLOR * spec * clamp(ATTENUATION, 0.0, 1.0) * v_fade;
 }
