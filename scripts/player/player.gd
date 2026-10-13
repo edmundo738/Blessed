@@ -21,9 +21,9 @@ const SPRINT := 6.4
 const CROUCH_SPEED := 1.7
 const SWIM := 3.0
 const ACCEL_GROUND := 14.0
-const ACCEL_AIR := 3.2
+const ACCEL_AIR := 5.5
 const FRICTION := 11.0
-const JUMP_VELOCITY := 5.1
+const JUMP_VELOCITY := 6.4
 const GRAVITY := 17.5
 const COYOTE := 0.14
 const JUMP_BUFFER := 0.14
@@ -220,6 +220,9 @@ func _move_land(delta: float, wish: Vector3) -> void:
 		jump_buffer = 0.0
 		coyote = 0.0
 		jumped.emit()
+	# altura de salto variavel: largar o botao cedo corta a subida (salto curto vs alto)
+	if Input.is_action_just_released("jump") and velocity.y > 0.0:
+		velocity.y *= 0.45
 		Sfx.play("step_grass", -14.0, 1.4)
 
 	# aterragem

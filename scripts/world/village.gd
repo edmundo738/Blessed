@@ -225,21 +225,10 @@ func _part(parent: Node, mesh: ArrayMesh, pos: Vector3, size: Vector3) -> void:
 
 
 func _build_elder(c: Vector2, base: float) -> void:
+	# NPCs humanos REMOVIDOS a pedido — as ruínas ficam sem habitantes.
+	# Mantém-se só um braseiro (fonte de luz útil à noite).
 	if structures != null:
 		structures.place("campfire", Vector3(c.x + 1.2, base + 0.05, c.y + 1.2), 0.0, true)
-	var npc: Npc = load("res://scripts/entities/npc.gd").new()
-	npc.mats = mats
-	npc.id = "elder"
-	npc.display_key = "npc.elder.name"
-	npc.personality = {"warmth": 0.72, "curiosity": 0.55, "fear": 0.30, "talkative": 0.8}
-	npc.player = get_parent().get_node_or_null("Player")
-	npc.world = world
-	npc.structures = structures
-	npc.add_to_group("npcs")
-	npc_root.add_child(npc)
-	npc.global_position = Vector3(c.x - 2.0, base + 0.05, c.y - 1.6)
-	npc.home = npc.global_position
-	npcs.append(npc)
 
 
 func _build_props(c: Vector2, base: float) -> void:
