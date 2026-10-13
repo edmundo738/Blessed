@@ -1,33 +1,35 @@
 #!/usr/bin/env python3
-"""serve_web.py — serve a build web em 0.0.0.0. Uso: python3 tools/serve_web.py [pasta] [porta]"""
-import http.server
-import os
-import socketserver
-import sys
+"""Serve o build Web de BLESSED com os headers que o Godot 4 precisa.
+Uso (na pasta do projeto, DEPOIS de exportar):
+    python tools/serve_web.py export/web2 8060
+Depois, no telemovel (mesmo Wi-Fi): http://IP_DO_PC:8060
+"""
+import http.server, socketserver, os, sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-folder = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else os.path.join(ROOT, "export", "web")
-port = int(sys.argv[2]) if len(sys.argv) > 2 else int(os.environ.get("PORT", "8080"))
-
-http.server.SimpleHTTPRequestHandler.extensions_map.update({
-	".wasm": "application/wasm", ".pck": "application/octet-stream",
-	".js": "text/javascript", ".json": "application/json", ".html": "text/html",
-})
-
+DIR = sys.argv[1] if len(sys.argv) > 1 else "export/web2"
+PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 8060
 
 class Handler(http.server.SimpleHTTPRequestHandler):
-	def __init__(self, *a, **kw):
-		super().__init__(*a, directory=folder, **kw)
+    extensions_map = {
+        **http.server.SimpleHTTPRequestHandler.extensions_map,
+        ".wasm": "application/wasm",
+        ".pck": "application/octet-stream",
+        ".js": "text/javascript",
+        ".json": "application/json",
+    }
+    def end_headers(self):
+        # cross-origin isolation (necessario se o build usar threads/SharedArrayBuffer)
+        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+        self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
 
-	def end_headers(self):
-		self.send_header("Cache-Control", "no-store")
-		super().end_headers()
-
-	def log_message(self, fmt, *args):
-		sys.stdout.write("%s - %s\n" % (self.address_string(), fmt % args))
-
-
+if not os.path.isdir(DIR):
+    print(f"ERRO: pasta '{DIR}' nao existe. Exporta primeiro (ver README_WEB.md).")
+    sys.exit(1)
+os.chdir(DIR)
 socketserver.TCPServer.allow_reuse_address = True
-with socketserver.TCPServer(("0.0.0.0", port), Handler) as httpd:
-	print("BLESSED a servir %s em http://0.0.0.0:%d" % (folder, port))
-	httpd.serve_forever()
+with socketserver.TCPServer(("0.0.0.0", PORT), Handler) as httpd:
+    print(f"BLESSED Web em  http://0.0.0.0:{PORT}  (no telemovel: http://IP_DO_PC:{PORT})")
+    httpd.serve_forever()
