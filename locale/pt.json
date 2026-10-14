@@ -86,6 +86,8 @@
   "hud.view_toggle": "V · Câmara: %s",
   "hud.view_first": "1.ª pessoa",
   "hud.view_third": "3.ª pessoa",
+  "hud.needs": "Necessidades",
+  "hud.hold_action": "manter para agir",
 
   "prompt.chop": "Cortar",
   "prompt.mine": "Picar",
@@ -189,6 +191,7 @@
   "ui.help.title": "Controlos",
   "ui.help.move": "WASD mover · Shift correr · Ctrl agachar · Espaço saltar",
   "ui.help.look": "Rato olhar · Q/E inclinar · V alternar câmara",
+  "ui.help.status": "N necessidades · F interagir · botão esquerdo manter/colher",
   "ui.help.use": "Botão esquerdo usar · 1-9 barra rápida",
   "ui.help.bag": "Tab mochila/bancada · J diário · M mapa",
   "ui.help.build": "B construir · F acender/interagir",
