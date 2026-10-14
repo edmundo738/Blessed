@@ -52,6 +52,49 @@ ex.: `"wood": { "stack": 99 }` muda a pilha da madeira).
 - `mesh`: caminho do `.glb`/`.gltf` **relativo à pasta do mod**.
 - `scale`: escala.
 
+## Editar o mundo sem código (100% data-driven)
+
+Tudo o que afina o mundo está em **`data/*.json`** — edita estes ficheiros e o jogo
+muda, **sem tocar em GDScript**. Se um ficheiro faltar ou for inválido, o jogo usa os
+valores embutidos no código (não parte nada).
+
+| Ficheiro | O que controla |
+|---|---|
+| `data/biomes.json` | Os 12 biomas: cor (RGB 0–1), nome, densidade de relva e de árvores. |
+| `data/terrain.json` | O gerador: ruídos, spline continental, picos, rio, snowline. |
+| `data/quality.json` | Os 3 perfis gráficos: toggles (ssao/nevoeiro/ssr/dof) e valores. |
+| `data/species.json` | Árvores/rochas/plantas: biomas (por **id**), peso, colheita, escala, balanço. |
+
+Exemplo — floresta mais verde e densa (edita a entrada `"forest"` em `data/biomes.json`):
+
+```json
+{ "id": "forest", "color": [0.10, 0.45, 0.30], "tree_density": 4.0 }
+```
+
+### Override via mod (sem alterar o jogo base)
+
+Em vez de editares o `data/`, um **mod** pode fazer override. No `mod.json`:
+
+```json
+{
+  "name": "O Meu Mundo",
+  "biomes":  { "forest": { "color": [0.10, 0.45, 0.30], "tree_density": 4.0 } },
+  "terrain": { "peak_height": 320.0 },
+  "species": { "trees": { "oak": { "weight": 2.0, "biomes": ["meadow", "forest", "grove"] } } },
+  "quality": { "values": { "fog_density": 0.03 } }
+}
+```
+
+- `biomes`: por **id**; cada campo substitui apenas esse campo.
+- `terrain`: chaves de topo (ex.: `peak_height`, `sea_level`, `snowline_base`).
+- `species`: `trees`/`rocks`/`plants` → id → campos (`weight`, `harvest`, `scale`,
+  `height`, `wind`, `biomes` por **id**).
+- `quality`: `values` (números) e `presets` (toggles ssao/nevoeiro/ssr/dof).
+
+Os biomas são referidos **pelo id** (`"forest"`, `"snow"`…) em `species.json` e nos
+mods — nunca por número. A ordem/índice dos biomas é estrutural (o shader usa-a) e
+mantém-se fixa; o que é editável são as cores, densidades e afinações.
+
 ## Usar modelos do Blender
 
 1. No Blender, exporta como **glTF 2.0 (`.glb`)**.
