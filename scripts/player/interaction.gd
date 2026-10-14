@@ -26,6 +26,7 @@ var ghost: MeshInstance3D
 var ghost_mat: StandardMaterial3D
 var _hold := false
 var _was_holding := false
+var _impact_t := 0.0
 
 
 func _ready() -> void:
@@ -191,10 +192,12 @@ func _can_interact(_a: Dictionary) -> bool:
 
 func _do_interact(_a: Dictionary) -> Dictionary:
 	if focus.is_empty():
-		return {"handled": false}
+		return {"handled": false, "ok": false}
 	match str(focus["kind"]):
 		"npc", "water":
 			_fire_once()
+		"harvest":
+			_work_tick(0.24, 1.0)
 		"structure":
 			var e: Dictionary = focus["ref"]
 			if str(e["id"]) == "campfire" and not bool(e.get("lit", false)):
@@ -202,6 +205,8 @@ func _do_interact(_a: Dictionary) -> Dictionary:
 				Sfx.play("craft", -10.0, 1.3)
 			elif str(e["id"]) == "bed":
 				_rest_in_bed()
+			else:
+				_work_tick(0.24, 0.9)
 	return {"handled": true, "ok": true}
 
 
@@ -222,14 +227,16 @@ func _handle_use(delta: float) -> void:
 	var holding := Input.is_action_pressed("use") and not building
 	if focus.is_empty():
 		_hold = false
+		_was_holding = false
 		progress = 0.0
+		_impact_t = 0.0
 		return
 	var kind := str(focus["kind"])
 	match kind:
 		"npc", "water":
 			if holding and not _was_holding:
 				_fire_once()
-			_hold = false
+			progress = 0.0
 		"structure":
 			var e: Dictionary = focus["ref"]
 			if str(e["id"]) == "campfire" and not bool(e.get("lit", false)):
@@ -240,23 +247,30 @@ func _handle_use(delta: float) -> void:
 				if holding and not _was_holding:
 					_rest_in_bed()
 			elif holding:
-				_hold_work(delta, 0.9)
-				if progress >= 1.0:
-					Game.request("remove_structure", {"entry": e})
-					progress = 0.0
+				_work_tick(delta, 0.9)
 			else:
 				progress = 0.0
+				_impact_t = 0.0
 		"harvest":
-			# exige o botao de usar: so olhar NAO colhe (fim do loot automatico)
 			if holding:
-				_hold_work(delta, 1.0)
-				if progress >= 1.0:
-					_harvest_done()
-					progress = 0.0
+				_work_tick(delta, 1.0)
 			else:
 				progress = 0.0
+				_impact_t = 0.0
 	_hold = holding
 	_was_holding = holding
+
+
+func _work_tick(delta: float, seconds: float) -> void:
+	_hold_work(delta, seconds)
+	if progress < 1.0 or focus.is_empty():
+		return
+	if str(focus["kind"]) == "harvest":
+		_harvest_done()
+	elif str(focus["kind"]) == "structure":
+		Game.request("remove_structure", {"entry": focus["ref"]})
+		progress = 0.0
+		_impact_t = 0.0
 
 
 func _hold_work(delta: float, seconds: float) -> void:
@@ -274,9 +288,11 @@ func _hold_work(delta: float, seconds: float) -> void:
 				power = float(pw[str(spec.get("action", ""))])
 			else:
 				power = 0.45   # à mão dá, mas custa
-	progress += delta * power * survival.work_multiplier() / maxf(seconds, 0.05)
-	if randf() < delta * 7.0:
-		player.hands.swing(0.22)
+	progress = minf(1.0, progress + delta * power * survival.work_multiplier() / maxf(seconds, 0.05))
+	_impact_t -= delta
+	if _impact_t <= 0.0:
+		_impact_t = 0.52
+		player.hands.swing(0.32)
 		_hit_feedback()
 
 
