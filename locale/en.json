@@ -82,7 +82,7 @@
   "hud.warmth": "Warmth",
   "hud.sanity": "Calm",
   "hud.blessing": "Blessing",
-  "hud.bonus": "TRAIT",
+  "hud.bonus": "BONUS",
   "hud.view_toggle": "V · Camera: %s",
   "hud.view_first": "First person",
   "hud.view_third": "Third person",
