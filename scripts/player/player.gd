@@ -67,6 +67,7 @@ signal jumped()
 
 func _ready() -> void:
 	name = "Player"
+	add_to_group("player")
 	_build_tree()
 	Game.register_saver(self)
 
