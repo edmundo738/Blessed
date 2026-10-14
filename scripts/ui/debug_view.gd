@@ -37,7 +37,7 @@ func _ready() -> void:
 	hud_line.add_theme_color_override("font_color", Color(1, 0.9, 0.4))
 	hud_line.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	hud_line.add_theme_constant_override("outline_size", 4)
-	main.get_tree().root.add_child(hud_line)
+	main.get_tree().root.add_child.call_deferred(hud_line)
 	_paint()
 
 

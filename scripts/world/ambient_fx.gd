@@ -22,8 +22,8 @@ func _ready() -> void:
 	flies = _make_flies()
 	add_child(flies)
 	_apply_quality()
-	if Game.has_signal("quality_changed") and not Game.quality_changed.is_connected(_apply_quality):
-		Game.quality_changed.connect(_apply_quality)
+	if not Bus.settings_changed.is_connected(_apply_quality):
+		Bus.settings_changed.connect(_apply_quality)
 
 
 func _process(_delta: float) -> void:
@@ -35,7 +35,7 @@ func _process(_delta: float) -> void:
 
 ## 0 = dia cheio, 1 = noite fechada (transição suave ao anoitecer/amanhecer).
 func _night_factor() -> float:
-	var h: float = Game.time_of_day
+	var h: float = Game.hour
 	if h >= 20.0 or h <= 5.0:
 		return 1.0
 	if h > 18.0:
@@ -46,7 +46,7 @@ func _night_factor() -> float:
 
 
 func _apply_quality() -> void:
-	var q: int = clampi(int(Game.quality), 0, 2)
+	var q: int = clampi(int(Game.settings.get("quality", 1)), 0, 2)
 	if dust != null:
 		dust.amount = [0, 90, 180][q]
 		dust.emitting = q >= 1
