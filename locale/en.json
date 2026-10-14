@@ -86,6 +86,8 @@
   "hud.view_toggle": "V · Camera: %s",
   "hud.view_first": "First person",
   "hud.view_third": "Third person",
+  "hud.needs": "Needs",
+  "hud.hold_action": "hold to work",
 
   "prompt.chop": "Chop",
   "prompt.mine": "Mine",
@@ -189,6 +191,7 @@
   "ui.help.title": "Controls",
   "ui.help.move": "WASD move · Shift sprint · Ctrl crouch · Space jump",
   "ui.help.look": "Mouse look · Q/E lean · V toggle camera",
+  "ui.help.status": "N needs · F interact · left click hold/work",
   "ui.help.use": "Left click use · 1-9 hotbar",
   "ui.help.bag": "Tab bag/bench · J journal · M map",
   "ui.help.build": "B build · F light/interact",
