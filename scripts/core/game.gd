@@ -137,6 +137,7 @@ func _build_input_map() -> void:
 		"save": [KEY_F5],
 		"locale": [KEY_F2],
 		"camera_toggle": [KEY_V],
+		"status_panel": [KEY_N],
 	}
 	for action in keys:
 		if not InputMap.has_action(action):
