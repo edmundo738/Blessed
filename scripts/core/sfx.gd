@@ -8,11 +8,15 @@ extends Node
 ## Tudo o que ouvimos aqui é feito com ruído filtrado, senoides e envelopes.
 
 const RATE := 22050
-const MAX_3D := 12
+const MAX_3D := 16
+const MAX_2D := 12
 
 var _cache: Dictionary = {}
 var _players_3d: Array[AudioStreamPlayer3D] = []
+var _players_2d: Array[AudioStreamPlayer] = []
+var _voice_cursor := 0
 var _loops: Dictionary = {}
+var _loop_names: Dictionary = {}
 var _rng := RandomNumberGenerator.new()
 var master_db: float = -6.0
 
@@ -26,6 +30,10 @@ func _ready() -> void:
 		p.unit_size = 6.0
 		add_child(p)
 		_players_3d.append(p)
+	for i in MAX_2D:
+		var p2 := AudioStreamPlayer.new()
+		add_child(p2)
+		_players_2d.append(p2)
 	AudioServer.set_bus_volume_db(0, master_db)
 
 
@@ -197,12 +205,24 @@ func stream(name: String) -> AudioStreamWAV:
 
 # ── reprodução ───────────────────────────────────────────────────────────────
 func play(name: String, db: float = 0.0, pitch: float = 1.0) -> void:
-	var p := AudioStreamPlayer.new()
+	if _players_2d.is_empty():
+		return
+	var p: AudioStreamPlayer = null
+	var chosen := _voice_cursor
+	for offset in _players_2d.size():
+		var i := (_voice_cursor + offset) % _players_2d.size()
+		if not _players_2d[i].playing:
+			p = _players_2d[i]
+			chosen = i
+			break
+	if p == null:
+		p = _players_2d[_voice_cursor]
+		chosen = _voice_cursor
+		p.stop()
+	_voice_cursor = (chosen + 1) % _players_2d.size()
 	p.stream = stream(name)
 	p.volume_db = db
 	p.pitch_scale = pitch
-	p.finished.connect(p.queue_free)
-	add_child(p)
 	p.play()
 
 
@@ -222,17 +242,29 @@ func play_at(name: String, pos: Vector3, db: float = 0.0, pitch: float = 1.0) ->
 func loop(id: String, name: String, db: float = -12.0) -> void:
 	if _loops.has(id):
 		var old: AudioStreamPlayer = _loops[id]
-		old.stop()
-		old.queue_free()
+		if _loop_names.get(id, "") == name and old.playing:
+			old.volume_db = db
+			return
 		_loops.erase(id)
+		_loop_names.erase(id)
+		if is_instance_valid(old):
+			var fade_out := create_tween()
+			fade_out.tween_property(old, "volume_db", -48.0, 0.35)
+			fade_out.tween_callback(func():
+				if is_instance_valid(old):
+					old.stop()
+					old.queue_free())
 	if name.is_empty():
 		return
 	var p := AudioStreamPlayer.new()
 	p.stream = stream(name)
-	p.volume_db = db
+	p.volume_db = -48.0
 	add_child(p)
 	p.play()
+	var fade_in := create_tween()
+	fade_in.tween_property(p, "volume_db", db, 0.45)
 	_loops[id] = p
+	_loop_names[id] = name
 
 
 func loop_volume(id: String, db: float) -> void:
