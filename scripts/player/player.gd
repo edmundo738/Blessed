@@ -48,6 +48,7 @@ var bob_amp := 0.0
 var step_phase := 0.0
 var coyote := 0.0
 var jump_buffer := 0.0
+var mantle_cooldown := 0.0
 var crouching := false
 var sprinting := false
 var swimming := false
@@ -129,6 +130,7 @@ func _physics_process(delta: float) -> void:
 	if not enabled:
 		return
 	_smooth_look(delta)
+	mantle_cooldown = maxf(0.0, mantle_cooldown - delta)
 	_swim_check()
 	var wish := _wish_direction()
 	if swimming:
@@ -168,6 +170,69 @@ func _third_person_distance() -> float:
 	if hit.is_empty():
 		return 4.2
 	return clampf(from.distance_to(hit.position) - 0.22, 0.65, 4.2)
+
+
+func _has_standing_clearance() -> bool:
+	var shape := CapsuleShape3D.new()
+	shape.radius = RADIUS
+	shape.height = HEIGHT
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = shape
+	query.transform = Transform3D(Basis.IDENTITY,
+		global_position + Vector3(0.0, HEIGHT * 0.5 + 0.04, 0.0))
+	query.exclude = [get_rid()]
+	query.collision_mask = 1
+	return get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
+
+
+## Salto de impulso sobre uma borda baixa quando o jogador já está contra ela.
+func _try_mantle(wish: Vector3) -> bool:
+	if mantle_cooldown > 0.0 or stamina < 8.0 or wish.length_squared() < 0.1:
+		return false
+	if not is_on_wall():
+		return false
+	var dir := (transform.basis * Vector3(wish.x, 0.0, wish.z)).normalized()
+	if dir.length_squared() < 0.1:
+		return false
+	var space := get_world_3d().direct_space_state
+	var from := global_position + Vector3(0.0, 0.95, 0.0)
+	var wall_query := PhysicsRayQueryParameters3D.create(from,
+		from + dir * (RADIUS + 0.55), 1)
+	wall_query.exclude = [get_rid()]
+	var wall_hit := space.intersect_ray(wall_query)
+	if wall_hit.is_empty():
+		return false
+	var ledge_from := global_position + dir * (RADIUS + 0.65) + Vector3(0.0, HEIGHT + 0.55, 0.0)
+	var ledge_query := PhysicsRayQueryParameters3D.create(ledge_from,
+		ledge_from - Vector3(0.0, HEIGHT + 1.1, 0.0), 1)
+	ledge_query.exclude = [get_rid()]
+	var ledge_hit := space.intersect_ray(ledge_query)
+	if ledge_hit.is_empty():
+		return false
+	var rise: float = float(ledge_hit.position.y) - global_position.y
+	if rise < 0.35 or rise > 1.45:
+		return false
+	var landing := global_position + dir * (RADIUS + 0.48) + Vector3(0.0, rise + 0.12, 0.0)
+	var clearance := PhysicsShapeQueryParameters3D.new()
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = RADIUS * 0.88
+	capsule.height = HEIGHT
+	clearance.shape = capsule
+	clearance.transform = Transform3D(Basis.IDENTITY, landing + Vector3(0.0, HEIGHT * 0.5, 0.0))
+	clearance.exclude = [get_rid()]
+	clearance.collision_mask = 1
+	if not space.intersect_shape(clearance, 1).is_empty():
+		return false
+	var climb := sqrt(2.0 * GRAVITY * (rise + 0.32))
+	velocity.y = clampf(climb, JUMP_VELOCITY, 8.2)
+	var flat := Vector3(velocity.x, 0.0, velocity.z)
+	flat = flat.move_toward(dir * maxf(flat.length(), 2.5), 5.0)
+	velocity.x = flat.x
+	velocity.z = flat.z
+	stamina = maxf(0.0, stamina - 8.0)
+	mantle_cooldown = 0.45
+	Sfx.play("step_wood", -10.0, 0.72)
+	return true
 
 
 # ── câmara ────────────────────────────────────────────────────────────────
@@ -217,6 +282,8 @@ func _move_land(delta: float, wish: Vector3) -> void:
 
 	# agachar
 	var want_crouch := Input.is_action_pressed("crouch")
+	if crouching and not want_crouch and not _has_standing_clearance():
+		want_crouch = true
 	if want_crouch != crouching:
 		crouching = want_crouch
 		var h := CROUCH_EYE if crouching else EYE
@@ -257,11 +324,17 @@ func _move_land(delta: float, wish: Vector3) -> void:
 	if Input.is_action_just_pressed("jump"):
 		jump_buffer = JUMP_BUFFER
 	jump_buffer = maxf(0.0, jump_buffer - delta)
-	if jump_buffer > 0.0 and (is_on_floor() or coyote > 0.0):
-		velocity.y = JUMP_VELOCITY * (0.72 if crouching else 1.0)
-		jump_buffer = 0.0
-		coyote = 0.0
-		jumped.emit()
+	if jump_buffer > 0.0:
+		var mantled := _try_mantle(wish)
+		if mantled:
+			jump_buffer = 0.0
+			coyote = 0.0
+			jumped.emit()
+		elif is_on_floor() or coyote > 0.0:
+			velocity.y = JUMP_VELOCITY * (0.72 if crouching else 1.0)
+			jump_buffer = 0.0
+			coyote = 0.0
+			jumped.emit()
 	# altura de salto variavel: largar o botao cedo corta a subida (salto curto vs alto)
 	if Input.is_action_just_released("jump") and velocity.y > 0.0:
 		velocity.y *= 0.45
