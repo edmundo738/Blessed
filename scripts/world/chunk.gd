@@ -100,7 +100,18 @@ func _build_ground(o: Vector2, with_collision: bool) -> void:
 			var sl := clampf(Vector2(normals[j * n + i].x, normals[j * n + i].z).length()
 				/ maxf(normals[j * n + i].y, 0.001) * 0.55, 0.0, 1.0)
 			st.set_normal(normals[j * n + i])
-			st.set_color(terrain.ground_color_s(x, z, h, sl, buf))
+			var gc := terrain.ground_color_s(x, z, h, sl, buf)
+			# classes de material para o shader do terreno (ver toon_terrain.gdshader)
+			gc.a = clampf(buf[Terrain.B_SNOW], 0.0, 1.0)
+			st.set_color(gc)
+			st.set_uv(Vector2(
+				buf[Terrain.B_MEADOW] + buf[Terrain.B_FOREST] + buf[Terrain.B_GROVE]
+					+ buf[Terrain.B_SAVANNA] * 0.8 + buf[Terrain.B_MARSH] * 0.6,
+				buf[Terrain.B_DIRT] + buf[Terrain.B_MUD] + buf[Terrain.B_MARSH] * 0.4
+					+ buf[Terrain.B_SAVANNA] * 0.2))
+			st.set_uv2(Vector2(
+				buf[Terrain.B_SAND] + buf[Terrain.B_DESERT],
+				buf[Terrain.B_BADLANDS]))
 			st.add_vertex(Vector3(x, h, z))
 
 	for j in res:
