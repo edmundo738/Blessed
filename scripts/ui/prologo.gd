@@ -20,6 +20,7 @@ var name_edit: LineEdit
 var body_group: Array = []
 var soul_group: Array = []
 var soul_desc: Label
+var appearance_preview: TextureRect
 var chosen_body := "f"
 var chosen_soul := "curious"
 var chosen_appearance := {"skin": 0, "cloth": 0, "hair": 0}
@@ -75,6 +76,16 @@ func _build() -> void:
 	creator.visible = false
 	root.add_child(creator)
 	_build_creator()
+
+
+func _refresh_appearance_preview() -> void:
+	if appearance_preview == null:
+		return
+	for p in get_tree().get_nodes_in_group("player"):
+		var avatar: Node = p.get_node_or_null("Avatar2D")
+		if avatar != null and avatar.has_method("preview_texture"):
+			appearance_preview.texture = avatar.call("preview_texture")
+			return
 
 
 func _build_creator() -> void:
@@ -170,6 +181,19 @@ func _build_creator() -> void:
 	go.pressed.connect(finish)
 	v.add_child(go)
 
+	appearance_preview = TextureRect.new()
+	appearance_preview.set_anchors_preset(Control.PRESET_CENTER)
+	appearance_preview.offset_left = 344
+	appearance_preview.offset_right = 464
+	appearance_preview.offset_top = -60
+	appearance_preview.offset_bottom = 120
+	appearance_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	appearance_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	appearance_preview.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	appearance_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	creator.add_child(appearance_preview)
+	_refresh_appearance_preview()
+
 
 func _pick_body(which: String) -> void:
 	chosen_body = which
@@ -185,6 +209,7 @@ func _pick_appearance(index: int, palette_key: String) -> void:
 		var avatar: Node = p.get_node_or_null("Avatar2D")
 		if avatar != null and avatar.has_method("refresh_appearance"):
 			avatar.call("refresh_appearance")
+	_refresh_appearance_preview()
 	Sfx.play("ui_click", -16.0)
 
 
