@@ -170,6 +170,20 @@ func _canopy(count: int, rmin: float, rmax: float, ybase: float, yspread: float,
 	return out
 
 
+## Arbusto em grupos de folhas sobrepostos, com silhueta estável em cada LOD.
+func _shrub(lobes: int, radius: float, tint: Color) -> ArrayMesh:
+	var parts: Array = []
+	for i in lobes:
+		var angle := float(i) / float(lobes) * TAU
+		var ring := radius * (0.28 if i > 0 else 0.0)
+		var pos := Vector3(cos(angle) * ring, radius * (0.34 if i > 0 else 0.48), sin(angle) * ring)
+		var leaf_tint := tint.lightened(rng.randf_range(-0.06, 0.09))
+		var leaf := MeshKit.blob(rng, radius * rng.randf_range(0.42, 0.58), 1,
+			0.16, Vector3(1.0, 0.82, 1.0), leaf_tint)
+		parts.append(_offset(leaf, pos))
+	return _merge(parts)
+
+
 func _build_trees() -> void:
 	# ── carvalho: copa larga em bolhas, a árvore "de sombra" ──────────────
 	trees["oak"] = _tree("oak", 2.2, 0.30, 0.16, Color(0.42, 0.29, 0.21),
@@ -246,11 +260,13 @@ func _build_rocks() -> void:
 
 
 func _build_plants() -> void:
-	# arbusto de bagas
-	var bush := MeshKit.blob(rng, 0.42, 2, 0.24, Vector3(1.15, 0.85, 1.15), Color(0.24, 0.55, 0.28))
+	# arbusto de bagas: grupos sobrepostos em vez de uma única esfera.
+	# O LOD reduz lobos, mantendo a leitura da silhueta a distância.
 	var bs := Species.new()
 	bs.id = "bush"
-	bs.lods = [bush, bush, bush]
+	bs.lods = [_shrub(7, 0.50, Color(0.24, 0.55, 0.28)),
+		_shrub(4, 0.50, Color(0.24, 0.55, 0.28)),
+		_shrub(2, 0.50, Color(0.24, 0.55, 0.28))]
 	bs.tint = Color(1, 1, 1)
 	bs.scale_range = Vector2(0.8, 1.3)
 	bs.biomes = PackedInt32Array([Terrain.B_MEADOW, Terrain.B_FOREST, Terrain.B_GROVE])
