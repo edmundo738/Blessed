@@ -18,6 +18,7 @@ class Species extends RefCounted:
 	var collider_scale := Vector3.ONE    # para o collision shape
 	var height: float = 1.0              # altura útil (sombra, som)
 	var wind: float = 0.0                # 0 = rígido, 1 = balança muito
+	var materials_authored: bool = false # material Blender preservado no GLB
 
 
 class Structure extends RefCounted:
@@ -150,6 +151,12 @@ func _tree(id: String, trunk_h: float, trunk_rb: float, trunk_rt: float,
 				c.get("scale", Vector3.ONE), c.get("tint", Color.WHITE))
 			parts.append(_offset(blob, c["pos"]))
 		s.lods.append(_merge(parts))
+	var blender_lods := BlessedBlenderAssets.lods_for("tree_" + id)
+	if not blender_lods.is_empty():
+		s.lods = blender_lods
+		s.materials_authored = true
+		# Imported models use a ground-level origin; do not sink their root into terrain.
+		s.y_offset = 0.0
 	return s
 
 
@@ -186,23 +193,29 @@ func _shrub(lobes: int, radius: float, tint: Color) -> ArrayMesh:
 
 func _build_trees() -> void:
 	# ── carvalho: copa larga em bolhas, a árvore "de sombra" ──────────────
-	trees["oak"] = _tree("oak", 2.2, 0.30, 0.16, Color(0.42, 0.29, 0.21),
-		_canopy(5, 0.95, 1.25, 2.15, 0.5, 0.85, Color(0.30, 0.72, 0.34)),
-		[1, 1, 0], Vector2(0.9, 1.35), [Terrain.B_MEADOW, Terrain.B_FOREST], 1.0,
-		"tree_oak", 3.6, 0.55, Vector3(0.7, 3.4, 0.7))
+	trees["oak"] = _tree("oak", 3.5, 0.38, 0.18, Color(0.42, 0.29, 0.21),
+		_canopy(7, 1.05, 1.45, 3.5, 0.7, 1.1, Color(0.30, 0.72, 0.34)),
+		[2, 1, 0], Vector2(0.92, 1.28), [Terrain.B_MEADOW, Terrain.B_FOREST], 1.0,
+		"tree_oak", 6.8, 0.55, Vector3(0.9, 6.2, 0.9))
 
 	# ── bétula: tronco claro, copa pequena e clara ────────────────────────
-	trees["birch"] = _tree("birch", 3.0, 0.17, 0.10, Color(0.86, 0.85, 0.80),
-		_canopy(4, 0.7, 0.95, 2.6, 0.5, 0.6, Color(0.55, 0.80, 0.36)),
-		[1, 1, 0], Vector2(0.85, 1.25),
+	trees["birch"] = _tree("birch", 4.5, 0.21, 0.08, Color(0.86, 0.85, 0.80),
+		_canopy(5, 0.72, 1.0, 4.2, 0.7, 0.8, Color(0.55, 0.80, 0.36)),
+		[2, 1, 0], Vector2(0.88, 1.24),
 		[Terrain.B_FOREST, Terrain.B_MEADOW, Terrain.B_SNOW], 0.8,
-		"tree_birch", 3.8, 0.7, Vector3(0.45, 3.6, 0.45))
+		"tree_birch", 7.1, 0.7, Vector3(0.6, 6.9, 0.6))
 
 	# ── cerejeira: a assinatura anime ─────────────────────────────────────
-	trees["sakura"] = _tree("sakura", 2.0, 0.26, 0.14, Color(0.40, 0.26, 0.26),
-		_canopy(6, 0.85, 1.15, 2.0, 0.55, 0.95, Color(1.0, 0.68, 0.82)),
-		[1, 1, 0], Vector2(0.95, 1.3), [Terrain.B_GROVE, Terrain.B_MEADOW], 1.0,
-		"tree_sakura", 3.2, 0.85, Vector3(0.6, 3.0, 0.6))
+	trees["sakura"] = _tree("sakura", 3.2, 0.31, 0.14, Color(0.40, 0.26, 0.26),
+		_canopy(7, 0.95, 1.28, 3.0, 0.65, 1.0, Color(1.0, 0.68, 0.82)),
+		[2, 1, 0], Vector2(0.95, 1.25), [Terrain.B_GROVE, Terrain.B_MEADOW], 1.0,
+		"tree_sakura", 5.8, 0.85, Vector3(0.8, 5.5, 0.8))
+
+	# Salgueiro: copa pendente, frequente apenas em bosques húmidos.
+	trees["willow"] = _tree("willow", 4.0, 0.31, 0.12, Color(0.42, 0.29, 0.21),
+		_canopy(6, 0.95, 1.3, 4.1, 0.7, 1.25, Color(0.34, 0.65, 0.32)),
+		[2, 1, 0], Vector2(0.92, 1.3), [Terrain.B_GROVE, Terrain.B_MARSH, Terrain.B_MEADOW], 0.58,
+		"tree_willow", 7.4, 0.95, Vector3(1.2, 7.0, 1.2))
 
 	# ── pinheiro: cones empilhados (mais barato e lê-se bem ao longe) ─────
 	var pine := Species.new()
@@ -212,29 +225,38 @@ func _build_trees() -> void:
 	pine.weight = 1.0
 	pine.harvest = "tree_pine"
 	pine.y_offset = -0.2
-	pine.height = 4.8
+	pine.height = 8.4
 	pine.wind = 0.25
-	pine.collider_scale = Vector3(0.6, 4.6, 0.6)
+	pine.collider_scale = Vector3(0.75, 8.0, 0.75)
 	var pb := PackedInt32Array([Terrain.B_FOREST, Terrain.B_ROCK, Terrain.B_SNOW])
 	pine.biomes = pb
-	for segs in [9, 6, 4]:
-		var parts: Array = [MeshKit.tapered(rng, 3.4, 0.22, 0.10, segs, 3, 0.05, true,
+	for segs in [11, 7, 4]:
+		var parts: Array = [MeshKit.tapered(rng, 6.8, 0.27, 0.06, segs, 3, 0.05, true,
 			Color(0.34, 0.24, 0.18))]
-		for i in 4:
-			var t := float(i) / 3.0
+		for i in 7:
+			var t := float(i) / 6.0
 			parts.append(_offset(
-				MeshKit.cone(lerpf(1.5, 0.55, t), lerpf(1.5, 1.1, t), segs, Color(0.16, 0.42, 0.26)),
-				Vector3(0, 0.9 + t * 2.6, 0)))
+				MeshKit.cone(lerpf(1.9, 0.42, t), lerpf(1.65, 0.34, t), segs,
+					Color(0.16, 0.42, 0.26).lightened(t * 0.08)),
+				Vector3(0, 0.9 + t * 5.7, 0)))
 		pine.lods.append(_merge(parts))
+	var pine_lods := BlessedBlenderAssets.lods_for("tree_pine")
+	if not pine_lods.is_empty():
+		pine.lods = pine_lods
+		pine.materials_authored = true
+		pine.y_offset = 0.0
 	trees["pine"] = pine
 
 
 func _build_rocks() -> void:
+	var blender_rocks := BlessedBlenderAssets.lods_for("rock_cluster")
 	for i in 3:
-		var m := MeshKit.rock(rng, lerpf(0.55, 1.15, float(i) / 2.0))
+		var m: ArrayMesh = blender_rocks[clampi(i, 0, blender_rocks.size() - 1)] \
+			if not blender_rocks.is_empty() else \
+			MeshKit.rock(rng, lerpf(0.55, 1.15, float(i) / 2.0))
 		var s := Species.new()
 		s.id = "rock_%d" % i
-		s.lods = [m, m, m]
+		s.lods = blender_rocks if not blender_rocks.is_empty() else [m, m, m]
 		s.tint = Color(0.85, 0.85, 0.92)
 		s.scale_range = Vector2(0.8, 1.5)
 		s.biomes = PackedInt32Array([Terrain.B_ROCK, Terrain.B_MEADOW, Terrain.B_SAND, Terrain.B_MARSH])
@@ -243,6 +265,7 @@ func _build_rocks() -> void:
 		s.y_offset = -0.18
 		s.height = 1.0
 		s.collider_scale = Vector3.ONE
+		s.materials_authored = not blender_rocks.is_empty()
 		rocks[s.id] = s
 	# pedregulho pequeno que se apanha à mão
 	var flint := MeshKit.rock(rng, 0.24)
@@ -267,6 +290,10 @@ func _build_plants() -> void:
 	bs.lods = [_shrub(7, 0.50, Color(0.24, 0.55, 0.28)),
 		_shrub(4, 0.50, Color(0.24, 0.55, 0.28)),
 		_shrub(2, 0.50, Color(0.24, 0.55, 0.28))]
+	var bush_lods := BlessedBlenderAssets.lods_for("plant_bush")
+	if not bush_lods.is_empty():
+		bs.lods = bush_lods
+		bs.materials_authored = true
 	bs.tint = Color(1, 1, 1)
 	bs.scale_range = Vector2(0.8, 1.3)
 	bs.biomes = PackedInt32Array([Terrain.B_MEADOW, Terrain.B_FOREST, Terrain.B_GROVE])
@@ -276,6 +303,25 @@ func _build_plants() -> void:
 	bs.height = 0.7
 	bs.wind = 1.0
 	plants["bush"] = bs
+	# Variante pouco frequente e imediatamente legível: frutos vermelhos visíveis
+	# entre as folhas, em vez de uma indicação textual sem pista visual.
+	var berry_bush := Species.new()
+	berry_bush.id = "berry_bush"
+	berry_bush.lods = [_berry_shrub(7, 0.50, 4), _berry_shrub(4, 0.50, 3),
+		_berry_shrub(2, 0.50, 2)]
+	var berry_lods := BlessedBlenderAssets.lods_for("plant_berry_bush")
+	if not berry_lods.is_empty():
+		berry_bush.lods = berry_lods
+		berry_bush.materials_authored = true
+	berry_bush.tint = Color.WHITE
+	berry_bush.scale_range = Vector2(0.8, 1.3)
+	berry_bush.biomes = bs.biomes
+	berry_bush.weight = 0.18
+	berry_bush.harvest = "bush_berry"
+	berry_bush.y_offset = bs.y_offset
+	berry_bush.height = bs.height
+	berry_bush.wind = bs.wind
+	plants["berry_bush"] = berry_bush
 
 	# cogumelo
 	var mush_parts: Array = [
@@ -285,12 +331,28 @@ func _build_plants() -> void:
 	var ms := Species.new()
 	ms.id = "mushroom"
 	ms.lods = [_merge(mush_parts), _merge(mush_parts), _merge(mush_parts)]
+	var mushroom_lods := BlessedBlenderAssets.lods_for("plant_mushroom")
+	if not mushroom_lods.is_empty():
+		ms.lods = mushroom_lods
+		ms.materials_authored = true
 	ms.scale_range = Vector2(0.8, 1.4)
 	ms.biomes = PackedInt32Array([Terrain.B_FOREST, Terrain.B_MARSH])
 	ms.weight = 0.8
 	ms.harvest = "mushroom"
 	ms.height = 0.3
 	plants["mushroom"] = ms
+
+
+func _berry_shrub(lobes: int, radius: float, berry_count: int) -> ArrayMesh:
+	var parts: Array = [_shrub(lobes, radius, Color(0.24, 0.55, 0.28))]
+	for i in berry_count:
+		var angle := TAU * (float(i) / float(berry_count)) + 0.35
+		var p := Vector3(cos(angle) * radius * 0.72,
+			radius * (0.42 + 0.2 * float(i % 2)), sin(angle) * radius * 0.72)
+		var berry := MeshKit.blob(rng, 0.095, 1, 0.08, Vector3(0.9, 1.0, 0.9),
+			Color(0.82, 0.12, 0.12))
+		parts.append(_offset(berry, p))
+	return _merge(parts)
 
 
 func _build_structures() -> void:

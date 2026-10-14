@@ -45,10 +45,75 @@ func _run() -> void:
 	# ── 1. mundo ──────────────────────────────────────────────────────────
 	var world: World = main.world
 	check("mundo existe", world != null)
+	check("céu nativo com ciclo dia/noite", world.environment.background_mode == Environment.BG_SKY
+		and world.sky_resource != null and world.sky_resource.sky_material is ShaderMaterial)
+	var sky_mat := world.sky_resource.sky_material as ShaderMaterial
+	check("três panoramas estilizados carregados", sky_mat != null
+		and sky_mat.get_shader_parameter("sky_day") != null
+		and sky_mat.get_shader_parameter("sky_morning") != null
+		and sky_mat.get_shader_parameter("sky_night") != null)
+	world.set_sky_visible(false)
+	check("modo de diagnóstico consegue ocultar o céu", world.environment.background_mode == Environment.BG_COLOR)
+	world.set_sky_visible(true)
+	check("modo de diagnóstico repõe o céu", world.environment.background_mode == Environment.BG_SKY)
+	var ambient: Node = main.get_node_or_null("AmbientFx")
+	var dust: CPUParticles3D = ambient.get("dust") as CPUParticles3D if ambient != null else null
+	var flies: CPUParticles3D = ambient.get("flies") as CPUParticles3D if ambient != null else null
+	check("poeira ambiental usa sprite Kenney", dust != null and dust.mesh is QuadMesh
+		and (dust.mesh.surface_get_material(0) as StandardMaterial3D).albedo_texture != null)
+	check("pirilampos usam sprite Kenney", flies != null and flies.mesh is QuadMesh
+		and (flies.mesh.surface_get_material(0) as StandardMaterial3D).albedo_texture != null)
+	var impact_pool: Array = main.fx.get("_pool") as Array
+	var impact: Node3D = impact_pool[0] as Node3D if not impact_pool.is_empty() else null
+	var impact_mesh: QuadMesh = impact.get("draw_pass_2") as QuadMesh if impact != null else null
+	check("impacto combina lascas 3D com brilho 2D reutilizável", impact != null
+		and (impact is GPUParticles3D or impact is CPUParticles3D)
+		and int(impact.get("draw_passes")) == 2 and impact_mesh != null
+		and (impact_mesh.surface_get_material(0) as StandardMaterial3D).albedo_texture != null)
+	var fx_use_gpu := bool(main.fx.get("_use_gpu"))
+	main.fx.set("_use_gpu", false)
+	var compatibility_emitter: CPUParticles3D = main.fx.call("_new_emitter") as CPUParticles3D
+	var compatibility_mesh: ArrayMesh = compatibility_emitter.mesh as ArrayMesh if compatibility_emitter != null else null
+	check("Compatibility tem emissor CPU com os mesmos dois passes", compatibility_emitter != null
+		and compatibility_mesh != null and compatibility_mesh.get_surface_count() == 2
+		and (compatibility_mesh.surface_get_material(1) as StandardMaterial3D).albedo_texture != null)
+	if compatibility_emitter != null:
+		compatibility_emitter.free()
+	main.fx.set("_use_gpu", fx_use_gpu)
 	check("terreno tem altura", absf(world.terrain.height(0, 0)) < 500.0,
 		"h(0,0)=%.2f" % world.terrain.height(0, 0))
 	check("aldeia existe", world.terrain.village_distance(
 		world.terrain.village_center().x, world.terrain.village_center().y) < 0.01)
+	var avatar_sprite := main.player.avatar.get_node_or_null("PixelSprite") as AnimatedSprite3D
+	check("jogador começa em 1.ª pessoa", not main.player.third_person)
+	check("avatar do jogador é sprite billboard",
+		avatar_sprite != null and avatar_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED
+			and not main.player.avatar.visible)
+	check("substituição Camp to Me desligada",
+		not bool(main.player.avatar.get("use_camp_sprite")))
+	var hands: Node = main.player.hands
+	var held: MeshInstance3D = hands.get("held") as MeshInstance3D if hands != null else null
+	check("mãos da 1.ª pessoa têm modelo pronto", hands != null and hands.has_method("set_item")
+		and held != null and hands.visible)
+	check("item inicial tem malha para a 1.ª pessoa", held != null and held.mesh != null)
+	if hands != null and held != null:
+		hands.call("set_item", "axe")
+		check("machado importado fica visível na mão", held.visible and _node_has_surface_mesh(held))
+		hands.call("set_item", "pickaxe")
+		check("picareta importada fica visível na mão", held.visible and _node_has_surface_mesh(held))
+		hands.call("set_item", "torch")
+	check("HUD mostra ícones nos espaços rápidos",
+		main.hud.hotbar_slots.size() == 9 and
+			(main.hud.hotbar_slots[0]["icon"] as ItemIcon).item_id == "torch")
+	var day_music: AudioStreamWAV = Sfx.stream("music_day")
+	var night_music: AudioStreamWAV = Sfx.stream("music_night")
+	check("temas diurno e noturno são loops",
+		day_music.loop_mode == AudioStreamWAV.LOOP_FORWARD and
+		 night_music.loop_mode == AudioStreamWAV.LOOP_FORWARD)
+	Sfx.set_music_phase("night")
+	check("fase noturna seleciona o tema certo",
+		str(Sfx._loop_names.get("music", "")) == "music_night")
+	Sfx.set_music_phase(Game.current_phase())
 	await _frames(60)
 	check("chunks construídos", world.chunks.size() > 0, "n=%d" % world.chunks.size())
 
@@ -56,6 +121,8 @@ func _run() -> void:
 	for c in world.chunks.values():
 		harvest += (c as Chunk).harvest_nodes.size()
 	check("nós colhíveis espalhados", harvest > 10, "n=%d" % harvest)
+	check("arbustos raros têm bagas visíveis e colhíveis",
+		world.species.plants.has("berry_bush") and Db.HARVEST.has("bush_berry"))
 
 	var instances := 0
 	for c in world.chunks.values():
@@ -63,6 +130,53 @@ func _run() -> void:
 			if d is MultiMeshInstance3D and (d as MultiMeshInstance3D).multimesh:
 				instances += (d as MultiMeshInstance3D).multimesh.instance_count
 	check("instâncias de vegetação", instances > 200, "n=%d" % instances)
+
+	# Valida cada modelo Blender no recurso Godot individualmente. As espécies
+	# continuam separadas; não se empilham modelos diferentes numa única malha.
+	var blender_asset_ids := ["tree_oak", "tree_birch", "tree_pine", "tree_sakura",
+		"tree_willow", "plant_bush", "plant_berry_bush", "plant_mushroom",
+		"rock_cluster", "grass_clump", "fern_clump", "flower_clump", "reed_clump",
+		"seaweed_cluster", "clover_clump", "pickup_berry", "pickup_leaf", "pickup_log", "tool_axe",
+		"tool_pickaxe"]
+	for asset_id in blender_asset_ids:
+		var asset_mesh: ArrayMesh = BlessedBlenderAssets.mesh_for(asset_id)
+		var asset_vertices: int = _mesh_vertex_count(asset_mesh)
+		var asset_size: Vector3 = asset_mesh.get_aabb().size if asset_mesh != null else Vector3.ZERO
+		var asset_ok: bool = asset_mesh != null and asset_mesh.get_surface_count() > 0 \
+			and asset_vertices > 0 and asset_size.x > 0.001 and asset_size.y > 0.001 \
+			and asset_size.z > 0.001
+		if str(asset_id).begins_with("tree_"):
+			asset_ok = asset_ok and asset_size.y > 2.0
+		check("GLB Blender %s tem mesh e escala válida" % asset_id, asset_ok,
+			"%d vértices, %d superfícies, Y %.2f m" % [asset_vertices,
+				asset_mesh.get_surface_count() if asset_mesh != null else 0, asset_size.y])
+
+	for lod_asset_id in ["tree_oak", "tree_birch", "tree_pine", "tree_sakura", "tree_willow",
+		"rock_cluster", "plant_bush", "plant_berry_bush", "plant_mushroom"]:
+		var base_mesh: ArrayMesh = BlessedBlenderAssets.mesh_for(lod_asset_id)
+		var lod1_mesh: ArrayMesh = BlessedBlenderAssets.mesh_for("%s_lod1" % lod_asset_id)
+		var lod2_mesh: ArrayMesh = BlessedBlenderAssets.mesh_for("%s_lod2" % lod_asset_id)
+		var base_count: int = _mesh_vertex_count(base_mesh)
+		var lod1_count: int = _mesh_vertex_count(lod1_mesh)
+		var lod2_count: int = _mesh_vertex_count(lod2_mesh)
+		var lod_ok: bool = base_count > 0 and lod1_count > 0 and lod2_count > 0 \
+			and lod1_count <= base_count and lod2_count <= lod1_count
+		check("LOD Blender %s importam e reduzem geometria" % lod_asset_id, lod_ok,
+			"base/1/2: %d/%d/%d vértices" % [base_count, lod1_count, lod2_count])
+
+	var blender_trees_in_world := 0
+	for c in world.chunks.values():
+		for decor in (c as Chunk)._decor:
+			if decor is not MultiMeshInstance3D or (decor as MultiMeshInstance3D).multimesh == null:
+				continue
+			var used_mesh: Mesh = (decor as MultiMeshInstance3D).multimesh.mesh
+			for tree_id in world.species.trees:
+				var tree_species: SpeciesKit.Species = world.species.trees[tree_id]
+				if not tree_species.lods.is_empty() and used_mesh == tree_species.lods[0]:
+					blender_trees_in_world += (decor as MultiMeshInstance3D).multimesh.instance_count
+					break
+	check("chunks usam modelos Blender para as árvores", blender_trees_in_world > 0,
+			"%d instâncias" % blender_trees_in_world)
 
 	# ── 2. biomas variados ────────────────────────────────────────────────
 	var biomes := {}
@@ -180,10 +294,27 @@ func _run() -> void:
 		var wood_before := inv.count("wood")
 		main.interaction.focus = {"kind": "harvest", "ref": target,
 			"pos": (target["pos"] as Vector3) + Vector3(0, 1, 0)}
-		main.interaction._harvest_done()
-		check("cortar árvore dá madeira", inv.count("wood") > wood_before,
-			"wood %d -> %d" % [wood_before, inv.count("wood")])
+		var hp_before := float(target["hp"])
+		main.interaction._hold_work(0.53, 1.0)
+		check("árvore exige impactos e perde resistência por golpe",
+			float(target["hp"]) < hp_before)
+		var hits := 1
+		while bool(target.get("alive", true)) and hits < 24:
+			main.interaction._hold_work(0.53, 1.0)
+			hits += 1
+		var dropped_wood := 0
+		for item in world.get_children():
+			if item.has_method("_try_pickup") and str(item.get("item_id")) == "wood":
+				dropped_wood += int(item.get("amount"))
+		check("árvore cria pickup físico de madeira",
+			dropped_wood >= int(Db.HARVEST[str(target["kind"])]["yields"].get("wood", 0))
+			and inv.count("wood") == wood_before,
+			"wood pickup=%d; mochila=%d" % [dropped_wood, inv.count("wood")])
 		check("nó colhido fica marcado", not bool(target.get("alive", true)))
+		check("árvore abatida tem animação de queda",
+			(target.get("chunk") as Chunk).get_node_or_null("FelledTree") != null)
+		check("árvore abatida entra no estado de respawn",
+			world.is_harvested(target["pos"] as Vector3, str(target["species"])))
 	else:
 		check("cortar árvore dá madeira", false, "nenhuma árvore por perto")
 
@@ -220,6 +351,10 @@ func _run() -> void:
 			break
 		await _frames(1)
 	check("a noite traz criaturas", had_creature, "n=%d" % night.creatures.size())
+	if had_creature:
+		var night_sprite := (night.creatures[0] as Creature).get_node_or_null("NightWandererSprite") as Sprite3D
+		check("criatura noturna é sprite billboard",
+			night_sprite != null and night_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED)
 	main.player.global_position = saved_pos
 	Game.hour = 12.0
 	Game.phase = Game.current_phase()
@@ -325,13 +460,16 @@ func _run() -> void:
 	# material will go through the transparent pipeline." Nenhum shader deste
 	# jogo precisa disso: a água ficou opaca e o céu é um skybox opaco.
 	var leaky: Array = []
-	for path in ["res://shaders/toon_terrain.gdshader", "res://shaders/toon_foliage.gdshader",
-			"res://shaders/anime_sky.gdshader"]:
+	for path in ["res://shaders/toon_terrain.gdshader", "res://shaders/toon_foliage.gdshader"]:
 		var code := _strip_comments(str(FileAccess.get_file_as_string(path)))
 		if "ALPHA" in code:
 			leaky.append(str(path).get_file())
-	check("só a água pode ser transparente (céu/terreno/folhagem opacos)",
-		leaky.is_empty(), ", ".join(leaky))
+	var sky_code := _strip_comments(str(FileAccess.get_file_as_string("res://shaders/anime_sky.gdshader")))
+	var sky_alpha_isolated := (
+		sky_code.contains("render_mode use_quarter_res_pass")
+		and sky_code.contains("if (AT_QUARTER_RES_PASS)") and sky_code.contains("ALPHA ="))
+	check("água e passe isolado das nuvens controlam a transparência",
+		leaky.is_empty() and sky_alpha_isolated, ", ".join(leaky))
 	var wcode := _strip_comments(str(FileAccess.get_file_as_string("res://shaders/stylized_water.gdshader")))
 	check("água usa blend_mix (não additive/alpha que lavaria a cor)", "blend_mix" in wcode)
 
@@ -472,6 +610,17 @@ func _run() -> void:
 		check("F1 constrói a cena de diagnóstico", rig != null and rig_nodes >= 10,
 			"%d objectos" % rig_nodes)
 
+	# ── menu separado da mochila e da bancada ───────────────────────────────
+	main.menus.open("bag")
+	await get_tree().process_frame
+	check("menu da mochila abre com slots e ícones", main.menus.current == "bag" and
+		main.menus._content.get_child_count() > 0)
+	main.menus.open("craft")
+	await get_tree().process_frame
+	check("bancada tem menu próprio", main.menus.current == "craft" and
+		main.menus._content.get_child_count() > 0)
+	main.menus.close()
+
 	# ── relatório ─────────────────────────────────────────────────────────
 	for l in lines:
 		print(l)
@@ -527,3 +676,24 @@ func _strip_comments(src: String) -> String:
 			out += src[i]
 			i += 1
 	return out
+
+
+func _mesh_vertex_count(mesh: ArrayMesh) -> int:
+	if mesh == null:
+		return 0
+	var total := 0
+	for surface_idx in mesh.get_surface_count():
+		var arrays: Array = mesh.surface_get_arrays(surface_idx)
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		total += verts.size()
+	return total
+
+
+func _node_has_surface_mesh(node: Node) -> bool:
+	if node is MeshInstance3D and (node as MeshInstance3D).mesh != null \
+			and (node as MeshInstance3D).mesh.get_surface_count() > 0:
+		return true
+	for child in node.get_children():
+		if _node_has_surface_mesh(child):
+			return true
+	return false

@@ -14,6 +14,9 @@ var player: Node3D
 var dust: CPUParticles3D
 var flies: CPUParticles3D
 
+const DUST_SPRITE := preload("res://content/fx/kenney/particles/smoke_02.png")
+const FIREFLY_SPRITE := preload("res://content/fx/kenney/particles/star_02.png")
+
 
 func _ready() -> void:
 	name = "AmbientFx"
@@ -69,7 +72,7 @@ func _make_dust() -> CPUParticles3D:
 	p.initial_velocity_max = 0.22
 	p.scale_amount_min = 0.5
 	p.scale_amount_max = 1.3
-	p.mesh = _billboard_quad(Vector2(0.05, 0.05), Color(1.0, 0.96, 0.88, 0.30))
+	p.mesh = _billboard_quad(Vector2(0.20, 0.20), Color(0.86, 0.82, 0.70, 0.20), DUST_SPRITE)
 	p.color = Color(1, 1, 1, 1)
 	return p
 
@@ -89,21 +92,23 @@ func _make_flies() -> CPUParticles3D:
 	p.initial_velocity_max = 0.45
 	p.scale_amount_min = 0.6
 	p.scale_amount_max = 1.1
-	p.mesh = _billboard_quad(Vector2(0.09, 0.09), Color(0.65, 1.0, 0.40, 0.9))
+	p.mesh = _billboard_quad(Vector2(0.105, 0.105), Color(1.65, 1.45, 0.62, 0.88), FIREFLY_SPRITE)
 	p.emitting = false
 	return p
 
 
 ## Quad que olha sempre para a câmara (billboard), sem luz, com alpha.
-func _billboard_quad(size: Vector2, col: Color) -> QuadMesh:
+func _billboard_quad(size: Vector2, col: Color, texture: Texture2D) -> QuadMesh:
 	var q := QuadMesh.new()
 	q.size = size
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	m.billboard_keep_scale = true
 	m.albedo_color = col
+	m.albedo_texture = texture
 	m.vertex_color_use_as_albedo = true
 	q.material = m
 	return q

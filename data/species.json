@@ -1,10 +1,11 @@
 {
-  "_comment": "Metadados das espécies (árvores/rochas/plantas). A GEOMETRIA é gerada por código (species.gd); aqui controlas ONDE cresce, QUÃO comum, O QUE larga, ESCALA e BALANÇO. 'biomes' usa os ids de data/biomes.json. Tudo opcional — o que faltar usa o valor embutido.",
+  "_comment": "Metadados das espécies. Os modelos editáveis vêm do kit Blender; species.gd mantém a geometria de reserva. Aqui controlas habitat, raridade, colheita, escala e vento. 'biomes' usa os ids de data/biomes.json.",
   "trees": {
-    "oak":    { "biomes": ["meadow", "forest"],            "weight": 1.0, "harvest": "tree_oak",   "scale": [0.90, 1.35], "height": 3.6, "wind": 0.55 },
-    "birch":  { "biomes": ["forest", "meadow", "snow"],    "weight": 0.8, "harvest": "tree_birch", "scale": [0.85, 1.25], "height": 3.8, "wind": 0.70 },
-    "sakura": { "biomes": ["grove", "meadow"],             "weight": 1.0, "harvest": "tree_sakura","scale": [0.95, 1.30], "height": 3.2, "wind": 0.85 },
-    "pine":   { "biomes": ["forest", "rock", "snow"],      "weight": 1.0, "harvest": "tree_pine",  "scale": [0.90, 1.40], "height": 4.8, "wind": 0.25 }
+    "oak":    { "biomes": ["meadow", "forest"],            "weight": 1.0,  "harvest": "tree_oak",    "scale": [0.92, 1.28], "height": 6.8, "wind": 0.55 },
+    "birch":  { "biomes": ["forest", "meadow", "snow"],    "weight": 0.8,  "harvest": "tree_birch",  "scale": [0.88, 1.24], "height": 7.1, "wind": 0.70 },
+    "sakura": { "biomes": ["grove", "meadow"],             "weight": 1.0,  "harvest": "tree_sakura", "scale": [0.95, 1.25], "height": 5.8, "wind": 0.85 },
+    "pine":   { "biomes": ["forest", "rock", "snow"],      "weight": 1.0,  "harvest": "tree_pine",   "scale": [0.90, 1.28], "height": 8.4, "wind": 0.25 },
+    "willow": { "biomes": ["grove", "marsh", "meadow"],    "weight": 0.58, "harvest": "tree_willow", "scale": [0.92, 1.30], "height": 7.4, "wind": 0.95 }
   },
   "rocks": {
     "rock_0":     { "biomes": ["rock", "meadow", "sand", "marsh"], "weight": 1.0,  "harvest": "rock",       "scale": [0.8, 1.5], "height": 1.0 },
@@ -13,7 +14,8 @@
     "flint_node": { "biomes": ["sand", "rock", "meadow"],          "weight": 0.5,  "harvest": "flint_node", "scale": [0.7, 1.2], "height": 0.3 }
   },
   "plants": {
-    "bush":     { "biomes": ["meadow", "forest", "grove"], "weight": 1.0, "harvest": "bush",     "scale": [0.8, 1.3], "height": 0.7, "wind": 1.0 },
-    "mushroom": { "biomes": ["forest", "marsh"],           "weight": 0.8, "harvest": "mushroom", "scale": [0.8, 1.4], "height": 0.3 }
+    "bush":       { "biomes": ["meadow", "forest", "grove"], "weight": 1.0, "harvest": "bush",       "scale": [0.8, 1.3], "height": 0.9, "wind": 1.0 },
+    "berry_bush": { "biomes": ["meadow", "forest", "grove"], "weight": 0.18,"harvest": "bush_berry", "scale": [0.8, 1.3], "height": 0.9, "wind": 1.0 },
+    "mushroom":   { "biomes": ["forest", "marsh"],           "weight": 0.8, "harvest": "mushroom",    "scale": [0.8, 1.4], "height": 0.3 }
   }
 }

@@ -134,6 +134,21 @@ func select(i: int) -> void:
 	Sfx.play("ui_click", -14.0, 1.2)
 
 
+## Move uma pilha da mochila para o espaço rápido escolhido, preservando a
+## pilha que estava nesse espaço. O inventário continua a ter 24 espaços.
+func equip_slot(index: int) -> void:
+	if index < 0 or index >= SLOTS:
+		return
+	if index < 9:
+		select(index)
+		return
+	var quick := clampi(hotbar_index, 0, 8)
+	var previous: Dictionary = slots[quick]
+	slots[quick] = slots[index]
+	slots[index] = previous
+	Sfx.play("ui_click", -12.0, 1.1)
+
+
 func next_slot(dir: int = 1) -> void:
 	hotbar_index = wrapi(hotbar_index + dir, 0, 9)
 	Sfx.play("ui_click", -16.0, 1.1)

@@ -50,7 +50,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_F3:
 			main.world.water.visible = not main.world.water.visible
 		KEY_F6:
-			main.world.sky_dome.visible = not main.world.sky_dome.visible
+			main.world.set_sky_visible(not main.world.sky_visible)
 		KEY_F7:
 			main.world.sun.shadow_enabled = not main.world.sun.shadow_enabled
 		KEY_F8:
@@ -70,7 +70,7 @@ func _paint() -> void:
 		"BÁSICOS" if basic else "do jogo",
 		"ON" if in_rig else "off",
 		"on" if w.water.visible else "OFF",
-		"on" if w.sky_dome.visible else "OFF",
+		"on" if w.sky_visible else "OFF",
 		"on" if w.sun.shadow_enabled else "OFF",
 	]
 
@@ -137,7 +137,7 @@ func _build_rig() -> void:
 	rig = Node3D.new()
 	rig.name = "DiagRig"
 	var o := rig_origin + Vector3(0, 6000, 0)
-	rig.global_position = o
+	rig.position = o
 	main.add_child(rig)
 
 	# chão às damas — referência de escala e de profundidade
@@ -146,7 +146,7 @@ func _build_rig() -> void:
 			var dark := (i + j) % 2 == 0
 			_box(Vector3(4, 0.4, 4),
 				Color(0.85, 0.85, 0.88) if dark else Color(0.25, 0.27, 0.32),
-				o + Vector3((i - 5) * 4.0, -0.2, (j - 5) * 4.0), 0.0)
+				Vector3((i - 5) * 4.0, -0.2, (j - 5) * 4.0), 0.0)
 
 	# cubo com uma cor por face — diz-te imediatamente se alguma face falta
 	var faces := [
@@ -217,7 +217,7 @@ func _box(size: Vector3, c: Color, at: Vector3, rot: float) -> void:
 	bm.size = size
 	mi.mesh = bm
 	mi.material_override = _plain(c)
-	mi.global_position = at
+	mi.position = at
 	mi.rotation.y = rot
 	rig.add_child(mi)
 

@@ -1,6 +1,7 @@
 # BLESSED
 
-Sandbox de sobrevivência em primeira pessoa, com mundo procedural, estilo anime cinemático.
+Sandbox de sobrevivência com mundo procedural e estilo anime cinemático; começa em primeira
+pessoa, com `V` para alternar para a câmara externa.
 
 > *Viveste muitas vidas. Um dia adormeceste. E acordaste abençoado — num mundo que não
 > conheces. Podes fazer tudo. Mas tem cuidado com o escuro.*
@@ -49,19 +50,24 @@ Abre `http://localhost:8080`, clica no ecrã e o rato é capturado.
 |---|---|
 | `W A S D` | andar |
 | `Shift` | correr · `Espaço` saltar · `Ctrl` agachar |
-| rato | olhar · botão esquerdo **manter premido** para cortar / picar / colher |
-| `F` | interagir (falar, acender, dormir) |
+| rato | olhar · botão esquerdo **manter premido** para cortar árvores e partir rochas |
+| `F` | recolher plantas/frutos · falar · acender · descansar · encher cantil |
 | `B` | modo construir · `R` rodar · roda do rato escolher peça |
 | `Tab` | mochila · `J` diário · `M` mapa · `Esc` pausa |
 | `1…9` | barra de atalhos · `G` largar item · `F5` guardar |
+| `V` | alternar primeira pessoa/câmara externa; a primeira pessoa mostra as mãos e o item equipado |
 | `F1` | cena de diagnóstico (geometria conhecida, materiais básicos) |
 | `F9` | materiais do jogo ↔ `StandardMaterial3D` — isola shaders vs. geometria |
 | `F3`/`F6`/`F7`/`F8` | água · céu · sombras · meio-dia |
 
 O prólogo abre o jogo: escolhes o **nome**, o **corpo** (Ela/Ele) e uma **alma** — o que te
 ficou da vida anterior. Não é cosmético: cada alma muda números reais, medidos e testados
-(tabela em [`docs/DESIGN.md`](docs/DESIGN.md) §6). Depois a câmara desce do céu sobre a
-aldeia e entrega-te o controlo.
+(tabela em [`docs/DESIGN.md`](docs/DESIGN.md) §6). Depois a câmara desce do céu sobre as
+ruínas e entrega-te o controlo.
+
+O jogo começa em **1.ª pessoa**, com mãos e ferramenta equipadas visíveis; `V` alterna para a
+câmara externa. A trilha é sintetizada em runtime e muda suavemente
+entre temas originais de alvorada, dia, crepúsculo e noite.
 
 ---
 
@@ -73,14 +79,14 @@ O projeto tem o seu próprio teste — é o que corre antes de se dizer que algo
 cd /home/user/Blessed && ./tools/check.sh
 ```
 
-Último resultado: **77 verificações, 0 falhas** (`SELFTEST_PASS`) — verificado no Godot 4.7.2
-headless real, e reproduzido a cada push pelo workflow `.github/workflows/selftest.yml`
+Último resultado: **125 verificações, 0 falhas** (`SELFTEST_PASS`) — verificado no Godot 4.7.2
+headless real. O workflow `.github/workflows/selftest.yml` repete o self-test a cada push
 (GitHub Actions), que **falha o build se o self-test falhar**.
 
 Há três sondas, todas a correr o jogo a sério dentro do motor:
 
 ```bash
-./tools/check.sh                                              # 77 verificações, PASS/FAIL
+./tools/check.sh                                              # 125 verificações, PASS/FAIL
 godot --headless --path . --quit-after 3000 -- diag           # números, não opiniões
 node shot.mjs . -- shot                                       # despeja a geometria real
 ```
@@ -123,9 +129,15 @@ O que o `tests/selftest.gd` cobre:
 
 ## Como está feito
 
-Forward+ no desktop, `gl_compatibility` na web. **Zero assets importados** — cada malha,
-material, textura e som é gerado em runtime, por isso o `.pck` tem 244 KB e o pipeline de
-exportação não precisa do editor.
+Forward+ no desktop, `gl_compatibility` na web. Terreno, chunks e grande parte das malhas são
+procedurais; árvores e plantas usam também modelos gratuitos Quaternius CC0, com fontes Blender
+editáveis, espécies separadas e LODs. Os 32 modelos Quaternius em formato glTF, respetivos
+buffers, texturas e metadados ocupam cerca de 29,6 MB; o kit
+procedural anterior continua disponível como fallback. O céu usa panoramas Kenney CC0 em 2K,
+com mipmaps, disco solar/lunar dinâmico e nuvens estilizadas em passe de quarto de resolução.
+Os detalhes da escala, política de LOD, memória estimada e próximas validações estão em
+[`docs/MODEL_SCALE_GUIDE.md`](docs/MODEL_SCALE_GUIDE.md) e
+[`docs/PRIORITY_ROADMAP.md`](docs/PRIORITY_ROADMAP.md).
 
 ```
 project.godot            autoloads + Forward+

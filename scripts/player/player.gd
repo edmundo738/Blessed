@@ -101,14 +101,17 @@ func _build_tree() -> void:
 
 	hands = Node3D.new()
 	hands.name = "Hands"
-	camera.add_child(hands)
 	var hands_script: GDScript = load("res://scripts/player/hands.gd")
 	hands.set_script(hands_script)
+	# Associar o script antes de entrar na árvore garante que _ready() cria
+	# braços e malha do item; sem esta ordem, a primeira pessoa fica vazia.
+	camera.add_child(hands)
 
 	avatar = Node3D.new()
 	avatar.name = "Avatar2D"
 	avatar.set_script(load("res://scripts/player/pixel_avatar.gd"))
 	add_child(avatar)
+	# A primeira pessoa é a experiência padrão; V continua a permitir a câmara externa.
 	_set_view_mode(false)
 
 
@@ -335,10 +338,10 @@ func _move_land(delta: float, wish: Vector3) -> void:
 			jump_buffer = 0.0
 			coyote = 0.0
 			jumped.emit()
+			Sfx.play("jump", -8.0, randf_range(0.94, 1.06))
 	# altura de salto variavel: largar o botao cedo corta a subida (salto curto vs alto)
 	if Input.is_action_just_released("jump") and velocity.y > 0.0:
 		velocity.y *= 0.45
-		Sfx.play("step_grass", -14.0, 1.4)
 
 	# aterragem
 	if is_on_floor() and not was_grounded:
@@ -458,6 +461,7 @@ func save_data() -> Dictionary:
 		"pos": [global_position.x, global_position.y, global_position.z],
 		"yaw": yaw, "pitch": pitch, "stamina": stamina,
 		"third_person": third_person,
+		"view_mode_version": 2,
 	}
 
 
@@ -469,4 +473,8 @@ func load_data(d: Dictionary) -> void:
 	pitch = float(d.get("pitch", 0.0))
 	target_pitch = pitch
 	stamina = float(d.get("stamina", 100.0))
-	_set_view_mode(bool(d.get("third_person", false)))
+	# Migra saves antigos (incluindo o teste de personagem em 3.ª pessoa) para
+	# primeira pessoa uma única vez; saves novos preservam a escolha do jogador.
+	var view_version := int(d.get("view_mode_version", 0))
+	var saved_third_person := bool(d.get("third_person", false)) if view_version >= 2 else false
+	_set_view_mode(saved_third_person)

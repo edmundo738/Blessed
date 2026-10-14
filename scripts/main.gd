@@ -22,6 +22,7 @@ var prologo: Prologo
 var debug_view: Node
 
 var _cinema_t := 0.0
+var _last_held_item := "__unset__"
 
 
 func _ready() -> void:
@@ -32,6 +33,7 @@ func _ready() -> void:
 	_build_ambient()
 	_build_ui()
 	_starter_kit()
+	_sync_held_item()
 	# o mundo à volta do spawn começa logo a existir
 	world.set_target(player.global_position)
 	world._update_chunks(Vector2i(int(floor(player.global_position.x / Chunk.SIZE)),
@@ -235,6 +237,7 @@ func _build_ui() -> void:
 
 	Bus.time_advanced.connect(_on_time)
 	Bus.locale_changed.connect(_on_locale)
+	Sfx.set_music_phase(Game.current_phase())
 	_on_time(Game.hour, Game.day)
 
 
@@ -249,6 +252,7 @@ func _process(delta: float) -> void:
 		_cinema(delta)
 		return
 	world.set_target(player.global_position)
+	_sync_held_item()
 	_apply_player_state()
 	_sense_light()
 	_hotbar_input()
@@ -294,6 +298,18 @@ func _hotbar_input() -> void:
 	for i in 9:
 		if Input.is_action_just_pressed("hotbar_%d" % (i + 1)):
 			inv.select(i)
+	_sync_held_item()
+
+
+func _sync_held_item() -> void:
+	if player == null or player.hands == null or inv == null:
+		return
+	var id := inv.hotbar_id()
+	if id == _last_held_item:
+		return
+	_last_held_item = id
+	if player.hands.has_method("set_item"):
+		player.hands.call("set_item", id)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -333,6 +349,7 @@ func _push_back_creatures() -> void:
 func _on_time(hour: float, day: int) -> void:
 	if world != null:
 		world.update_time(hour, Game.daylight(), Game.current_phase())
+	Sfx.set_music_phase(Game.current_phase())
 
 
 func _on_locale(_code: String) -> void:

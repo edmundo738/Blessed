@@ -198,7 +198,13 @@ func _do_interact(_a: Dictionary) -> Dictionary:
 		"npc", "water":
 			_fire_once()
 		"harvest":
-			_work_tick(0.24, 1.0)
+			var harvest_kind := str(focus["ref"].get("kind", ""))
+			if harvest_kind.begins_with("tree") or harvest_kind == "rock":
+				Bus.say("prompt.hold_harvest", 1.8)
+				return {"handled": false, "failed": true, "reason": "hold_to_work"}
+			# Plantas e bagas são recolhidas num gesto. Árvores e rochas exigem
+			# ferramenta/impactos contínuos para não parecerem botões mágicos.
+			_harvest_done()
 		"structure":
 			var e: Dictionary = focus["ref"]
 			if str(e["id"]) == "campfire" and not bool(e.get("lit", false)):
@@ -207,7 +213,7 @@ func _do_interact(_a: Dictionary) -> Dictionary:
 			elif str(e["id"]) == "bed":
 				_rest_in_bed()
 			else:
-				_work_tick(0.24, 0.9)
+				Game.request("remove_structure", {"entry": e})
 	return {"handled": true, "ok": true}
 
 
@@ -247,28 +253,29 @@ func _handle_use(delta: float) -> void:
 			elif str(e["id"]) == "bed":
 				if holding and not _was_holding:
 					_rest_in_bed()
-			elif holding:
-				_work_tick(delta, 0.9)
 			else:
 				progress = maxf(0.0, progress - delta * 0.16)
 				_impact_t = 0.0
 		"harvest":
-			if holding:
+			var harvest_kind := str(focus["ref"].get("kind", ""))
+			var needs_held_work := harvest_kind.begins_with("tree") or harvest_kind == "rock"
+			if holding and needs_held_work:
 				_work_tick(delta, 1.0)
 			else:
-				progress = maxf(0.0, progress - delta * 0.16)
+				# Plantas/frutos têm apenas ação rápida F; o rato não repete a mesma ação.
+				progress = 0.0
 				_impact_t = 0.0
 	_hold = holding
 	_was_holding = holding
 
 
 func _work_tick(delta: float, seconds: float) -> void:
-	_hold_work(delta, seconds)
-	if progress < 1.0 or focus.is_empty():
-		return
 	if str(focus["kind"]) == "harvest":
-		_harvest_done()
+		_hold_work(delta, seconds)
 	elif str(focus["kind"]) == "structure":
+		_hold_work(delta, seconds)
+		if progress < 1.0 or focus.is_empty():
+			return
 		Game.request("remove_structure", {"entry": focus["ref"]})
 		progress = 0.0
 		_impact_t = 0.0
@@ -276,19 +283,35 @@ func _work_tick(delta: float, seconds: float) -> void:
 
 func _hold_work(delta: float, seconds: float) -> void:
 	_hold = true
+	if focus.is_empty():
+		return
+	if str(focus["kind"]) == "harvest":
+		var node: Dictionary = focus["ref"]
+		var kind := str(node.get("kind", ""))
+		var spec: Dictionary = Db.HARVEST.get(kind, {})
+		var max_hp := maxf(float(node.get("max_hp", spec.get("hp", 1))), 1.0)
+		node["max_hp"] = max_hp
+		_impact_t -= delta
+		if _impact_t > 0.0:
+			return
+		_impact_t = 0.52
+		var tool_id := inv.hotbar_id()
+		var required := str(spec.get("tool", ""))
+		var damage := 1.0
+		if not required.is_empty():
+			var tool: Dictionary = Db.item(tool_id)
+			var power: Dictionary = tool.get("power", {})
+			damage = float(power.get(str(spec.get("action", "")), 0.55))
+		node["hp"] = maxf(0.0, float(node.get("hp", max_hp)) - damage)
+		progress = 1.0 - float(node["hp"]) / max_hp
+		player.hands.swing(0.35)
+		player.hands.recoil_kick(0.35 if tool_id == required else 0.2)
+		_hit_feedback()
+		if float(node["hp"]) <= 0.0:
+			_harvest_done()
+		return
 	var tool_id := inv.hotbar_id()
 	var power := 1.0
-	var spec: Dictionary = {}
-	if not focus.is_empty() and str(focus["kind"]) == "harvest":
-		spec = Db.HARVEST.get(str(focus["ref"]["kind"]), {})
-		var want := str(spec.get("tool", ""))
-		if not want.is_empty():
-			var def: Dictionary = Db.item(tool_id)
-			var pw: Dictionary = def.get("power", {})
-			if pw.has(str(spec.get("action", ""))):
-				power = float(pw[str(spec.get("action", ""))])
-			else:
-				power = 0.45   # à mão dá, mas custa
 	progress = minf(1.0, progress + delta * power * survival.work_multiplier() / maxf(seconds, 0.05))
 	_impact_t -= delta
 	if _impact_t <= 0.0:
@@ -322,21 +345,41 @@ func _harvest_done() -> void:
 	var n: Dictionary = focus["ref"]
 	var spec: Dictionary = Db.HARVEST.get(str(n["kind"]), {})
 	var yields: Dictionary = spec.get("yields", {})
+	var dropped_total := 0
 	for k in yields:
 		var qty := int(yields[k])
 		var bonus := 0.35 if str(Game.profile.get("soul", "")) != "curious" else 0.6
 		if randf() < bonus:
 			qty += 1
-		inv.add(str(k), qty)
-		Game.bump("item_" + str(k), qty)
+		# Colher altera o mundo; não teletransporta o recurso para a mochila.
+		# Cada tipo de material cria um pickup físico visível para o jogador.
+		_drop_resource(str(k), qty, n["pos"] as Vector3)
+		dropped_total += qty
 	n["alive"] = false
 	world.hide_harvest(n)
-	Sfx.play_at("pick", focus["pos"], -4.0, 0.85)
+	world.mark_harvested(n)
+	Sfx.play_at("chop", focus["pos"], -4.0, 0.72)
 	fx.burst(focus["pos"], Color(0.6, 0.45, 0.3), 16)
+	if dropped_total > 0:
+		Bus.say("msg.resources_fell", 2.4)
 	Bus.node_harvested.emit(str(n["species"]), str(n["kind"]), focus["pos"])
 	Game.bump("harvest_" + str(n["kind"]))
 	progress = 0.0
 	focus = {}
+
+
+func _drop_resource(id: String, qty: int, at: Vector3) -> void:
+	var packed: Script = load("res://scripts/world/dropped_item.gd")
+	var drop: Area3D = packed.new() as Area3D
+	drop.set("item_id", id)
+	drop.set("amount", qty)
+	drop.set("inv", inv)
+	drop.set("player_ref", player)
+	world.add_child(drop)
+	var angle := randf() * TAU
+	var spread := randf_range(0.35, 0.95)
+	drop.global_position = at + Vector3(cos(angle) * spread, 0.42, sin(angle) * spread)
+	drop.set("launch_direction", Vector3(cos(angle), 0.0, sin(angle)))
 
 
 func _fire_once() -> void:
@@ -350,9 +393,11 @@ func _fire_once() -> void:
 				inv.remove("bottle", 1)
 				inv.add("water", 1)
 				Sfx.play("splash", -10.0, 1.2)
-				Bus.say("msg.crafted", 2.0)
+				Bus.say("msg.water_filled", 2.0)
 			else:
 				survival.drink(22.0)
+				Sfx.play("drink", -9.0)
+				Bus.say("msg.drink", 2.0)
 
 
 # ══════════════════════════════════════════════════════════════════════════

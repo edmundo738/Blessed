@@ -389,11 +389,9 @@ func _scene_light() -> void:
 	var cam: Camera3D = main.player.camera
 	say("  câmara: fov=%.1f near=%.3f far=%.1f  posição=%s",
 		[cam.fov, cam.near, cam.far, _v(cam.global_position)])
-	var sky: MeshInstance3D = w.sky_dome
-	var sky_r := float(sky.mesh.get_aabb().size.x) * 0.5
-	say("  domo do céu: raio=%.0f  prioridade do nó=%d  posição=%s  (câmara dentro? %s)",
-		[sky_r, int(sky.render_priority), _v(sky.global_position),
-		str(sky.global_position.distance_to(cam.global_position) < sky_r)])
+	say("  céu nativo: ativo=%s modo=%d radiância=%d processo=%d", [
+		str(w.sky_visible), w.environment.background_mode,
+		w.sky_resource.radiance_size, w.sky_resource.process_mode])
 	_probe_meshes()
 	say("")
 	say("  cor de vértice por espécie (o shader faz ALBEDO = COLOR × tinta):")

@@ -159,7 +159,7 @@ func _build_creator() -> void:
 	for palette_key in ["skin", "cloth", "hair"]:
 		var option := OptionButton.new()
 		option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var category := "prologo.appearance_" + palette_key
+		var category: String = "prologo.appearance_" + palette_key
 		option.add_item(Loc.t(category) + " · " + Loc.t("prologo.palette_1"))
 		option.add_item(Loc.t(category) + " · " + Loc.t("prologo.palette_2"))
 		option.add_item(Loc.t(category) + " · " + Loc.t("prologo.palette_3"))

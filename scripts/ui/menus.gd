@@ -237,43 +237,70 @@ func _option(label_key: String, setting: String, options: Array) -> void:
 func _build_bag() -> void:
 	_title.text = Loc.t("tab.inventory")
 	var grid := GridContainer.new()
-	grid.columns = 6
+	grid.columns = 5
 	grid.add_theme_constant_override("h_separation", 6)
 	grid.add_theme_constant_override("v_separation", 6)
 	_content.add_child(grid)
 	for i in inv.SLOTS:
 		var s: Dictionary = inv.slots[i]
 		var b := Button.new()
-		b.custom_minimum_size = Vector2(88, 52)
+		b.custom_minimum_size = Vector2(104, 56)
+		b.focus_mode = Control.FOCUS_NONE
 		if s.is_empty():
-			b.text = "·"
+			b.text = ""
 			b.disabled = true
 		else:
 			var id := str(s["id"])
-			b.text = "%s\nx%d" % [Db.item_name(id), int(s["qty"])]
-			b.pressed.connect(_use_item.bind(id))
+			var layout := HBoxContainer.new()
+			layout.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			layout.add_theme_constant_override("separation", 5)
+			var icon := ItemIcon.new()
+			icon.custom_minimum_size = Vector2(28, 36)
+			icon.size = Vector2(28, 36)
+			icon.set_item(id)
+			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			layout.add_child(icon)
+			var labels := VBoxContainer.new()
+			labels.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			labels.alignment = BoxContainer.ALIGNMENT_CENTER
+			labels.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			var name_label := Label.new()
+			name_label.text = Db.item_name(id)
+			name_label.clip_text = true
+			name_label.add_theme_font_size_override("font_size", 11)
+			name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			labels.add_child(name_label)
+			var count_label := Label.new()
+			count_label.text = "× %d" % int(s["qty"])
+			count_label.add_theme_font_size_override("font_size", 10)
+			count_label.add_theme_color_override("font_color", Color(0.88, 0.78, 0.55))
+			count_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			labels.add_child(count_label)
+			layout.add_child(labels)
+			b.add_child(layout)
+			b.tooltip_text = Loc.t("ui.consume") if Db.item_kind(id) == "food" or id == "water" else Loc.t("ui.equip")
+			b.pressed.connect(_use_item.bind(id, i))
 		grid.add_child(b)
 	_label("")
 	_button(Loc.t("tab.crafting"), func(): open("craft"))
 	_button(Loc.t("settings.back"), func(): open("pause"))
 
 
-func _use_item(id: String) -> void:
+func _use_item(id: String, slot_index: int) -> void:
 	var def := Db.item(id)
-	match str(def.get("kind", "")):
-		"food":
-			if inv.remove(id, 1):
-				survival.eat(float(def.get("food", 0)), float(def.get("drink", 0)),
-					float(def.get("risk", 0)))
-		"tool":
-			if id == "water":
-				if inv.remove("water", 1):
-					inv.add("bottle", 1)
-					survival.drink(float(def.get("drink_amount", 50.0)))
-			elif id == "torch":
-				Bus.say("prompt.light", 2.0)
-		"structure":
-			Bus.say("prompt.place", 2.0)
+	if id == "water":
+		if inv.remove("water", 1):
+			inv.add("bottle", 1)
+			survival.drink(float(def.get("drink_amount", 50.0)))
+			Sfx.play("drink", -9.0)
+			Bus.say("msg.drink_flask", 2.0)
+	elif str(def.get("kind", "")) == "food":
+		if inv.remove(id, 1):
+			survival.eat(float(def.get("food", 0)), float(def.get("drink", 0)),
+				float(def.get("risk", 0)))
+	else:
+		inv.equip_slot(slot_index)
+		Bus.ui_message.emit(Loc.t("msg.equipped", [Db.item_name(id)]), 1.8)
 	_rebuild()
 
 
@@ -282,27 +309,43 @@ func _build_craft() -> void:
 	_title.text = Loc.t("tab.crafting")
 	var stations: Array = interaction.nearby_stations() if interaction != null else []
 	if stations.is_empty():
-		_label("— " + Loc.t("item.campfire") + " —", 12, Color(1, 1, 1, 0.5))
+		_label(Loc.t("menu.craft_handmade"), 12, Color(0.78, 0.82, 0.75, 0.78))
 	for r in Db.recipes_for(stations):
 		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
 		_content.add_child(row)
-		var lbl := Label.new()
+		var icon := ItemIcon.new()
+		icon.custom_minimum_size = Vector2(34, 40)
+		icon.size = Vector2(34, 40)
+		icon.set_item(str(r["result"]))
+		row.add_child(icon)
+		var details := VBoxContainer.new()
+		details.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(details)
+		var title := Label.new()
+		title.text = "%s  × %d" % [Db.item_name(str(r["result"])), int(r.get("qty", 1))]
+		title.add_theme_font_size_override("font_size", 13)
+		details.add_child(title)
 		var needs_txt := []
 		for k in r["needs"]:
-			needs_txt.append("%d %s" % [int(r["needs"][k]), Db.item_name(str(k))])
-		lbl.text = "%s x%d   (%s)" % [Db.item_name(str(r["result"])), int(r.get("qty", 1)),
-			", ".join(needs_txt)]
-		lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			var have := inv.count(str(k))
+			var need := int(r["needs"][k])
+			needs_txt.append("%s %d/%d" % [Db.item_name(str(k)), mini(have, need), need])
+		var ingredients := Label.new()
+		ingredients.text = "  ·  ".join(needs_txt)
+		ingredients.add_theme_font_size_override("font_size", 10)
+		ingredients.add_theme_color_override("font_color", Color(0.76, 0.79, 0.74, 0.84))
+		details.add_child(ingredients)
 		var ok := inv.can_craft(r)
-		lbl.add_theme_color_override("font_color",
-			Color(1, 1, 1, 0.9) if ok else Color(1, 1, 1, 0.35))
-		row.add_child(lbl)
 		var b := Button.new()
-		b.text = "+"
-		b.custom_minimum_size = Vector2(46, 0)
+		b.text = Loc.t("ui.craft")
+		b.custom_minimum_size = Vector2(92, 38)
+		b.focus_mode = Control.FOCUS_NONE
 		b.disabled = not ok
 		b.pressed.connect(_craft.bind(str(r["id"])))
 		row.add_child(b)
+		var separator := HSeparator.new()
+		_content.add_child(separator)
 	_label("")
 	_button(Loc.t("settings.back"), func(): open("pause"))
 

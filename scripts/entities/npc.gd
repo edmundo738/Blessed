@@ -41,7 +41,7 @@ var world: Node3D
 var structures: Structures
 var mats: Materials
 
-var _mesh: MeshInstance3D
+var _mesh: Node3D
 var _rng := RandomNumberGenerator.new()
 
 
@@ -52,16 +52,19 @@ func _ready() -> void:
 
 
 func _build_body() -> void:
-	var body := MeshInstance3D.new()
-	body.mesh = _make_mesh()
-	# Sem material_override o Godot usa o material PBR por omissão: cinzento,
-	# sem bandas, a destoar de tudo o resto. As malhas do MeshKit já trazem cor
-	# de vértice, por isso o material toon chega.
-	if mats != null:
-		body.material_override = mats.structure
-	body.position = Vector3(0, 0.85, 0)
-	add_child(body)
-	_mesh = body
+	# Pessoas usam sprites animados billboard; terreno e arquitetura permanecem 3D.
+	var avatar := Node3D.new()
+	avatar.name = "PixelVillager"
+	avatar.set_script(load("res://scripts/player/pixel_avatar.gd"))
+	var variant := absi(hash(id))
+	avatar.set("appearance_override", {
+		"name": id,
+		"body": "f" if variant % 2 == 0 else "m",
+		"appearance": {"skin": variant % 3, "cloth": (variant / 3) % 4,
+			"hair": (variant / 7) % 4},
+	})
+	add_child(avatar)
+	_mesh = avatar
 	var col := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
 	cap.radius = 0.32
@@ -69,50 +72,6 @@ func _build_body() -> void:
 	col.shape = cap
 	col.position = Vector3(0, 0.85, 0)
 	add_child(col)
-
-
-func _make_mesh() -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = hash(id) ^ 0x1234
-	var skin := Color(0.94, 0.80, 0.70)
-	var cloth := Color(0.32, 0.40, 0.62)
-	var hair := Color(0.85, 0.85, 0.90)
-	# corpo
-	var torso := MeshKit.box(Vector3(0.52, 0.78, 0.30), cloth)
-	_append(st, torso, Vector3(0, 0.18, 0))
-	# cabeça
-	var head := MeshKit.blob(rng, 0.21, 1, 0.06, Vector3(0.92, 1.05, 0.92), Color.WHITE)
-	_append(st, head, Vector3(0, 0.80, 0), Color(skin))
-	# cabelo
-	var cap := MeshKit.blob(rng, 0.225, 1, 0.10, Vector3(1.0, 0.85, 1.0), Color.WHITE)
-	_append(st, cap, Vector3(0, 0.86, -0.01), Color(hair))
-	# braços
-	for s in [-1.0, 1.0]:
-		var arm := MeshKit.box(Vector3(0.14, 0.62, 0.16), cloth.darkened(0.08))
-		_append(st, arm, Vector3(s * 0.33, 0.16, 0))
-	# saia/pernas
-	var legs := MeshKit.box(Vector3(0.44, 0.62, 0.28), cloth.lightened(0.12))
-	_append(st, legs, Vector3(0, -0.52, 0))
-	return st.commit()
-
-
-func _append(st: SurfaceTool, mesh: ArrayMesh, off: Vector3, tint: Color = Color.WHITE) -> void:
-	var arr := mesh.surface_get_arrays(0)
-	var verts: Array = arr[Mesh.ARRAY_VERTEX]
-	var norms: Variant = arr[Mesh.ARRAY_NORMAL]
-	var cols: Variant = arr[Mesh.ARRAY_COLOR]
-	var idx: Variant = arr[Mesh.ARRAY_INDEX]
-	var indexed := idx != null and not (idx as Array).is_empty()
-	var order: Array = (idx as Array) if indexed else verts
-	for k in order.size():
-		var vi := int(order[k]) if indexed else k
-		var c: Color = (cols as Array)[vi] if cols != null else Color.WHITE
-		st.set_color(c * tint)
-		if norms != null:
-			st.set_normal((norms as Array)[vi])
-		st.add_vertex((verts[vi] as Vector3) + off)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -309,8 +268,10 @@ func _animate(delta: float) -> void:
 	# respiração + olhar: barato, mas é o que faz parecer vivo
 	var t := float(Time.get_ticks_msec()) * 0.001
 	if _mesh:
-		_mesh.position.y = 0.85 + sin(t * 1.6) * 0.012
+		_mesh.position.y = 0.88 + sin(t * 1.6) * 0.012
 		_mesh.rotation.z = sin(t * 0.7) * 0.02
+		_mesh.call("update_pose", velocity, rotation.y,
+			player.global_position + Vector3(0.0, 1.4, 0.0))
 
 
 # ── sentidos ──────────────────────────────────────────────────────────────

@@ -11,6 +11,7 @@ const ITEMS := {
 	"stone":        {"kind": "resource", "stack": 40, "icon": "stone"},
 	"flint":        {"kind": "resource", "stack": 20, "icon": "flint"},
 	"fiber":        {"kind": "resource", "stack": 40, "icon": "fiber"},
+	"leaf":         {"kind": "resource", "stack": 60, "icon": "leaf"},
 	"stick":        {"kind": "resource", "stack": 40, "icon": "stick"},
 	# ── comida ──────────────────────────────────────────────────────────────
 	"berry":        {"kind": "food", "stack": 20, "icon": "berry",
@@ -46,6 +47,7 @@ const ITEMS := {
 ## Receitas: `needs` são consumidos, `result` é criado. `station` vazio = mãos.
 const RECIPES := [
 	{"id": "stick",     "result": "stick",       "qty": 2, "needs": {"wood": 1}},
+	{"id": "leaf_fiber", "result": "fiber",       "qty": 1, "needs": {"leaf": 3}},
 	{"id": "torch",     "result": "torch",       "qty": 2, "needs": {"stick": 1, "fiber": 1}},
 	{"id": "axe",       "result": "axe",         "qty": 1, "needs": {"stick": 2, "stone": 2, "fiber": 2}},
 	{"id": "pickaxe",   "result": "pickaxe",     "qty": 1, "needs": {"stick": 2, "stone": 3, "fiber": 1}},
@@ -64,12 +66,14 @@ const RECIPES := [
 
 ## O que sai de cada nó do mundo quando é colhido.
 const HARVEST := {
-	"tree_oak":    {"action": "chop", "tool": "axe", "hp": 6, "yields": {"wood": 3, "stick": 1}},
-	"tree_pine":   {"action": "chop", "tool": "axe", "hp": 8, "yields": {"wood": 4}},
-	"tree_birch":  {"action": "chop", "tool": "axe", "hp": 5, "yields": {"wood": 2, "stick": 2}},
-	"tree_sakura": {"action": "chop", "tool": "axe", "hp": 6, "yields": {"wood": 2, "berry": 2}},
+	"tree_oak":    {"action": "chop", "tool": "axe", "hp": 6, "yields": {"wood": 3, "stick": 1, "leaf": 3}},
+	"tree_pine":   {"action": "chop", "tool": "axe", "hp": 8, "yields": {"wood": 4, "leaf": 2}},
+	"tree_birch":  {"action": "chop", "tool": "axe", "hp": 5, "yields": {"wood": 2, "stick": 2, "leaf": 3}},
+	"tree_sakura": {"action": "chop", "tool": "axe", "hp": 6, "yields": {"wood": 2, "berry": 2, "leaf": 2}},
+	"tree_willow":{"action": "chop", "tool": "axe", "hp": 7, "yields": {"wood": 3, "stick": 2, "leaf": 4}},
 	"rock":        {"action": "mine", "tool": "pickaxe", "hp": 5, "yields": {"stone": 2, "flint": 1}},
 	"bush":        {"action": "pick", "tool": "", "hp": 1, "yields": {"berry": 2, "fiber": 1}},
+	"bush_berry":  {"action": "pick", "tool": "", "hp": 1, "yields": {"berry": 3}},
 	"tuft":        {"action": "pick", "tool": "", "hp": 1, "yields": {"fiber": 2}},
 	"mushroom":    {"action": "pick", "tool": "", "hp": 1, "yields": {"mushroom": 1}},
 	"flint_node":  {"action": "pick", "tool": "", "hp": 1, "yields": {"flint": 2}},

@@ -11,6 +11,7 @@ var bars: Dictionary = {}
 var hotbar_slots: Array = []
 var prompt_label: Label
 var prompt_bar: ProgressBar
+var hotbar_item_label: Label
 var subtitle: Label
 var toast_label: Label
 var clock_label: Label
@@ -165,12 +166,19 @@ func _bars() -> void:
 	needs_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	needs_button.offset_left = 22
 	needs_button.offset_top = -106
-	needs_button.offset_right = 290
-	needs_button.offset_bottom = -78
+	needs_button.offset_right = 52
+	needs_button.offset_bottom = -76
+	needs_button.custom_minimum_size = Vector2(30, 30)
+	needs_button.tooltip_text = Loc.t("hud.needs")
 	needs_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	needs_button.add_theme_font_size_override("font_size", 11)
 	needs_button.add_theme_color_override("font_color", Color(0.91, 0.93, 0.87, 0.92))
 	needs_button.focus_mode = Control.FOCUS_NONE
+	var needs_icon := ItemIcon.new()
+	needs_icon.item_id = "needs"
+	needs_icon.position = Vector2(4, 4)
+	needs_icon.size = Vector2(22, 22)
+	needs_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	needs_button.add_child(needs_icon)
 	needs_button.pressed.connect(func():
 		needs_expanded = not needs_expanded
 		_refresh_needs_panel())
@@ -216,14 +224,13 @@ func _add_status_bar(parent: Control, id: String, col: Color,
 	row.add_theme_constant_override("separation", 6)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	parent.add_child(row)
-	var lbl := Label.new()
-	lbl.text = Loc.t("hud." + id).substr(0, 3).to_upper()
-	lbl.custom_minimum_size = Vector2(34, 0)
-	lbl.add_theme_font_size_override("font_size", 10)
-	lbl.add_theme_color_override("font_color", Color(1, 1, 1, 0.78))
-	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(lbl)
+	var icon := ItemIcon.new()
+	icon.item_id = id
+	icon.custom_minimum_size = Vector2(20, 20)
+	icon.size = Vector2(20, 20)
+	icon.tooltip_text = Loc.t("hud." + id)
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(icon)
 	var bg := ColorRect.new()
 	bg.color = Color(0.015, 0.02, 0.028, 0.58)
 	bg.custom_minimum_size = Vector2(fill_width + 2.0, height)
@@ -243,7 +250,7 @@ func _add_status_bar(parent: Control, id: String, col: Color,
 	value_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	value_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(value_label)
-	bars[id] = {"fill": fill, "label": lbl, "value_label": value_label,
+	bars[id] = {"fill": fill, "label": icon, "value_label": value_label,
 		"color": col, "value": 1.0, "width": fill_width}
 
 
@@ -255,11 +262,12 @@ func _refresh_needs_panel() -> void:
 		if float((bars.get(id, {}) as Dictionary).get("value", 1.0)) < 0.28:
 			critical = true
 	needs_panel.visible = needs_expanded or critical
-	needs_button.text = "N  %s%s" % [Loc.t("hud.needs"), "  !" if critical else ""]
+	needs_button.text = ""
+	needs_button.tooltip_text = Loc.t("hud.needs") + ("  !" if critical else "")
 	if critical:
-		needs_button.add_theme_color_override("font_color", Color(1.0, 0.74, 0.5, 1.0))
+		needs_button.modulate = Color(1.0, 0.74, 0.5, 1.0)
 	else:
-		needs_button.add_theme_color_override("font_color", Color(0.91, 0.93, 0.87, 0.92))
+		needs_button.modulate = Color.WHITE
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -273,59 +281,120 @@ func _unhandled_input(event: InputEvent) -> void:
 func _hotbar() -> void:
 	var hb := HBoxContainer.new()
 	hb.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	hb.offset_left = -9 * 44 * 0.5
-	hb.offset_top = -74
-	hb.offset_right = 9 * 44 * 0.5
-	hb.offset_bottom = -22
-	hb.add_theme_constant_override("separation", 4)
+	hb.offset_left = -220
+	hb.offset_top = -60
+	hb.offset_right = 220
+	hb.offset_bottom = -12
+	hb.add_theme_constant_override("separation", 5)
 	hb.alignment = BoxContainer.ALIGNMENT_CENTER
 	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(hb)
 	for i in 9:
-		var slot := ColorRect.new()
-		slot.color = Color(0, 0, 0, 0.35)
-		slot.custom_minimum_size = Vector2(40, 40)
-		slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var slot := Button.new()
+		slot.custom_minimum_size = Vector2(43, 47)
+		slot.toggle_mode = true
+		slot.focus_mode = Control.FOCUS_NONE
+		slot.mouse_filter = Control.MOUSE_FILTER_STOP
+		var normal := StyleBoxFlat.new()
+		normal.bg_color = Color(0.035, 0.055, 0.06, 0.84)
+		normal.border_color = Color(0.53, 0.57, 0.52, 0.68)
+		normal.set_border_width_all(1)
+		normal.set_corner_radius_all(5)
+		normal.content_margin_left = 2
+		normal.content_margin_right = 2
+		normal.content_margin_top = 2
+		normal.content_margin_bottom = 2
+		slot.add_theme_stylebox_override("normal", normal)
+		var hover := normal.duplicate() as StyleBoxFlat
+		hover.bg_color = Color(0.12, 0.15, 0.12, 0.95)
+		slot.add_theme_stylebox_override("hover", hover)
+		var selected := normal.duplicate() as StyleBoxFlat
+		selected.bg_color = Color(0.19, 0.15, 0.075, 0.96)
+		selected.border_color = Color(0.96, 0.78, 0.38, 1.0)
+		selected.set_border_width_all(2)
+		slot.add_theme_stylebox_override("pressed", selected)
 		hb.add_child(slot)
-		var lbl := Label.new()
-		lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
-		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		lbl.add_theme_font_size_override("font_size", 11)
-		lbl.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
-		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		slot.add_child(lbl)
 		var num := Label.new()
 		num.text = str(i + 1)
-		num.position = Vector2(2, 1)
-		num.add_theme_font_size_override("font_size", 9)
-		num.add_theme_color_override("font_color", Color(1, 1, 1, 0.45))
+		num.position = Vector2(4, 1)
+		num.add_theme_font_size_override("font_size", 8)
+		num.add_theme_color_override("font_color", Color(0.92, 0.9, 0.8, 0.76))
 		num.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		slot.add_child(num)
-		hotbar_slots.append({"bg": slot, "label": lbl})
+		var icon := ItemIcon.new()
+		icon.position = Vector2(6, 5)
+		icon.size = Vector2(31, 31)
+		icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		slot.add_child(icon)
+		var qty := Label.new()
+		qty.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		qty.offset_left = -22
+		qty.offset_top = -17
+		qty.offset_right = -2
+		qty.offset_bottom = -1
+		qty.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		qty.add_theme_font_size_override("font_size", 10)
+		qty.add_theme_color_override("font_color", Color.WHITE)
+		qty.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.95))
+		qty.add_theme_constant_override("shadow_offset_x", 1)
+		qty.add_theme_constant_override("shadow_offset_y", 1)
+		qty.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		slot.add_child(qty)
+		slot.pressed.connect(func():
+			if inv != null:
+				inv.select(i))
+		hotbar_slots.append({"bg": slot, "icon": icon, "qty": qty})
+	hotbar_item_label = Label.new()
+	hotbar_item_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	hotbar_item_label.offset_left = -160
+	hotbar_item_label.offset_top = -83
+	hotbar_item_label.offset_right = 160
+	hotbar_item_label.offset_bottom = -62
+	hotbar_item_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hotbar_item_label.add_theme_font_size_override("font_size", 12)
+	hotbar_item_label.add_theme_color_override("font_color", Color(1.0, 0.94, 0.78, 0.92))
+	hotbar_item_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.92))
+	hotbar_item_label.add_theme_constant_override("shadow_offset_y", 2)
+	hotbar_item_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(hotbar_item_label)
 
 
 func _prompt() -> void:
+	var plate := PanelContainer.new()
+	plate.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	plate.offset_top = -148
+	plate.offset_bottom = -112
+	plate.offset_left = -220
+	plate.offset_right = 220
+	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var plate_style := StyleBoxFlat.new()
+	plate_style.bg_color = Color(0.025, 0.035, 0.04, 0.78)
+	plate_style.border_color = Color(0.78, 0.68, 0.44, 0.65)
+	plate_style.set_border_width_all(1)
+	plate_style.set_corner_radius_all(6)
+	plate_style.content_margin_left = 12
+	plate_style.content_margin_right = 12
+	plate_style.content_margin_top = 3
+	plate_style.content_margin_bottom = 3
+	plate.add_theme_stylebox_override("panel", plate_style)
+	root.add_child(plate)
 	prompt_label = Label.new()
-	prompt_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	prompt_label.offset_top = -128
-	prompt_label.offset_bottom = -100
-	prompt_label.offset_left = -220
-	prompt_label.offset_right = 220
 	prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	prompt_label.add_theme_font_size_override("font_size", 16)
-	prompt_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.92))
+	prompt_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	prompt_label.add_theme_font_size_override("font_size", 13)
+	prompt_label.add_theme_color_override("font_color", Color(0.98, 0.95, 0.87, 0.98))
 	prompt_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
 	prompt_label.add_theme_constant_override("shadow_offset_y", 2)
 	prompt_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(prompt_label)
+	plate.add_child(prompt_label)
 
 	prompt_bar = ProgressBar.new()
 	prompt_bar.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	prompt_bar.offset_left = -70
 	prompt_bar.offset_right = 70
-	prompt_bar.offset_top = -98
-	prompt_bar.offset_bottom = -92
+	prompt_bar.offset_top = -108
+	prompt_bar.offset_bottom = -102
 	prompt_bar.show_percentage = false
 	prompt_bar.value = 0
 	prompt_bar.visible = false
@@ -370,11 +439,15 @@ func _top() -> void:
 	identity_bonus.add_theme_font_size_override("font_size", 10)
 	identity_bonus.add_theme_color_override("font_color", Color(0.86, 0.91, 0.87, 0.92))
 	identity_stack.add_child(identity_bonus)
+	# O nome e o traço continuam disponíveis no diário; o HUD de jogo reserva
+	# espaço para informação de sobrevivência e para a cena.
+	identity_panel.visible = false
 	camera_mode_label = Label.new()
 	camera_mode_label.position = Vector2(22, 132)
 	camera_mode_label.add_theme_font_size_override("font_size", 10)
 	camera_mode_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.55))
 	camera_mode_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	camera_mode_label.visible = false
 	root.add_child(camera_mode_label)
 	_refresh_identity()
 
@@ -477,8 +550,7 @@ func _process(delta: float) -> void:
 	_refresh_identity()
 	_refresh_needs_panel()
 	if interaction != null:
-		prompt_bar.value = clampf(interaction.progress, 0.0, 1.0) * 100.0
-		prompt_bar.visible = interaction.progress > 0.005
+		_refresh_prompt()
 	# suaviza as barras
 	for id in bars:
 		var b: Dictionary = bars[id]
@@ -515,14 +587,21 @@ func _refresh_hotbar() -> void:
 	for i in 9:
 		var s: Dictionary = inv.slots[i]
 		var slot: Dictionary = hotbar_slots[i]
-		var lbl: Label = slot["label"]
-		var bg: ColorRect = slot["bg"]
+		var icon: ItemIcon = slot["icon"]
+		var qty: Label = slot["qty"]
+		var bg: Button = slot["bg"]
 		if s.is_empty():
-			lbl.text = ""
+			icon.set_item("")
+			qty.text = ""
+			bg.tooltip_text = Loc.t("hud.empty_slot")
 		else:
 			var id := str(s["id"])
-			lbl.text = "%s\n%d" % [Db.item_name(id).substr(0, 10), int(s["qty"])]
-		bg.color = Color(1, 1, 1, 0.14) if i == inv.hotbar_index else Color(0, 0, 0, 0.35)
+			icon.set_item(id)
+			qty.text = str(int(s["qty"])) if int(s["qty"]) > 1 else ""
+			bg.tooltip_text = Db.item_name(id)
+		bg.button_pressed = i == inv.hotbar_index
+	var selected := inv.hotbar_id()
+	hotbar_item_label.text = Db.item_name(selected) if selected != "" else Loc.t("hud.empty_slot")
 
 
 func _on_stat(id: String, value: float, max_value: float) -> void:
@@ -550,18 +629,56 @@ func _on_subtitle(key: String, seconds: float) -> void:
 	_sub_t = seconds
 
 
-func _on_focus(_who: Node, key: String) -> void:
-	if key == "":
+func _on_focus(_who: Node, _key: String) -> void:
+	_refresh_prompt()
+
+
+func _refresh_prompt() -> void:
+	if prompt_label == null:
+		return
+	if interaction == null or interaction.focus.is_empty():
 		prompt_label.text = ""
+		prompt_label.get_parent().visible = false
 		crosshair.modulate = Color(1, 1, 1, 0.76)
 		return
+	prompt_label.get_parent().visible = true
 	crosshair.modulate = Color(1.0, 0.84, 0.52, 0.96)
-	var text := "[F] " + Loc.t(key)
-	if interaction != null and not interaction.focus.is_empty():
-		var kind := str(interaction.focus.get("kind", ""))
-		if kind == "harvest" or (kind == "structure" and str(interaction.focus["ref"].get("id", "")) != "bed"):
-			text += "   ·   [LMB] " + Loc.t("hud.hold_action")
-	prompt_label.text = text
+	var f: Dictionary = interaction.focus
+	var key: String = str(interaction.call("prompt_key"))
+	var action := Loc.t(key)
+	var target := ""
+	var kind := str(f.get("kind", ""))
+	var hold_action := false
+	if kind == "harvest":
+		var node: Dictionary = f["ref"]
+		var resource_id := str(node.get("kind", ""))
+		var spec: Dictionary = Db.HARVEST.get(resource_id, {})
+		var want := str(spec.get("tool", ""))
+		if resource_id.begins_with("tree"):
+			target = Loc.t("hud.target_tree")
+		elif resource_id == "rock":
+			target = Loc.t("hud.target_rock")
+		elif resource_id == "bush_berry":
+			target = Loc.t("hud.target_berry_bush")
+		else:
+			var yields: Dictionary = spec.get("yields", {})
+			var yield_ids := yields.keys()
+			target = Db.item_name(str(yield_ids[0])) if not yield_ids.is_empty() else action
+		hold_action = resource_id.begins_with("tree") or resource_id == "rock"
+		if hold_action and want != "" and inv != null and inv.hotbar_id() != want:
+			action += "  ·  " + Loc.t("hud.needs_tool", [Db.item_name(want)])
+		var max_hp := maxf(float(node.get("max_hp", node.get("hp", 1))), 1.0)
+		var hp := maxf(float(node.get("hp", max_hp)), 0.0)
+		prompt_bar.value = (1.0 - hp / max_hp) * 100.0
+		prompt_bar.visible = hold_action and hp < max_hp
+	else:
+		match kind:
+			"structure": target = Db.item_name(str(f["ref"].get("id", "")))
+			"water": target = Loc.t("hud.target_water")
+			"npc": target = Loc.t("hud.target_person")
+		prompt_bar.visible = false
+	var binding := Loc.t("hud.hold_lmb") if hold_action else "[F]"
+	prompt_label.text = "%s   %s · %s" % [binding, target, action] if target != "" else "%s   %s" % [binding, action]
 
 
 func _on_time(hour: float, day: int) -> void:
@@ -592,6 +709,8 @@ func refresh_locale() -> void:
 	for entry in BAR_ORDER:
 		var id: String = entry[0]
 		if bars.has(id):
-			((bars[id] as Dictionary)["label"] as Label).text = Loc.t("hud." + id).substr(0, 3).to_upper()
+			((bars[id] as Dictionary)["label"] as Control).tooltip_text = Loc.t("hud." + id)
 	_refresh_identity()
 	_refresh_needs_panel()
+	_refresh_hotbar()
+	_refresh_prompt()

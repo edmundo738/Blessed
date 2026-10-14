@@ -168,8 +168,8 @@ func _rng() -> RandomNumberGenerator:
 func _scatter(o: Vector2, with_collision: bool) -> void:
 	var rng := _rng()
 	var buckets := {}      # id -> {transforms, tints, mesh, wind, height}
-	var grass_t: Array = []
-	var grass_c: Array = []
+	var groundcover: Dictionary = {}
+	var seaweed_t: Array[Transform3D] = []
 	var buf := PackedFloat32Array()
 	buf.resize(Terrain.BIOME_COUNT)
 
@@ -207,6 +207,7 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 				"pos": Vector3(x, h, z), "kind": sp.harvest, "species": id,
 				"hp": int(Db.HARVEST.get(sp.harvest, {}).get("hp", 5)),
 				"radius": 0.9 * s, "height": sp.height * s,
+				"base_transform": xform,
 				"alive": true, "bucket": id, "bindex": bi, "chunk": self,
 			})
 			if with_collision:
@@ -269,6 +270,8 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 			var id := species.pick(species.plants, biome, rng.randf())
 			if id.is_empty():
 				continue
+			if id == "bush" and rng.randf() < 0.14:
+				id = "berry_bush"
 			var sp: SpeciesKit.Species = species.plants[id]
 			if world != null and world.is_harvested(Vector3(x, h, z), id):
 				continue
@@ -281,6 +284,21 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 				"hp": 1, "radius": 0.9, "height": sp.height * s,
 				"alive": true, "bucket": id, "bindex": bi, "chunk": self,
 			})
+
+	# ── algas em prateleiras rasas ─────────────────────────────────────────
+	# O asset é uma instância MultiMesh; só colocamos em profundidade onde a
+	# silhueta fica abaixo da superfície e continua legível através da água.
+	if lod == 0 and BlessedBlenderAssets.has_asset("seaweed_cluster"):
+		for i in 40:
+			var x := o.x + rng.randf() * SIZE
+			var z := o.y + rng.randf() * SIZE
+			var h := terrain.height(x, z)
+			var depth := Terrain.SEA_LEVEL - h
+			if depth < 0.8 or depth > 2.1 or rng.randf() > 0.68:
+				continue
+			var scale := rng.randf_range(0.55, 0.92)
+			seaweed_t.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU)
+				.scaled(Vector3(scale, scale, scale)), Vector3(x, h + 0.05, z)))
 
 	# ── relva (só MultiMesh, sem colisão, com fade por distância) ─────────
 	if lod <= 1:
@@ -305,16 +323,33 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 			if rng.randf() > SpeciesKit.grass_density(biome) * 2.2:
 				continue
 			var s := rng.randf_range(0.75, 1.35)
-			grass_t.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU)
+			var cover_id := "grass_clump"
+			var variant_roll := rng.randf()
+			if biome == Terrain.B_MARSH and variant_roll < 0.52:
+				cover_id = "reed_clump"
+			elif biome == Terrain.B_FOREST and variant_roll < 0.20:
+				cover_id = "fern_clump"
+			elif biome in [Terrain.B_MEADOW, Terrain.B_GROVE]:
+				if variant_roll < 0.10:
+					cover_id = "flower_clump"
+				elif variant_roll < 0.20:
+					cover_id = "clover_clump"
+			if not groundcover.has(cover_id):
+				groundcover[cover_id] = {"t": [], "c": []}
+			(groundcover[cover_id]["t"] as Array).append(Transform3D(
+				Basis(Vector3.UP, rng.randf() * TAU)
 				.scaled(Vector3(s, s * rng.randf_range(0.8, 1.3), s)), Vector3(x, h - 0.03, z)))
-			grass_c.append(terrain.ground_color_s(x, z, h, sl, buf).lightened(rng.randf_range(-0.05, 0.12)))
+			(groundcover[cover_id]["c"] as Array).append(
+				terrain.ground_color_s(x, z, h, sl, buf).lightened(rng.randf_range(-0.05, 0.12)))
 			placed += 1
 
 	# ── cria os MultiMesh ─────────────────────────────────────────────────
 	_buckets = buckets
 	for id in buckets:
 		_make_multimesh(str(id), buckets[id])
-	_grass_multimesh(grass_t, grass_c)
+	for cover_id in groundcover:
+		_grass_multimesh(str(cover_id), groundcover[cover_id]["t"], groundcover[cover_id]["c"])
+	_seaweed_multimesh(seaweed_t)
 
 
 func _tint(rng: RandomNumberGenerator) -> Color:
@@ -360,7 +395,7 @@ func _make_multimesh(id: String, b: Dictionary) -> void:
 	b["mm"] = mm
 	var inst := MultiMeshInstance3D.new()
 	inst.multimesh = mm
-	inst.material_override = mats.foliage
+	inst.material_override = null if sp.materials_authored else mats.foliage
 	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if lod == 0 \
 		else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
@@ -369,12 +404,14 @@ func _make_multimesh(id: String, b: Dictionary) -> void:
 	_decor.append(inst)
 
 
-func _grass_multimesh(t: Array, c: Array) -> void:
+func _grass_multimesh(asset_id: String, t: Array, c: Array) -> void:
 	if t.is_empty():
 		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(Vector2i(cx, cz)) ^ 0x9E37
-	var mesh := MeshKit.grass_tuft(rng, 4, 0.62, 0.05, Color(1, 1, 1))
+	var authored_cover := BlessedBlenderAssets.mesh_for(asset_id)
+	var mesh: ArrayMesh = authored_cover if authored_cover != null else \
+		MeshKit.grass_tuft(rng, 4, 0.62, 0.05, Color(1, 1, 1))
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_custom_data = true
@@ -389,7 +426,33 @@ func _grass_multimesh(t: Array, c: Array) -> void:
 		mm.set_instance_custom_data(i, Color(col.r, col.g, col.b, fade))
 	var inst := MultiMeshInstance3D.new()
 	inst.multimesh = mm
-	inst.material_override = mats.grass
+	# Blender palette colors are baked into GLB vertex colors. Keep the shared
+	# shader for toon light and wind on both authored and code fallback meshes.
+	# Quaternius groundcover has its own authored texture/material. Keep it intact;
+	# use the shared wind shader only for the procedural fallback mesh.
+	inst.material_override = null if authored_cover != null else mats.grass
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	add_child(inst)
+	_decor.append(inst)
+
+
+func _seaweed_multimesh(transforms: Array[Transform3D]) -> void:
+	if transforms.is_empty():
+		return
+	var mesh := BlessedBlenderAssets.mesh_for("seaweed_cluster")
+	if mesh == null:
+		return
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = mesh
+	mm.instance_count = transforms.size()
+	for i in transforms.size():
+		mm.set_instance_transform(i, transforms[i])
+	var inst := MultiMeshInstance3D.new()
+	inst.name = "UnderwaterSeaweed"
+	inst.multimesh = mm
+	inst.material_override = mats.foliage
 	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	add_child(inst)
@@ -412,6 +475,8 @@ func _add_collider(pos: Vector3, size: Vector3) -> void:
 ## Esconde a instância de um nó já colhido (MultiMesh não tem "hide").
 func hide_harvest(n: Dictionary) -> void:
 	n["alive"] = false
+	if str(n.get("kind", "")).begins_with("tree"):
+		_show_felled_tree(n)
 	var bid := str(n.get("bucket", ""))
 	if not _buckets.has(bid):
 		return
@@ -424,6 +489,36 @@ func hide_harvest(n: Dictionary) -> void:
 		return
 	mm.set_instance_transform(i, Transform3D(
 		Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO), n["pos"]))
+
+
+func _show_felled_tree(n: Dictionary) -> void:
+	var species_id := str(n.get("species", ""))
+	if not species.trees.has(species_id):
+		return
+	var base: Transform3D = n.get("base_transform", Transform3D.IDENTITY)
+	var pivot := Node3D.new()
+	pivot.name = "FelledTree"
+	add_child(pivot)
+	pivot.global_position = n["pos"]
+	var tree := MeshInstance3D.new()
+	tree.mesh = species.trees[species_id].lods[0]
+	tree.material_override = mats.foliage
+	tree.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	tree.transform = Transform3D(base.basis, Vector3(0.0,
+		base.origin.y - (n["pos"] as Vector3).y, 0.0))
+	pivot.add_child(tree)
+	# A direção alterna pelo ponto do mundo para manter a queda reproduzível.
+	var dir := 1.0 if posmod(roundi((n["pos"] as Vector3).x), 2) == 0 else -1.0
+	var fall := pivot.create_tween()
+	fall.set_parallel(true)
+	fall.tween_property(pivot, "rotation:z", -dir * 1.32, 0.68) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	fall.tween_property(pivot, "position:x", pivot.position.x + dir * 1.9, 0.68) \
+		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	fall.chain().tween_interval(2.2)
+	fall.tween_callback(func():
+		if is_instance_valid(pivot):
+			pivot.queue_free())
 
 
 func set_lod(new_lod: int, with_collision: bool) -> void:

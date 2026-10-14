@@ -5,6 +5,10 @@ extends Node3D
 
 var sprite: AnimatedSprite3D
 var _last_animation := ""
+var appearance_override: Dictionary = {}
+## O modo Camp to Me é uma substituição reversível só para o jogador.
+## NPCs continuam a usar os perfis próprios do Blessed.
+var use_camp_sprite := false
 
 
 func _ready() -> void:
@@ -29,15 +33,19 @@ func _build_sprite_frames() -> void:
 		sprite.name = "PixelSprite"
 		sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		sprite.pixel_size = 0.036
+		sprite.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 		sprite.position.y = 0.0
 		sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(sprite)
+	if use_camp_sprite:
+		_build_camp_sprite_frames()
+		return
 
 	var frames := SpriteFrames.new()
 	frames.clear_all()
 	for direction in ["front", "back", "side"]:
 		for gait in ["idle", "walk"]:
-			var anim := direction + "_" + gait
+			var anim: String = direction + "_" + gait
 			frames.add_animation(anim)
 			frames.set_animation_speed(anim, 8.0 if gait == "walk" else 2.0)
 			frames.set_animation_loop(anim, true)
@@ -48,6 +56,34 @@ func _build_sprite_frames() -> void:
 	sprite.animation = "back_idle"
 
 
+func _build_camp_sprite_frames() -> void:
+	# Usamos apenas os ciclos frente/costas que o projeto de origem aprovou.
+	# Os ciclos de caminhada/laterais estão marcados como experimentais nesse
+	# projeto, por isso não são promovidos silenciosamente para produção.
+	const DIRECTIONS := {"front": "front", "back": "back"}
+	const FRAME_COUNT := 12
+	const FRAME_SECONDS := 0.27
+	var frames := SpriteFrames.new()
+	frames.clear_all()
+	for direction in DIRECTIONS:
+		var animation: String = str(direction) + "_idle"
+		frames.add_animation(animation)
+		frames.set_animation_speed(animation, 1.0 / FRAME_SECONDS)
+		frames.set_animation_loop(animation, true)
+		for index in range(1, FRAME_COUNT + 1):
+			var path := "res://content/characters/camp_to_me/%s/frame_%03d.png" % [
+				DIRECTIONS[direction], index]
+			var texture := load(path) as Texture2D
+			if texture == null:
+				push_error("Missing Camp to Me player frame: " + path)
+				continue
+			frames.add_frame(animation, texture)
+	sprite.sprite_frames = frames
+	sprite.pixel_size = 1.72 / 544.0
+	sprite.animation = "back_idle"
+	sprite.speed_scale = 1.0
+
+
 func _make_frame(direction: String, frame: int) -> Texture2D:
 	const W := 32
 	const H := 48
@@ -55,7 +91,7 @@ func _make_frame(direction: String, frame: int) -> Texture2D:
 	img.fill(Color(0, 0, 0, 0))
 
 	# Palette slots are intentionally centralized for future costume/heritage assets.
-	var profile: Dictionary = Game.profile
+	var profile: Dictionary = appearance_override if not appearance_override.is_empty() else Game.profile
 	var appearance: Dictionary = profile.get("appearance", {})
 	var body := str(profile.get("body", "f"))
 	var skin := _palette_color(appearance.get("skin", 0), [
@@ -68,8 +104,8 @@ func _make_frame(direction: String, frame: int) -> Texture2D:
 	var shade := cloth.darkened(0.28)
 	var light := cloth.lightened(0.24)
 	var hair_light := hair.lightened(0.18)
-	var leg_shift := [0, 2, 0, -2][frame % 4] if direction == "side" else [0, 1, 0, -1][frame % 4]
-	var arm_shift := [0, 1, 0, -1][frame % 4]
+	var leg_shift: int = [0, 2, 0, -2][frame % 4] if direction == "side" else [0, 1, 0, -1][frame % 4]
+	var arm_shift: int = [0, 1, 0, -1][frame % 4]
 
 	# Soft pixel-art ground shadow is omitted: the 3D world supplies contact shadow.
 	# Boots and legs, outlined in a deep ink tone.
@@ -151,6 +187,13 @@ func update_pose(world_velocity: Vector3, facing: float, camera_position: Vector
 	if sprite == null:
 		return
 	var local_camera := Basis(Vector3.UP, -facing) * (camera_position - global_position)
+	if use_camp_sprite:
+		# A arte tem vistas de frente e costas. Mantemos a silhueta consistente
+		# sem espelhar a face nem inventar uma vista lateral inexistente.
+		var camp_animation := "back_idle" if local_camera.z >= 0.0 else "front_idle"
+		if sprite.animation != camp_animation:
+			sprite.play(camp_animation)
+		return
 	var direction := "back"
 	if local_camera.z < -0.55:
 		direction = "front"

@@ -93,8 +93,10 @@ Integração > Profundidade > Variedade > Quantidade**
 
 Consequências práticas já aplicadas:
 
-- **Compatibilidade** → Forward+ no desktop, `gl_compatibility` na web, zero assets
-  importados. Um `.pck` de 244 KB corre em qualquer lado.
+- **Compatibilidade** → Forward+ no desktop e `gl_compatibility` na web. Assets externos
+  só entram quando têm função clara e formato suportado nos dois renderizadores; as
+  panorâmicas CC0 do céu e os GLBs de vegetação são recursos normais do projeto, não
+  dependências de runtime ou plugins.
 - **Estabilidade** → self-test antes de se dizer que funciona; nenhum `:=` em expressões
   dinâmicas (é erro de parse em Godot 4.7, não um aviso).
 - **Coerência** → uma só porta de entrada para acções, uma só fonte de verdade para o
@@ -208,8 +210,56 @@ Por ordem de prioridade, com a razão:
    (trabalhar, comer, dormir) e memória de longo prazo persistida.
 3. **Zonas urbanas no gerador.** O caminho já existe como curva; falta densidade à volta
    dele e um segundo pólo para dar destino à exploração.
-4. **Natação e água atravessável.** A água existe e tem shader; falta o estado do jogador.
+4. **Água atravessável e margens de saída.** Já existe natação; faltam rios com margens
+   navegáveis e uma saída consistente quando o jogador cai em zonas profundas.
 5. **Segunda língua dos NPCs.** O texto PT/EN existe e alterna em jogo (`F2`); falta voz.
 
 O que **não** entra por enquanto: mais biomas, mais espécies, mais mobs. Variedade e
 Quantidade estão no fim da lista por decisão, não por esquecimento.
+
+---
+
+## 12. Direção audiovisual
+
+O mundo e a arquitetura continuam em 3D estilizado, com materiais toon, cores pintadas e
+formas legíveis. Pessoas, criaturas e animais ficam em sprites 2D integrados como billboards;
+o terreno, a vegetação, os objetos e as construções continuam em 3D. A câmara começa em
+A câmara começa em 1.ª pessoa, com mãos e ferramenta equipadas visíveis; `V` mantém a opção
+de câmara externa. O avatar Blessed 2D continua disponível mas fica oculto por omissão. A
+substituição experimental de *Come to Me* está desligada e não entra na apresentação atual.
+
+A música é original e sintetizada no próprio jogo: camadas harmónicas suaves e um motivo
+melódico curto acompanham quatro estados — alvorada, dia, crepúsculo e noite. Os temas
+mudam com transições longas, deixando espaço para passos, ferramentas, água, fogo, vento e
+criaturas. As referências servem como orientação de atmosfera e acabamento, não como fonte
+de melodias, personagens ou assets copiados.
+
+O céu usa três panorâmicas ilustradas CC0 para dia, alvorada/crepúsculo e noite, reduzidas a
+2K com mipmaps. O shader substitui o disco solar/lunar gravado nas imagens por discos ligados
+ao ciclo real de luz; uma fase lunar muda ao longo de 28 dias. As nuvens combinam essas
+formas pintadas com uma camada discreta de duas escalas, deslocada a velocidades diferentes
+num passe a quarto da resolução. A radiância atualiza incrementalmente e os parâmetros do
+ciclo sincronizam até cinco vezes por segundo. Poeira e pirilampos usam sprites CC0 em
+billboards leves; densidade continua ligada ao perfil de qualidade. Ver medidas e contagens
+em [`MODEL_SCALE_GUIDE.md`](MODEL_SCALE_GUIDE.md).
+
+---
+
+## 13. Interface e ações do mundo
+
+A interface de jogo deve priorizar sinais visuais estáveis: ícones desenhados pelo próprio
+jogo, quantidades curtas, item selecionado e um único alvo contextual. O menu da mochila e o
+menu da bancada são superfícies separadas; comida pode ser consumida na mochila e os outros
+itens podem ser enviados para o espaço rápido selecionado.
+
+Ações seguem o peso do objeto. `F` colhe plantas e frutos num gesto; árvores e rochas pedem
+manter o botão esquerdo e recebem impactos repetidos. Ferramentas certas aceleram o trabalho,
+o progresso fica visível, árvores tombam no golpe final e entram no ciclo de respawn do mundo.
+Madeira, ramos, folhas e frutos nascem como pickups no local; só entram na mochila quando o
+jogador se aproxima e os recolhe. Três folhas podem ser transformadas em fibra à mão.
+
+Esta é uma passagem de gameplay. Os pickups ainda usam malhas provisórias do Blessed, não os
+modelos Blender finais. A árvore abatida ainda não se parte num tronco persistente; ferramentas
+não têm durabilidade; as margens dos rios precisam de uma rota de saída mais previsível. Estes
+sistemas devem crescer a partir das mesmas regras de alvo, custo, feedback e consequência, em
+vez de acrescentarem prompts duplicados.

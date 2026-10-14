@@ -32,8 +32,10 @@ var sun: DirectionalLight3D
 var env_node: WorldEnvironment
 var environment: Environment
 var water: MeshInstance3D
-var sky_dome: MeshInstance3D
+var sky_resource: Sky
+var sky_visible := true
 var wind := 0.16
+var _last_sky_sync_msec := -1000
 
 
 func _ready() -> void:
@@ -42,7 +44,7 @@ func _ready() -> void:
 	species = SpeciesKit.new(Game.world_seed)
 	mats = Materials.new()
 	_build_environment()
-	_build_sky_dome()
+	_build_sky()
 	_build_water()
 	Game.register_saver(self)
 	Bus.settings_changed.connect(_apply_settings)
@@ -81,6 +83,12 @@ func _build_environment() -> void:
 		environment.adjustment_enabled = true
 		environment.adjustment_saturation = 1.04
 		env_node.environment = environment
+	# Controlled bloom: it gives the sun a soft cinematic edge without washing
+	# out the whole image or adding a fake translucent sphere to the sky.
+	environment.glow_enabled = true
+	environment.glow_intensity = 0.62
+	environment.glow_strength = 0.82
+	environment.glow_bloom = 0.06
 
 	sun = get_node_or_null("Sun") as DirectionalLight3D
 	if sun == null:
@@ -93,20 +101,23 @@ func _build_environment() -> void:
 		add_child(sun)
 
 
-func _build_sky_dome() -> void:
-	var sphere := SphereMesh.new()
-	sphere.radius = 400.0
-	sphere.height = 800.0
-	sphere.radial_segments = 40
-	sphere.rings = 24
-	sky_dome = MeshInstance3D.new()
-	sky_dome.name = "SkyDome"
-	sky_dome.mesh = sphere
-	sky_dome.material_override = mats.sky
-	sky_dome.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	sky_dome.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-	mats.sky.render_priority = -100
-	add_child(sky_dome)
+func _build_sky() -> void:
+	# Native Godot sky: no giant sphere over the scene and no per-pixel multi-octave
+	# cloud noise. The panorama textures carry the painted cloud shapes; a small
+	# live shader layer keeps the sun and moon aligned with the day/night lighting.
+	sky_resource = Sky.new()
+	sky_resource.sky_material = mats.sky
+	sky_resource.radiance_size = Sky.RADIANCE_SIZE_128
+	sky_resource.process_mode = Sky.PROCESS_MODE_INCREMENTAL
+	environment.sky = sky_resource
+	environment.background_mode = Environment.BG_SKY
+	sky_visible = true
+
+
+func set_sky_visible(value: bool) -> void:
+	sky_visible = value
+	if environment != null:
+		environment.background_mode = Environment.BG_SKY if value else Environment.BG_COLOR
 
 
 func _build_water() -> void:
@@ -150,7 +161,11 @@ func update_time(hour: float, daylight: float, phase: String) -> void:
 	var dusk := 0.0
 	if phase == "dusk" or phase == "dawn":
 		dusk = clampf(1.0 - absf(daylight - 0.45) * 3.0, 0.0, 1.0)
-	mats.apply_time(dir, daylight, dusk)
+	var now_msec := Time.get_ticks_msec()
+	var refresh_sky := now_msec - _last_sky_sync_msec >= 200
+	if refresh_sky:
+		_last_sky_sync_msec = now_msec
+	mats.apply_time(dir, daylight, dusk, refresh_sky)
 
 	environment.ambient_light_energy = lerpf(0.58, 0.26, night)
 	environment.fog_light_color = Color(0.72, 0.83, 0.95).lerp(Color(0.07, 0.09, 0.18), night)
@@ -174,11 +189,6 @@ func radius() -> int:
 func _process(_delta: float) -> void:
 	var c := Vector2i(int(floor(_target.x / Chunk.SIZE)), int(floor(_target.z / Chunk.SIZE)))
 	var r := radius()
-	if sky_dome:
-		var cam := get_viewport().get_camera_3d()
-		if cam:
-			# o domo acompanha a câmara sem rodar: assim VERTEX continua a ser a direção
-			sky_dome.global_position = cam.global_position
 	if water:
 		# a água segue o jogador em passos de 10 m para o shader não "nadar"
 		water.position.x = snappedf(_target.x, 10.0)

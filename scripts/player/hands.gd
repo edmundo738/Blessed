@@ -8,6 +8,7 @@ extends Node3D
 var arm_r: Node3D
 var arm_l: Node3D
 var held: MeshInstance3D
+var _asset_root: Node3D
 var rng := RandomNumberGenerator.new()
 
 var swing_t := -1.0
@@ -52,6 +53,84 @@ func set_held(mesh: ArrayMesh, mat: Material = null) -> void:
 	held.material_override = mat
 	held.visible = mesh != null
 	arm_l.visible = mesh != null
+
+
+## Gera uma silhueta clara para o item equipado, visível na 1.ª pessoa.
+func set_item(item_id: String) -> void:
+	if is_instance_valid(_asset_root):
+		_asset_root.queue_free()
+	_asset_root = null
+	var asset_id := ""
+	match item_id:
+		"axe": asset_id = "tool_axe"
+		"pickaxe": asset_id = "tool_pickaxe"
+	var authored := BlessedBlenderAssets.scene_for(asset_id) if not asset_id.is_empty() else null
+	if authored != null:
+		var model := authored.instantiate() as Node3D
+		if model != null:
+			_asset_root = model
+			_asset_root.name = "BlenderTool_" + item_id
+			_asset_root.scale = Vector3.ONE * 0.72
+			_asset_root.rotation_degrees = Vector3(0.0, 0.0, -16.0)
+			_asset_root.position = Vector3(0.0, -0.12, 0.0)
+			held.add_child(_asset_root)
+			held.mesh = null
+			# MeshInstance visibility hides its whole subtree, including the GLB tool.
+			held.visible = true
+			arm_l.visible = true
+			return
+	held.visible = true
+	var parts: Array = []
+	match item_id:
+		"axe":
+			parts = [[MeshKit.box(Vector3(0.055, 0.48, 0.055), Color("a97542")),
+				Transform3D(Basis(Vector3.FORWARD, deg_to_rad(-28)), Vector3(-0.04, 0.10, 0))],
+				[MeshKit.box(Vector3(0.28, 0.16, 0.09), Color("cbd8d5")),
+				Transform3D(Basis(Vector3.FORWARD, deg_to_rad(-28)), Vector3(0.08, 0.29, 0))]]
+		"pickaxe":
+			parts = [[MeshKit.box(Vector3(0.055, 0.48, 0.055), Color("a97542")),
+				Transform3D(Basis(Vector3.FORWARD, deg_to_rad(-24)), Vector3(-0.04, 0.10, 0))],
+				[MeshKit.box(Vector3(0.34, 0.09, 0.08), Color("cbd8d5")),
+				Transform3D(Basis(Vector3.FORWARD, deg_to_rad(-12)), Vector3(0.02, 0.31, 0))]]
+		"torch":
+			parts = [[MeshKit.box(Vector3(0.08, 0.48, 0.08), Color("8b5b35")),
+				Transform3D(Basis.IDENTITY, Vector3(0, 0.08, 0))],
+				[MeshKit.blob(rng, 0.13, 1, 0.1, Vector3(0.8, 1.3, 0.8), Color("ff9b40")),
+				Transform3D(Basis.IDENTITY, Vector3(0, 0.36, 0))]]
+		"rod":
+			parts = [[MeshKit.box(Vector3(0.035, 0.68, 0.035), Color("9b693d")),
+				Transform3D(Basis(Vector3.FORWARD, deg_to_rad(-22)), Vector3(0, 0.18, 0))]]
+		"wood", "stick":
+			parts = [[MeshKit.box(Vector3(0.08, 0.38, 0.08), Color("a97542")),
+				Transform3D(Basis(Vector3.FORWARD, deg_to_rad(-24)), Vector3(0, 0.12, 0))]]
+		"stone", "flint":
+			parts = [[MeshKit.blob(rng, 0.16, 1, 0.12, Vector3(1.0, 0.7, 0.8), Color("9ba6a3")),
+				Transform3D(Basis.IDENTITY, Vector3(0, 0.12, 0))]]
+		"berry", "bush_berry", "mushroom", "meat_raw", "meat_cooked", "fish_raw", "fish_cooked":
+			var tint := Color("c84444") if item_id == "berry" or item_id == "bush_berry" else Color("d88472")
+			parts = [[MeshKit.blob(rng, 0.16, 1, 0.14, Vector3(1.0, 0.8, 0.85), tint),
+				Transform3D(Basis.IDENTITY, Vector3(0, 0.12, 0))]]
+		"bottle", "water":
+			parts = [[MeshKit.box(Vector3(0.16, 0.32, 0.14), Color("8fcfd0")),
+				Transform3D(Basis.IDENTITY, Vector3(0, 0.12, 0))],
+				[MeshKit.box(Vector3(0.08, 0.07, 0.08), Color("dbc995")),
+				Transform3D(Basis.IDENTITY, Vector3(0, 0.32, 0))]]
+		_:
+			if item_id.begins_with("meat") or item_id == "stew":
+				parts = [[MeshKit.blob(rng, 0.16, 1, 0.1, Vector3(1.0, 0.7, 0.8), Color("b96a48")),
+					Transform3D(Basis.IDENTITY, Vector3(0, 0.12, 0))]]
+	if parts.is_empty():
+		set_held(null)
+		return
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for part in parts:
+		st.append_from(part[0], 0, part[1])
+	var mesh := st.commit()
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.roughness = 0.82
+	set_held(mesh, mat)
 
 
 func swing(duration: float = 0.34) -> void:

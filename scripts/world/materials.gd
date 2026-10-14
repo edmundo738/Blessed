@@ -13,6 +13,10 @@ var water: ShaderMaterial
 var sky: ShaderMaterial
 var structure: ShaderMaterial
 
+const SKY_DAY := preload("res://content/fx/kenney/sky/skybox-day.png")
+const SKY_MORNING := preload("res://content/fx/kenney/sky/skybox-morning.png")
+const SKY_NIGHT := preload("res://content/fx/kenney/sky/skybox-night.png")
+
 
 func _init() -> void:
 	var ts: Shader = load("res://shaders/toon_terrain.gdshader")
@@ -53,11 +57,13 @@ func _init() -> void:
 
 	sky = ShaderMaterial.new()
 	sky.shader = ss
-	sky.set_shader_parameter("cloud_amount", 0.55)
+	sky.set_shader_parameter("sky_day", SKY_DAY)
+	sky.set_shader_parameter("sky_morning", SKY_MORNING)
+	sky.set_shader_parameter("sky_night", SKY_NIGHT)
 
 
 ## Aplica a hora do dia aos materiais (chamado pelo DayCycle).
-func apply_time(sun_dir: Vector3, daylight: float, dusk: float) -> void:
+func apply_time(sun_dir: Vector3, daylight: float, dusk: float, update_sky: bool = true) -> void:
 	var sd := -sun_dir
 	terrain.set_shader_parameter("sun_dir", sd)
 	foliage.set_shader_parameter("sun_dir", sd)
@@ -78,10 +84,15 @@ func apply_time(sun_dir: Vector3, daylight: float, dusk: float) -> void:
 	grass.set_shader_parameter("ambient_gain", lerpf(0.74, 0.38, night))
 	structure.set_shader_parameter("ambient_gain", lerpf(0.74, 0.38, night))
 
-	sky.set_shader_parameter("sun_dir", sd)
-	sky.set_shader_parameter("daylight", daylight)
-	sky.set_shader_parameter("dusk_mix", dusk)
-	sky.set_shader_parameter("glow_strength", lerpf(0.35, 1.1, clampf(daylight * 1.4, 0.0, 1.0)))
+	# The sky also builds Godot's reflection cubemap. Updating it only five times
+	# per second keeps the sun motion smooth while giving incremental cubemap work
+	# time to finish between changes.
+	if update_sky:
+		sky.set_shader_parameter("sun_dir", sd)
+		sky.set_shader_parameter("daylight", daylight)
+		sky.set_shader_parameter("dusk_mix", dusk)
+		sky.set_shader_parameter("moon_phase", fposmod(float(Game.day - 1) / 28.0, 1.0))
+		sky.set_shader_parameter("cloud_offset", fposmod(float(Game.day - 1) * 0.012 + Game.hour * 0.0005, 1.0))
 	water.set_shader_parameter("sky_tint",
 		Color(0.62, 0.82, 1.0).lerp(Color(0.10, 0.14, 0.30), night))
 	water.set_shader_parameter("deep_color",

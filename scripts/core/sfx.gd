@@ -18,6 +18,7 @@ var _voice_cursor := 0
 var _loops: Dictionary = {}
 var _loop_names: Dictionary = {}
 var _rng := RandomNumberGenerator.new()
+var _music_phase := ""
 var master_db: float = -6.0
 
 
@@ -115,6 +116,8 @@ func _sweep_into(a: PackedFloat32Array, f0: float, f1: float, gain: float) -> vo
 
 # ── receitas de som ──────────────────────────────────────────────────────────
 func _build(name: String) -> AudioStreamWAV:
+	if name.begins_with("music_"):
+		return _build_music(name.trim_prefix("music_"))
 	var a := PackedFloat32Array()
 	match name:
 		"step_grass":
@@ -127,6 +130,11 @@ func _build(name: String) -> AudioStreamWAV:
 			_tone_into(a, 180.0, 0.25, 0, int(0.05 * RATE))
 		"step_water":
 			a = _buf(0.22); _noise_into(a, 0.4); _one_pole(a, 700.0); _decay(a, 0.18)
+		"jump":
+			# Impulso curto de ar + grave macio; não reutiliza um passo/tambor.
+			a = _buf(0.24); _noise_into(a, 0.16); _one_pole(a, 520.0)
+			_sweep_into(a, 78.0, 145.0, 0.18)
+			_decay(a, 0.20)
 		"chop":
 			a = _buf(0.28); _noise_into(a, 0.8); _one_pole(a, 1800.0); _decay(a, 0.14)
 			_sweep_into(a, 240.0, 90.0, 0.35)
@@ -239,7 +247,7 @@ func play_at(name: String, pos: Vector3, db: float = 0.0, pitch: float = 1.0) ->
 
 
 ## Loop ambiente (vento, água, fogo, drone noturno). `id` identifica o canal.
-func loop(id: String, name: String, db: float = -12.0) -> void:
+func loop(id: String, name: String, db: float = -12.0, fade_seconds: float = 0.45) -> void:
 	if _loops.has(id):
 		var old: AudioStreamPlayer = _loops[id]
 		if _loop_names.get(id, "") == name and old.playing:
@@ -249,7 +257,7 @@ func loop(id: String, name: String, db: float = -12.0) -> void:
 		_loop_names.erase(id)
 		if is_instance_valid(old):
 			var fade_out := create_tween()
-			fade_out.tween_property(old, "volume_db", -48.0, 0.35)
+			fade_out.tween_property(old, "volume_db", -48.0, fade_seconds)
 			fade_out.tween_callback(func():
 				if is_instance_valid(old):
 					old.stop()
@@ -262,7 +270,7 @@ func loop(id: String, name: String, db: float = -12.0) -> void:
 	add_child(p)
 	p.play()
 	var fade_in := create_tween()
-	fade_in.tween_property(p, "volume_db", db, 0.45)
+	fade_in.tween_property(p, "volume_db", db, fade_seconds)
 	_loops[id] = p
 	_loop_names[id] = name
 
@@ -274,3 +282,84 @@ func loop_volume(id: String, db: float) -> void:
 
 func stop_loop(id: String) -> void:
 	loop(id, "", 0.0)
+
+
+## Trilha original e adaptável às fases do mundo.
+func set_music_phase(phase: String) -> void:
+	if phase == _music_phase:
+		return
+	_music_phase = phase
+	var track := "music_dawn"
+	var level := -19.0
+	match phase:
+		"day":
+			track = "music_day"
+			level = -17.0
+		"dusk":
+			track = "music_dusk"
+			level = -19.0
+		"night":
+			track = "music_night"
+			level = -22.0
+	loop("music", track, level, 2.4)
+
+
+## Composição em camadas: harmonia sustentada e motivo agudo delicado.
+## O ciclo de quatro compassos repete sem assets externos.
+func _build_music(mood: String) -> AudioStreamWAV:
+	const BAR := 3.2
+	const BARS := 4
+	var a := _buf(BAR * BARS)
+	var roots := [50, 53, 57, 52] # ré menor, fá, lá menor, mi menor
+	var melody := [74, 69, 72, 76, 72, 67, 71, 74]
+	match mood:
+		"day":
+			roots = [62, 57, 59, 55]
+			melody = [74, 76, 81, 78, 76, 74, 71, 69]
+		"dusk":
+			roots = [57, 53, 50, 52]
+			melody = [76, 72, 69, 72, 74, 69, 67, 71]
+		"night":
+			roots = [45, 48, 43, 50]
+			melody = [69, 72, 67, 74, 72, 69, 65, 67]
+		"dawn":
+			roots = [50, 57, 53, 52]
+			melody = [74, 77, 81, 79, 77, 74, 72, 69]
+	var samples_per_bar := int(BAR * RATE)
+	for bar in BARS:
+		var root_note := int(roots[bar])
+		var start := bar * samples_per_bar
+		# Notas longas com ataque lento formam a cama harmónica.
+		for interval in [0, 7, 12]:
+			_add_music_note(a, _midi_hz(root_note + interval - 12), start,
+				samples_per_bar, 0.055 if interval == 0 else 0.026, 0.22, true)
+		# Motivo curto, com bastante espaço para os sons do ambiente.
+		for beat in 2:
+			var note_index := bar * 2 + beat
+			var note_start := start + int(float(beat) * BAR * 0.5 * RATE)
+			_add_music_note(a, _midi_hz(int(melody[note_index])), note_start,
+				int(BAR * 0.46 * RATE), 0.075, 0.13, false)
+	return _to_wav(a, true)
+
+
+func _midi_hz(note: int) -> float:
+	return 440.0 * pow(2.0, float(note - 69) / 12.0)
+
+
+func _add_music_note(a: PackedFloat32Array, frequency: float, start: int,
+		length: int, gain: float, release: float, pad: bool) -> void:
+	var finish := mini(start + length, a.size())
+	var phase := 0.0
+	var step := TAU * frequency / float(RATE)
+	var release_samples := maxi(1, int(release * RATE))
+	for i in range(start, finish):
+		var local := i - start
+		var envelope := 1.0
+		if pad:
+			envelope = minf(1.0, float(local) / float(RATE * 0.45))
+			envelope *= minf(1.0, float(finish - i) / float(release_samples))
+		else:
+			var attack := minf(1.0, float(local) / float(RATE * 0.018))
+			envelope = attack * exp(-4.6 * float(local) / float(maxi(length, 1)))
+		a[i] += (sin(phase) + 0.22 * sin(phase * 2.0)) * gain * envelope
+		phase += step

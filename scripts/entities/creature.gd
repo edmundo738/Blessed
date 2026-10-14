@@ -18,9 +18,7 @@ var survival: Node
 var alive := true
 var touch_t := 0.0
 var growl_t := 0.0
-var _body: MeshInstance3D
-var _eyes: MeshInstance3D
-var _mat: StandardMaterial3D
+var _body: Sprite3D
 var _rng := RandomNumberGenerator.new()
 
 
@@ -31,32 +29,16 @@ func _ready() -> void:
 
 
 func _build() -> void:
-	_mat = StandardMaterial3D.new()
-	_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_mat.albedo_color = Color(0.035, 0.03, 0.055)
-	_body = MeshInstance3D.new()
-	_body.mesh = MeshKit.blob(_rng, 0.85, 1, 0.42, Vector3(0.95, 1.5, 0.95), Color.WHITE)
-	_body.material_override = _mat
+	# A criatura também é 2D: uma silhueta pixel art suspensa no cenário 3D.
+	_body = Sprite3D.new()
+	_body.name = "NightWandererSprite"
+	_body.texture = _make_texture()
+	_body.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_body.pixel_size = 0.045
+	_body.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	_body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_body.position = Vector3(0, 1.05, 0)
 	add_child(_body)
-
-	var eye_mat := StandardMaterial3D.new()
-	eye_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	eye_mat.albedo_color = Color(1.0, 0.85, 0.55)
-	_eyes = MeshInstance3D.new()
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for s in [-1.0, 1.0]:
-		var m := MeshKit.blob(_rng, 0.055, 0, 0.0, Vector3(1.4, 0.8, 0.6), Color.WHITE)
-		var arr := m.surface_get_arrays(0)
-		var verts: Array = arr[Mesh.ARRAY_VERTEX]
-		for v in verts:
-			st.set_color(Color.WHITE)
-			st.add_vertex((v as Vector3) + Vector3(s * 0.16, 0.1, -0.7))
-	_eyes.mesh = st.commit()
-	_eyes.material_override = eye_mat
-	_eyes.position = Vector3(0, 1.65, 0)
-	add_child(_eyes)
 
 	var col := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
@@ -65,6 +47,36 @@ func _build() -> void:
 	col.shape = cap
 	col.position = Vector3(0, 1.0, 0)
 	add_child(col)
+
+
+func _make_texture() -> Texture2D:
+	const W := 32
+	const H := 48
+	var image := Image.create(W, H, false, Image.FORMAT_RGBA8)
+	image.fill(Color(0, 0, 0, 0))
+	var ink := Color("#171827")
+	var shade := Color("#30263d")
+	var edge := Color("#554060")
+	var eye := Color("#ffd78a")
+	# Cabeça estreita, ombros largos e braços alongados para ler bem à distância.
+	image.fill_rect(Rect2i(11, 4, 10, 2), edge)
+	image.fill_rect(Rect2i(8, 6, 16, 9), ink)
+	image.fill_rect(Rect2i(10, 7, 12, 8), shade)
+	image.fill_rect(Rect2i(5, 15, 22, 17), ink)
+	image.fill_rect(Rect2i(8, 16, 16, 15), shade)
+	image.fill_rect(Rect2i(2, 17, 6, 20), ink)
+	image.fill_rect(Rect2i(24, 17, 6, 20), ink)
+	image.fill_rect(Rect2i(4, 34, 5, 8), shade)
+	image.fill_rect(Rect2i(23, 34, 5, 8), shade)
+	image.fill_rect(Rect2i(9, 29, 6, 15), ink)
+	image.fill_rect(Rect2i(17, 29, 6, 15), ink)
+	image.fill_rect(Rect2i(8, 43, 8, 3), edge)
+	image.fill_rect(Rect2i(16, 43, 8, 3), edge)
+	# Olhos dourados pequenos: um ponto de luz que se distingue no escuro.
+	image.fill_rect(Rect2i(11, 10, 3, 2), eye)
+	image.fill_rect(Rect2i(19, 10, 3, 2), eye)
+	image.fill_rect(Rect2i(14, 19, 4, 8), Color("#8b3e57"))
+	return ImageTexture.create_from_image(image)
 
 
 func _physics_process(delta: float) -> void:
@@ -86,6 +98,8 @@ func _physics_process(delta: float) -> void:
 	if day > 0.25:
 		# o sol mata: foge e desaparece
 		_fade_out(delta * 1.6)
+		if not alive:
+			return
 		light_push += -flat.normalized() * 2.0
 
 	var wish := flat.normalized() * speed * (0.55 + boldness)
@@ -104,11 +118,10 @@ func _physics_process(delta: float) -> void:
 	if flat.length_squared() > 0.01:
 		rotation.y = atan2(flat.x, flat.z)
 	_body.rotation.z = sin(float(Time.get_ticks_msec()) * 0.004) * 0.08
-	_eyes.visible = day < 0.5
 
 	# contacto
 	touch_t = maxf(0.0, touch_t - delta)
-	if dist < 1.5 and touch_t <= 0.0:
+	if day <= 0.25 and dist < 1.5 and touch_t <= 0.0:
 		touch_t = 1.4
 		if survival != null and survival.has_method("damage"):
 			survival.call("damage", damage, "creature")
@@ -122,7 +135,7 @@ func _physics_process(delta: float) -> void:
 			randf_range(0.8, 1.1))
 
 	# alimenta o medo do jogador
-	if survival != null and dist < 26.0:
+	if day <= 0.25 and survival != null and dist < 26.0:
 		survival.creature_threat = maxf(survival.creature_threat,
 			clampf(1.0 - dist / 26.0, 0.0, 1.0))
 
@@ -135,10 +148,7 @@ func hurt(amount: float) -> void:
 
 
 func _fade_out(rate: float) -> void:
-	var c: Color = _mat.albedo_color
-	c.a = maxf(0.0, c.a - rate * 0.02)
-	_mat.albedo_color = c
-	_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	if c.a <= 0.01:
+	_body.modulate.a = maxf(0.0, _body.modulate.a - rate * 0.75)
+	if _body.modulate.a <= 0.01:
 		alive = false
 		queue_free()
