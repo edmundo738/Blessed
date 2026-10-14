@@ -20,6 +20,9 @@ var build_label: Label
 var identity_name: Label
 var identity_bonus: Label
 var camera_mode_label: Label
+var needs_panel: PanelContainer
+var needs_button: Button
+var needs_expanded := false
 var fear_rect: ColorRect
 var hurt_rect: ColorRect
 var crosshair: Control
@@ -146,41 +149,125 @@ func _crosshair() -> Control:
 
 
 func _bars() -> void:
-	var panel := VBoxContainer.new()
-	panel.position = Vector2(22, -150)
-	panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	panel.offset_left = 22
-	panel.offset_top = -196
-	panel.offset_right = 250
-	panel.offset_bottom = -24
-	panel.add_theme_constant_override("separation", 3)
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(panel)
+	var primary := VBoxContainer.new()
+	primary.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	primary.offset_left = 22
+	primary.offset_top = -70
+	primary.offset_right = 252
+	primary.offset_bottom = -18
+	primary.add_theme_constant_override("separation", 4)
+	primary.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(primary)
+	for id in ["health", "stamina"]:
+		_add_status_bar(primary, id, _bar_color(id), 184.0, 12.0)
+
+	needs_button = Button.new()
+	needs_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	needs_button.offset_left = 22
+	needs_button.offset_top = -106
+	needs_button.offset_right = 252
+	needs_button.offset_bottom = -78
+	needs_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	needs_button.add_theme_font_size_override("font_size", 11)
+	needs_button.add_theme_color_override("font_color", Color(0.91, 0.93, 0.87, 0.92))
+	needs_button.focus_mode = Control.FOCUS_NONE
+	needs_button.pressed.connect(func():
+		needs_expanded = not needs_expanded
+		_refresh_needs_panel())
+	root.add_child(needs_button)
+
+	needs_panel = PanelContainer.new()
+	needs_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	needs_panel.offset_left = 22
+	needs_panel.offset_top = -274
+	needs_panel.offset_right = 252
+	needs_panel.offset_bottom = -110
+	needs_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.025, 0.04, 0.055, 0.78)
+	style.border_color = Color(0.68, 0.7, 0.62, 0.32)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(4)
+	style.content_margin_left = 8
+	style.content_margin_right = 8
+	style.content_margin_top = 6
+	style.content_margin_bottom = 6
+	needs_panel.add_theme_stylebox_override("panel", style)
+	root.add_child(needs_panel)
+	var needs_stack := VBoxContainer.new()
+	needs_stack.add_theme_constant_override("separation", 3)
+	needs_panel.add_child(needs_stack)
+	for id in ["hunger", "thirst", "energy", "warmth", "sanity", "blessing"]:
+		_add_status_bar(needs_stack, id, _bar_color(id), 164.0, 9.0)
+	needs_panel.visible = false
+	_refresh_needs_panel()
+
+
+func _bar_color(id: String) -> Color:
 	for entry in BAR_ORDER:
-		var id: String = entry[0]
-		var col: Color = entry[1]
-		var row := HBoxContainer.new()
-		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		panel.add_child(row)
-		var lbl := Label.new()
-		lbl.text = Loc.t("hud." + id).substr(0, 3).to_upper()
-		lbl.custom_minimum_size = Vector2(38, 0)
-		lbl.add_theme_font_size_override("font_size", 10)
-		lbl.add_theme_color_override("font_color", Color(1, 1, 1, 0.72))
-		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(lbl)
-		var bg := ColorRect.new()
-		bg.color = Color(0, 0, 0, 0.38)
-		bg.custom_minimum_size = Vector2(150, 9)
-		bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		row.add_child(bg)
-		var fill := ColorRect.new()
-		fill.color = col
-		fill.position = Vector2(1, 1)
-		fill.size = Vector2(148, 7)
-		fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		bg.add_child(fill)
-		bars[id] = {"fill": fill, "label": lbl, "color": col, "value": 1.0}
+		if str(entry[0]) == id:
+			return entry[1]
+	return Color.WHITE
+
+
+func _add_status_bar(parent: Control, id: String, col: Color,
+		fill_width: float, height: float) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(row)
+	var lbl := Label.new()
+	lbl.text = Loc.t("hud." + id).substr(0, 3).to_upper()
+	lbl.custom_minimum_size = Vector2(34, 0)
+	lbl.add_theme_font_size_override("font_size", 10)
+	lbl.add_theme_color_override("font_color", Color(1, 1, 1, 0.78))
+	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(lbl)
+	var bg := ColorRect.new()
+	bg.color = Color(0.015, 0.02, 0.028, 0.58)
+	bg.custom_minimum_size = Vector2(fill_width + 2.0, height)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(bg)
+	var fill := ColorRect.new()
+	fill.color = col
+	fill.position = Vector2(1, 1)
+	fill.size = Vector2(fill_width, maxf(height - 2.0, 1.0))
+	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.add_child(fill)
+	var value_label := Label.new()
+	value_label.text = "100"
+	value_label.custom_minimum_size = Vector2(28, 0)
+	value_label.add_theme_font_size_override("font_size", 9)
+	value_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.62))
+	value_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	value_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(value_label)
+	bars[id] = {"fill": fill, "label": lbl, "value_label": value_label,
+		"color": col, "value": 1.0, "width": fill_width}
+
+
+func _refresh_needs_panel() -> void:
+	if needs_panel == null or needs_button == null:
+		return
+	var critical := false
+	for id in ["hunger", "thirst", "energy", "warmth", "sanity"]:
+		if float((bars.get(id, {}) as Dictionary).get("value", 1.0)) < 0.28:
+			critical = true
+	needs_panel.visible = needs_expanded or critical
+	needs_button.text = "N  %s%s" % [Loc.t("hud.needs"), "  !" if critical else ""]
+	if critical:
+		needs_button.add_theme_color_override("font_color", Color(1.0, 0.74, 0.5, 1.0))
+	else:
+		needs_button.add_theme_color_override("font_color", Color(0.91, 0.93, 0.87, 0.92))
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("status_panel") and Game.started and not Game.paused:
+		needs_expanded = not needs_expanded
+		_refresh_needs_panel()
+		get_viewport().set_input_as_handled()
+
 
 
 func _hotbar() -> void:
@@ -314,6 +401,7 @@ func _top() -> void:
 	fps_label.add_theme_font_size_override("font_size", 11)
 	fps_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.4))
 	fps_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	fps_label.visible = OS.is_debug_build()
 	root.add_child(fps_label)
 
 	build_label = Label.new()
@@ -326,6 +414,7 @@ func _top() -> void:
 	build_label.add_theme_font_size_override("font_size", 10)
 	build_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.35))
 	build_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	build_label.visible = OS.is_debug_build()
 	root.add_child(build_label)
 
 
@@ -386,6 +475,7 @@ func _process(delta: float) -> void:
 			float(Time.get_ticks_msec()) * 0.001)
 	_refresh_hotbar()
 	_refresh_identity()
+	_refresh_needs_panel()
 	if interaction != null:
 		prompt_bar.value = clampf(interaction.progress, 0.0, 1.0) * 100.0
 		prompt_bar.visible = interaction.progress > 0.005
@@ -393,7 +483,7 @@ func _process(delta: float) -> void:
 	for id in bars:
 		var b: Dictionary = bars[id]
 		var f: ColorRect = b["fill"]
-		var target := 148.0 * clampf(float(b["value"]), 0.0, 1.0)
+		var target := float(b["width"]) * clampf(float(b["value"]), 0.0, 1.0)
 		f.size.x = lerpf(f.size.x, target, 1.0 - exp(-9.0 * delta))
 
 
@@ -458,7 +548,15 @@ func _on_subtitle(key: String, seconds: float) -> void:
 
 
 func _on_focus(_who: Node, key: String) -> void:
-	prompt_label.text = "" if key == "" else "[E] " + Loc.t(key)
+	if key == "":
+		prompt_label.text = ""
+		return
+	var text := "[F] " + Loc.t(key)
+	if interaction != null and not interaction.focus.is_empty():
+		var kind := str(interaction.focus.get("kind", ""))
+		if kind == "harvest" or (kind == "structure" and str(interaction.focus["ref"].get("id", "")) != "bed"):
+			text += "   ·   [LMB] " + Loc.t("hud.hold_action")
+	prompt_label.text = text
 
 
 func _on_time(hour: float, day: int) -> void:
@@ -491,3 +589,4 @@ func refresh_locale() -> void:
 		if bars.has(id):
 			((bars[id] as Dictionary)["label"] as Label).text = Loc.t("hud." + id).substr(0, 3).to_upper()
 	_refresh_identity()
+	_refresh_needs_panel()
