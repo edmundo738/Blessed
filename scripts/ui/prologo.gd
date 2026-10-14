@@ -148,11 +148,12 @@ func _build_creator() -> void:
 	for palette_key in ["skin", "cloth", "hair"]:
 		var option := OptionButton.new()
 		option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		option.add_item(Loc.t("prologo.palette_1"))
-		option.add_item(Loc.t("prologo.palette_2"))
-		option.add_item(Loc.t("prologo.palette_3"))
+		var category := "prologo.appearance_" + palette_key
+		option.add_item(Loc.t(category) + " · " + Loc.t("prologo.palette_1"))
+		option.add_item(Loc.t(category) + " · " + Loc.t("prologo.palette_2"))
+		option.add_item(Loc.t(category) + " · " + Loc.t("prologo.palette_3"))
 		if palette_key == "cloth":
-			option.add_item(Loc.t("prologo.palette_4"))
+			option.add_item(Loc.t(category) + " · " + Loc.t("prologo.palette_4"))
 		option.select(int(chosen_appearance[palette_key]))
 		option.item_selected.connect(_pick_appearance.bind(palette_key))
 		appearance_row.add_child(option)
