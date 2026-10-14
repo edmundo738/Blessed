@@ -22,6 +22,7 @@ var soul_group: Array = []
 var soul_desc: Label
 var chosen_body := "f"
 var chosen_soul := "curious"
+var chosen_appearance := {"skin": 0, "cloth": 0, "hair": 0}
 var _fade := 0.0
 var _target_alpha := 1.0
 
@@ -81,8 +82,8 @@ func _build_creator() -> void:
 	v.set_anchors_preset(Control.PRESET_CENTER)
 	v.offset_left = -320
 	v.offset_right = 320
-	v.offset_top = -230
-	v.offset_bottom = 230
+	v.offset_top = -300
+	v.offset_bottom = 300
 	v.add_theme_constant_override("separation", 10)
 	creator.add_child(v)
 
@@ -138,6 +139,24 @@ func _build_creator() -> void:
 		v.add_child(b)
 		soul_group.append(b)
 
+	var appearance_title := Label.new()
+	appearance_title.text = Loc.t("prologo.appearance")
+	v.add_child(appearance_title)
+	var appearance_row := HBoxContainer.new()
+	appearance_row.add_theme_constant_override("separation", 6)
+	v.add_child(appearance_row)
+	for palette_key in ["skin", "cloth", "hair"]:
+		var option := OptionButton.new()
+		option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		option.add_item(Loc.t("prologo.palette_1"))
+		option.add_item(Loc.t("prologo.palette_2"))
+		option.add_item(Loc.t("prologo.palette_3"))
+		if palette_key == "cloth":
+			option.add_item(Loc.t("prologo.palette_4"))
+		option.select(int(chosen_appearance[palette_key]))
+		option.item_selected.connect(_pick_appearance.bind(palette_key))
+		appearance_row.add_child(option)
+
 	soul_desc = Label.new()
 	soul_desc.text = Loc.t("prologo.soul_" + chosen_soul + "_desc")
 	soul_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -156,6 +175,16 @@ func _pick_body(which: String) -> void:
 	for i in body_group.size():
 		(body_group[i] as Button).button_pressed = (["f", "m"][i] == which)
 	Sfx.play("ui_click", -12.0)
+
+
+func _pick_appearance(index: int, palette_key: String) -> void:
+	chosen_appearance[palette_key] = index
+	Game.profile["appearance"] = chosen_appearance.duplicate(true)
+	for p in get_tree().get_nodes_in_group("player"):
+		var avatar: Node = p.get_node_or_null("Avatar2D")
+		if avatar != null and avatar.has_method("refresh_appearance"):
+			avatar.call("refresh_appearance")
+	Sfx.play("ui_click", -16.0)
 
 
 func _pick_soul(which: String) -> void:
@@ -220,9 +249,14 @@ func finish() -> void:
 		"name": n if n != "" else ("Ana" if chosen_body == "f" else "Rui"),
 		"body": chosen_body,
 		"soul": chosen_soul,
+		"appearance": chosen_appearance.duplicate(true),
 	}
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	queue_free()
 	Game.started = true
+	for p in get_tree().get_nodes_in_group("player"):
+		var avatar: Node = p.get_node_or_null("Avatar2D")
+		if avatar != null and avatar.has_method("refresh_appearance"):
+			avatar.call("refresh_appearance")
 	Bus.objective_added.emit(Game.objective_current)
 	Bus.subtitle_requested.emit("obj.wood", 5.0)
