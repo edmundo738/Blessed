@@ -90,6 +90,22 @@ func _merge(parts: Array) -> ArrayMesh:
 	return st.commit()
 
 
+## Ramo afunilado que liga o tronco às massas da copa.
+## Mantém as árvores como um único mesh por espécie/LOD para preservar o batching.
+func _branch(start: Vector3, finish: Vector3, radius: float, tint: Color) -> ArrayMesh:
+	var delta := finish - start
+	if delta.length_squared() < 0.0001:
+		return MeshKit.tapered(rng, 0.01, radius, radius * 0.5, 4, 1, 0.0, false, tint)
+	var axis := delta.normalized()
+	var local_mesh := MeshKit.tapered(rng, delta.length(), radius, radius * 0.38,
+		5, 2, 0.04, false, tint)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var basis := Basis(Quaternion(Vector3.UP, axis))
+	st.append_from(local_mesh, 0, Transform3D(basis, start))
+	return st.commit()
+
+
 ## Constrói uma espécie arbórea com 3 LODs reais (mesma silhueta, menos triângulos).
 func _tree(id: String, trunk_h: float, trunk_rb: float, trunk_rt: float,
 		trunk_tint: Color, canopy: Array, subdivs: Array, scale_r: Vector2,
@@ -123,6 +139,13 @@ func _tree(id: String, trunk_h: float, trunk_rb: float, trunk_rt: float,
 			if bi >= max_blobs:
 				break
 			var c: Dictionary = canopy[bi]
+			# Ramos visíveis apenas nos LOD próximos; o LOD distante conserva a silhueta
+			# com menos triângulos e não acrescenta custo de geometria onde mal se nota.
+			if li < 2 and bi < (2 if li == 1 else canopy.size()):
+				var branch_end: Vector3 = c["pos"] * 0.76
+				var branch_start := Vector3(0.0, trunk_h * 0.46, 0.0)
+				parts.append(_branch(branch_start, branch_end,
+					maxf(trunk_rt * 0.55, float(c["r"]) * 0.075), trunk_tint))
 			var blob := MeshKit.blob(rng, float(c["r"]), lvl, float(c.get("jit", 0.18)),
 				c.get("scale", Vector3.ONE), c.get("tint", Color.WHITE))
 			parts.append(_offset(blob, c["pos"]))
