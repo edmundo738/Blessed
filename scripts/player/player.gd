@@ -33,6 +33,8 @@ var cam_pivot: Node3D
 var lean_node: Node3D
 var hands: Node3D
 var collider: CollisionShape3D
+var avatar: Node3D
+var third_person := false
 
 var yaw := 0.0
 var pitch := 0.0
@@ -101,9 +103,18 @@ func _build_tree() -> void:
 	var hands_script: GDScript = load("res://scripts/player/hands.gd")
 	hands.set_script(hands_script)
 
+	avatar = Node3D.new()
+	avatar.name = "Avatar2D"
+	avatar.set_script(load("res://scripts/player/pixel_avatar.gd"))
+	add_child(avatar)
+	_set_view_mode(false)
+
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not enabled:
+		return
+	if event.is_action_pressed("camera_toggle"):
+		_set_view_mode(not third_person)
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var sens := float(Game.settings["sensitivity"]) * 0.0022
@@ -126,6 +137,36 @@ func _physics_process(delta: float) -> void:
 	_head_bob(delta)
 	move_and_slide()
 	_surface_probe()
+	if avatar != null and avatar.has_method("update_pose"):
+		avatar.call("update_pose", velocity, yaw, camera.global_position)
+
+
+# ── apresentação do jogador ────────────────────────────────────────────────
+func _set_view_mode(use_third_person: bool) -> void:
+	third_person = use_third_person
+	if camera == null:
+		return
+	camera.position = Vector3.ZERO
+	camera.rotation = Vector3.ZERO
+	if hands != null:
+		hands.visible = not third_person
+	if avatar != null:
+		avatar.visible = third_person
+	if third_person:
+		camera.position = Vector3(0.0, -0.12, 4.2)
+		camera.rotation.x = -0.12
+
+
+func _third_person_distance() -> float:
+	var from := global_position + Vector3(0.0, 1.42, 0.0)
+	var back := global_transform.basis.z.normalized()
+	var to := from + back * 4.2
+	var query := PhysicsRayQueryParameters3D.create(from, to, 1)
+	query.exclude = [get_rid()]
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return 4.2
+	return clampf(from.distance_to(hit.position) - 0.22, 0.65, 4.2)
 
 
 # ── câmara ────────────────────────────────────────────────────────────────
@@ -282,10 +323,15 @@ func _head_bob(delta: float) -> void:
 	var amp := 0.055 * bob_amp
 	var base := CROUCH_EYE if crouching else EYE
 	var swim_dip := -0.25 if swimming else 0.0
-	camera.position = Vector3(
-		cos(bob_t) * amp * 0.8,
-		sin(bob_t * 2.0) * amp + swim_dip,
-		sin(bob_t) * amp * 0.35)
+	if third_person:
+		camera.position = Vector3(0.0, -0.12, _third_person_distance())
+		camera.rotation.x = -0.12
+	else:
+		camera.position = Vector3(
+			cos(bob_t) * amp * 0.8,
+			sin(bob_t * 2.0) * amp + swim_dip,
+			sin(bob_t) * amp * 0.35)
+		camera.rotation = Vector3.ZERO
 	lean_node.rotation.z += sin(bob_t) * 0.012 * bob_amp
 
 	# passos no ponto certo do ciclo
@@ -337,6 +383,7 @@ func save_data() -> Dictionary:
 	return {
 		"pos": [global_position.x, global_position.y, global_position.z],
 		"yaw": yaw, "pitch": pitch, "stamina": stamina,
+		"third_person": third_person,
 	}
 
 
@@ -348,3 +395,4 @@ func load_data(d: Dictionary) -> void:
 	pitch = float(d.get("pitch", 0.0))
 	target_pitch = pitch
 	stamina = float(d.get("stamina", 100.0))
+	_set_view_mode(bool(d.get("third_person", false)))
