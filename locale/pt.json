@@ -74,6 +74,10 @@
   "hud.warmth": "Calor",
   "hud.sanity": "Calma",
   "hud.blessing": "Bênção",
+  "hud.bonus": "TRAÇO",
+  "hud.view_toggle": "V · Câmara: %s",
+  "hud.view_first": "1.ª pessoa",
+  "hud.view_third": "3.ª pessoa",
 
   "prompt.chop": "Cortar",
   "prompt.mine": "Picar",
