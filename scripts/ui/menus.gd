@@ -151,6 +151,10 @@ func _build_pause() -> void:
 	_label(Loc.t("ui.help.move"), 11, Color(1, 1, 1, 0.45))
 	_label(Loc.t("ui.help.use"), 11, Color(1, 1, 1, 0.45))
 	_label(Loc.t("ui.help.bag"), 11, Color(1, 1, 1, 0.45))
+	_label(Loc.t("ui.help.look"), 11, Color(1, 1, 1, 0.45))
+	_label(Loc.t("ui.help.status"), 11, Color(1, 1, 1, 0.45))
+	_label(Loc.t("ui.help.build"), 11, Color(1, 1, 1, 0.45))
+	_label(Loc.t("ui.help.pause"), 11, Color(1, 1, 1, 0.45))
 
 
 # ── definições ────────────────────────────────────────────────────────────
