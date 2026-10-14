@@ -17,6 +17,9 @@ var clock_label: Label
 var objective_label: Label
 var fps_label: Label
 var build_label: Label
+var identity_name: Label
+var identity_bonus: Label
+var camera_mode_label: Label
 var fear_rect: ColorRect
 var hurt_rect: ColorRect
 var crosshair: Control
@@ -252,6 +255,42 @@ func _top() -> void:
 	clock_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(clock_label)
 
+	var identity_panel := PanelContainer.new()
+	identity_panel.position = Vector2(18, 48)
+	identity_panel.custom_minimum_size = Vector2(270, 78)
+	identity_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.035, 0.055, 0.075, 0.76)
+	panel_style.border_color = Color(0.72, 0.66, 0.48, 0.48)
+	panel_style.set_border_width_all(1)
+	panel_style.set_corner_radius_all(5)
+	panel_style.content_margin_left = 10
+	panel_style.content_margin_right = 10
+	panel_style.content_margin_top = 6
+	panel_style.content_margin_bottom = 6
+	identity_panel.add_theme_stylebox_override("panel", panel_style)
+	root.add_child(identity_panel)
+	var identity_stack := VBoxContainer.new()
+	identity_stack.add_theme_constant_override("separation", 1)
+	identity_panel.add_child(identity_stack)
+	identity_name = Label.new()
+	identity_name.add_theme_font_size_override("font_size", 13)
+	identity_name.add_theme_color_override("font_color", Color(1.0, 0.93, 0.72))
+	identity_stack.add_child(identity_name)
+	identity_bonus = Label.new()
+	identity_bonus.custom_minimum_size = Vector2(240, 30)
+	identity_bonus.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	identity_bonus.add_theme_font_size_override("font_size", 10)
+	identity_bonus.add_theme_color_override("font_color", Color(0.86, 0.91, 0.87, 0.92))
+	identity_stack.add_child(identity_bonus)
+	camera_mode_label = Label.new()
+	camera_mode_label.position = Vector2(22, 132)
+	camera_mode_label.add_theme_font_size_override("font_size", 10)
+	camera_mode_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.55))
+	camera_mode_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(camera_mode_label)
+	_refresh_identity()
+
 	objective_label = Label.new()
 	objective_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	objective_label.offset_left = -420
@@ -346,6 +385,7 @@ func _process(delta: float) -> void:
 		(fear_rect.material as ShaderMaterial).set_shader_parameter("time_s",
 			float(Time.get_ticks_msec()) * 0.001)
 	_refresh_hotbar()
+	_refresh_identity()
 	if interaction != null:
 		prompt_bar.value = clampf(interaction.progress, 0.0, 1.0) * 100.0
 		prompt_bar.visible = interaction.progress > 0.005
@@ -355,6 +395,28 @@ func _process(delta: float) -> void:
 		var f: ColorRect = b["fill"]
 		var target := 148.0 * clampf(float(b["value"]), 0.0, 1.0)
 		f.size.x = lerpf(f.size.x, target, 1.0 - exp(-9.0 * delta))
+
+
+func _refresh_identity() -> void:
+	if identity_name == null:
+		return
+	var profile: Dictionary = Game.profile
+	var player_name := str(profile.get("name", "")).strip_edges()
+	if player_name.is_empty():
+		player_name = Loc.t("app.title")
+	var soul := str(profile.get("soul", "curious"))
+	var label := Loc.t("prologo.soul_" + soul)
+	var detail := Loc.t("prologo.soul_" + soul + "_desc")
+	var name_text := player_name + "  ·  " + label
+	var bonus_text := Loc.t("hud.bonus") + "  " + detail
+	if identity_name.text != name_text:
+		identity_name.text = name_text
+	if identity_bonus.text != bonus_text:
+		identity_bonus.text = bonus_text
+	if camera_mode_label != null and player != null:
+		var third := bool(player.get("third_person"))
+		var mode := Loc.t("hud.view_third") if third else Loc.t("hud.view_first")
+		camera_mode_label.text = Loc.t("hud.view_toggle", [mode])
 
 
 func _refresh_hotbar() -> void:
@@ -428,3 +490,4 @@ func refresh_locale() -> void:
 		var id: String = entry[0]
 		if bars.has(id):
 			((bars[id] as Dictionary)["label"] as Label).text = Loc.t("hud." + id).substr(0, 3).to_upper()
+	_refresh_identity()
