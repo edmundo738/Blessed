@@ -18,13 +18,14 @@ func refresh_appearance() -> void:
 
 
 func _build_sprite_frames() -> void:
-	sprite = AnimatedSprite3D.new()
-	sprite.name = "PixelSprite"
-	sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	sprite.pixel_size = 0.036
-	sprite.position.y = 0.0
-	sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(sprite)
+	if sprite == null:
+		sprite = AnimatedSprite3D.new()
+		sprite.name = "PixelSprite"
+		sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		sprite.pixel_size = 0.036
+		sprite.position.y = 0.0
+		sprite.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(sprite)
 
 	var frames := SpriteFrames.new()
 	frames.clear_all()
@@ -50,6 +51,7 @@ func _make_frame(direction: String, frame: int) -> Texture2D:
 	# Palette slots are intentionally centralized for future costume/heritage assets.
 	var profile: Dictionary = Game.profile
 	var appearance: Dictionary = profile.get("appearance", {})
+	var body := str(profile.get("body", "f"))
 	var skin := _palette_color(appearance.get("skin", 0), [
 		Color("#f1c7a2"), Color("#d89b72"), Color("#8e5b43")])
 	var cloth := _palette_color(appearance.get("cloth", 0), [
@@ -99,6 +101,9 @@ func _make_frame(direction: String, frame: int) -> Texture2D:
 	_rect(img, 11, 6, 12, 3, hair)
 	_rect(img, 10, 8, 4, 8, hair)
 	_rect(img, 20, 8, 4, 7, hair)
+	if body == "f":
+		_rect(img, 10, 12, 2, 6, hair)
+		_rect(img, 22, 12, 2, 6, hair)
 	_rect(img, 13, 8, 5, 2, hair_light)
 	_rect(img, 16, 10, 3, 2, hair)
 	_rect(img, 12, 13, 2, 2, outline)
