@@ -39,9 +39,9 @@ func _build_sprite_frames() -> void:
 		for gait in ["idle", "walk"]:
 			var anim := direction + "_" + gait
 			frames.add_animation(anim)
-			frames.set_animation_speed(anim, 7.0 if gait == "walk" else 2.0)
+			frames.set_animation_speed(anim, 8.0 if gait == "walk" else 2.0)
 			frames.set_animation_loop(anim, true)
-			var count := 2 if gait == "walk" else 1
+			var count := 4 if gait == "walk" else 1
 			for frame in count:
 				frames.add_frame(anim, _make_frame(direction, frame))
 	sprite.sprite_frames = frames
@@ -68,7 +68,8 @@ func _make_frame(direction: String, frame: int) -> Texture2D:
 	var shade := cloth.darkened(0.28)
 	var light := cloth.lightened(0.24)
 	var hair_light := hair.lightened(0.18)
-	var leg_shift := frame * 2 if direction == "side" else frame
+	var leg_shift := [0, 2, 0, -2][frame % 4] if direction == "side" else [0, 1, 0, -1][frame % 4]
+	var arm_shift := [0, 1, 0, -1][frame % 4]
 
 	# Soft pixel-art ground shadow is omitted: the 3D world supplies contact shadow.
 	# Boots and legs, outlined in a deep ink tone.
@@ -91,12 +92,12 @@ func _make_frame(direction: String, frame: int) -> Texture2D:
 	_rect(img, 15, 35, 2, 2, outline)
 
 	# Arms sit outside the torso so the silhouette reads at small scale.
-	_rect(img, 5, 22, 5, 14, outline)
-	_rect(img, 6, 23, 3, 11, cloth)
-	_rect(img, 23, 22, 5, 14, outline)
-	_rect(img, 24, 23, 3, 11, shade)
-	_rect(img, 6, 34, 4, 4, outline)
-	_rect(img, 24, 34, 4, 4, skin)
+	_rect(img, 5, 22 + arm_shift, 5, 14, outline)
+	_rect(img, 6, 23 + arm_shift, 3, 11, cloth)
+	_rect(img, 23, 22 - arm_shift, 5, 14, outline)
+	_rect(img, 24, 23 - arm_shift, 3, 11, shade)
+	_rect(img, 6, 34 + arm_shift, 4, 4, outline)
+	_rect(img, 24, 34 - arm_shift, 4, 4, skin)
 
 	# Neck and head, with a distinctive layered fringe.
 	_rect(img, 13, 17, 7, 5, outline)
