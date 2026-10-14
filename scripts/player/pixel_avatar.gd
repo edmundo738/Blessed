@@ -12,6 +12,11 @@ func _ready() -> void:
 	position.y = 0.88
 
 
+func refresh_appearance() -> void:
+	_build_sprite_frames()
+	_last_animation = ""
+
+
 func _build_sprite_frames() -> void:
 	sprite = AnimatedSprite3D.new()
 	sprite.name = "PixelSprite"
