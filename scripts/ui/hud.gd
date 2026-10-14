@@ -153,7 +153,7 @@ func _bars() -> void:
 	primary.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	primary.offset_left = 22
 	primary.offset_top = -70
-	primary.offset_right = 252
+	primary.offset_right = 290
 	primary.offset_bottom = -18
 	primary.add_theme_constant_override("separation", 4)
 	primary.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -165,7 +165,7 @@ func _bars() -> void:
 	needs_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	needs_button.offset_left = 22
 	needs_button.offset_top = -106
-	needs_button.offset_right = 252
+	needs_button.offset_right = 290
 	needs_button.offset_bottom = -78
 	needs_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	needs_button.add_theme_font_size_override("font_size", 11)
@@ -180,7 +180,7 @@ func _bars() -> void:
 	needs_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	needs_panel.offset_left = 22
 	needs_panel.offset_top = -274
-	needs_panel.offset_right = 252
+	needs_panel.offset_right = 290
 	needs_panel.offset_bottom = -110
 	needs_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var style := StyleBoxFlat.new()
@@ -528,7 +528,10 @@ func _refresh_hotbar() -> void:
 func _on_stat(id: String, value: float, max_value: float) -> void:
 	if not bars.has(id):
 		return
-	(bars[id] as Dictionary)["value"] = value / maxf(max_value, 0.001)
+	var bar: Dictionary = bars[id]
+	bar["value"] = value / maxf(max_value, 0.001)
+	(bar["value_label"] as Label).text = str(roundi(value))
+	_refresh_needs_panel()
 
 
 func _on_toast(key: String, seconds: float) -> void:
@@ -550,7 +553,9 @@ func _on_subtitle(key: String, seconds: float) -> void:
 func _on_focus(_who: Node, key: String) -> void:
 	if key == "":
 		prompt_label.text = ""
+		crosshair.modulate = Color(1, 1, 1, 0.76)
 		return
+	crosshair.modulate = Color(1.0, 0.84, 0.52, 0.96)
 	var text := "[F] " + Loc.t(key)
 	if interaction != null and not interaction.focus.is_empty():
 		var kind := str(interaction.focus.get("kind", ""))
