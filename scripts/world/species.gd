@@ -41,6 +41,40 @@ func _init(seed_value: int) -> void:
 	_build_rocks()
 	_build_plants()
 	_build_structures()
+	# metadados data-driven (data/species.json) por cima da geometria gerada
+	for id in trees:
+		_apply_meta("trees", trees[id])
+	for id in rocks:
+		_apply_meta("rocks", rocks[id])
+	for id in plants:
+		_apply_meta("plants", plants[id])
+
+
+## Aplica metadados data-driven sobre uma espécie já construída (sem dados = nada muda).
+func _apply_meta(kind: String, s: Species) -> void:
+	var meta := Db.species_meta(kind, s.id)
+	if meta.is_empty():
+		return
+	if meta.has("weight"):
+		s.weight = float(meta["weight"])
+	if meta.has("harvest"):
+		s.harvest = str(meta["harvest"])
+	if meta.has("height"):
+		s.height = float(meta["height"])
+	if meta.has("wind"):
+		s.wind = float(meta["wind"])
+	var sc = meta.get("scale", null)
+	if typeof(sc) == TYPE_ARRAY and sc.size() >= 2:
+		s.scale_range = Vector2(float(sc[0]), float(sc[1]))
+	var bl = meta.get("biomes", null)
+	if typeof(bl) == TYPE_ARRAY:
+		var b := PackedInt32Array()
+		for bid in bl:
+			var idx := Db.biome_index(str(bid))
+			if idx >= 0:
+				b.append(idx)
+		if b.size() > 0:
+			s.biomes = b
 
 
 func _trunk(h: float, rb: float, rt: float, seg: int, tint: Color) -> ArrayMesh:
@@ -291,6 +325,10 @@ func pick(pool: Dictionary, biome: int, r: float) -> String:
 
 ## Densidade de árvores por bioma (árvores por 100 m²).
 static func tree_density(biome: int) -> float:
+	return Db.biome_density(biome, "tree", _tree_density_default(biome))
+
+
+static func _tree_density_default(biome: int) -> float:
 	match biome:
 		Terrain.B_FOREST: return 2.6
 		Terrain.B_GROVE: return 2.0
@@ -309,6 +347,10 @@ static func tree_density(biome: int) -> float:
 
 ## Densidade de relva por bioma (tufos por m²).
 static func grass_density(biome: int) -> float:
+	return Db.biome_density(biome, "grass", _grass_density_default(biome))
+
+
+static func _grass_density_default(biome: int) -> float:
 	match biome:
 		Terrain.B_MEADOW: return 0.55
 		Terrain.B_FOREST: return 0.35

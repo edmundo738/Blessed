@@ -75,6 +75,22 @@ func _run() -> void:
 		biomes[world.terrain.dominant_s(x, z, h, world.terrain.slope(x, z))] = true
 	check("mais de 3 biomas", biomes.size() > 3, "n=%d" % biomes.size())
 
+	# ── 2b. camada data-driven (data/*.json carregado pelo Db) ──────────────
+	check("Db: biomas carregados", Db.biome_count() >= 12, "n=%d" % Db.biome_count())
+	check("Db: ordem dos biomas bate certo", Db.biome_index("forest") == Terrain.B_FOREST,
+		"forest=%d" % Db.biome_index("forest"))
+	var _fc := Db.biome_color(Terrain.B_FOREST, Color.BLACK)
+	check("Db: cor do bioma vem do JSON", _fc.g > _fc.r and _fc.g > 0.3, "g=%.2f" % _fc.g)
+	check("Db: terrain peak_height", Db.terrain_num("peak_height", 0.0) > 100.0,
+		"=%.0f" % Db.terrain_num("peak_height", 0.0))
+	check("Db: quality preset 2", not Db.quality_preset(2, {}).is_empty())
+	check("Db: species oak", not Db.species_meta("trees", "oak").is_empty())
+	check("Db→species: densidade da floresta", SpeciesKit.tree_density(Terrain.B_FOREST) > 1.0,
+		"=%.2f" % SpeciesKit.tree_density(Terrain.B_FOREST))
+	# guarda de regressão: as propriedades que o ambient_fx usa têm de existir
+	check("Game.hour existe", typeof(Game.hour) == TYPE_FLOAT)
+	check("Game.settings tem quality", Game.settings.has("quality"))
+
 	# ── 3. inventário ─────────────────────────────────────────────────────
 	var inv: Inventory = main.inv
 	inv.add("wood", 20)

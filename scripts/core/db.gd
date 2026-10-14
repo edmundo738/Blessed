@@ -129,3 +129,159 @@ func recipes_for(near: Array = []) -> Array:
 		if st2.is_empty() or st2 in near:
 			out.append(r)
 	return out
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  CAMADA DATA-DRIVEN — data/*.json (+ overrides de Mods)
+#
+#  Biomas, afinação do terreno, qualidade e espécies vivem em JSON editável
+#  (data/). Cada accessor aceita um `fallback`: se o JSON faltar ou for
+#  inválido, devolve o valor embutido e o jogo comporta-se EXATAMENTE como
+#  antes. É 100% aditivo — não parte nada.
+# ══════════════════════════════════════════════════════════════════════════
+var biomes: Array = []
+var terrain_cfg: Dictionary = {}
+var quality_cfg: Dictionary = {}
+var species_cfg: Dictionary = {}
+var _biome_idx: Dictionary = {}
+
+
+func _ready() -> void:
+	name = "Db"
+	reload_data()
+
+
+## (Re)carrega os dados de data/. Chamado no arranque; pode ser chamado de
+## novo após instalar/desativar mods para aplicar overrides.
+func reload_data() -> void:
+	var bd := _json_dict("res://data/biomes.json")
+	var arr = bd.get("biomes", [])
+	biomes = arr if typeof(arr) == TYPE_ARRAY else []
+	terrain_cfg = _json_dict("res://data/terrain.json")
+	quality_cfg = _json_dict("res://data/quality.json")
+	species_cfg = _json_dict("res://data/species.json")
+	_rebuild_biome_idx()
+	_apply_mods()
+	print("[Db] data-driven: biomas=%d | terrain=%d chaves | quality=%s | espécies=%d" % [
+		biomes.size(), terrain_cfg.size(),
+		"sim" if not quality_cfg.is_empty() else "não", _count_species()])
+
+
+func _json_dict(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {}
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if typeof(parsed) != TYPE_DICTIONARY:
+		push_warning("[Db] JSON inválido: " + path)
+		return {}
+	return parsed
+
+
+func _rebuild_biome_idx() -> void:
+	_biome_idx.clear()
+	for i in biomes.size():
+		if typeof(biomes[i]) == TYPE_DICTIONARY:
+			_biome_idx[str(biomes[i].get("id", ""))] = i
+
+
+func _count_species() -> int:
+	var n := 0
+	for kind in ["trees", "rocks", "plants"]:
+		var k = species_cfg.get(kind, {})
+		if typeof(k) == TYPE_DICTIONARY:
+			n += k.size()
+	return n
+
+
+## Overrides vindos dos mods (Mods.biomes/terrain/quality/species).
+func _apply_mods() -> void:
+	for id in Mods.biomes:
+		var idx := biome_index(str(id))
+		var ov = Mods.biomes[id]
+		if idx >= 0 and typeof(ov) == TYPE_DICTIONARY:
+			for k in ov:
+				biomes[idx][k] = ov[k]
+	for k in Mods.terrain:
+		terrain_cfg[k] = Mods.terrain[k]
+	for k in Mods.quality:
+		quality_cfg[k] = Mods.quality[k]
+	for kind in Mods.species:
+		if typeof(species_cfg.get(kind, null)) != TYPE_DICTIONARY:
+			species_cfg[kind] = {}
+		for id in Mods.species[kind]:
+			if typeof(species_cfg[kind].get(id, null)) != TYPE_DICTIONARY:
+				species_cfg[kind][id] = {}
+			var ov2 = Mods.species[kind][id]
+			if typeof(ov2) == TYPE_DICTIONARY:
+				for k2 in ov2:
+					species_cfg[kind][id][k2] = ov2[k2]
+
+
+# ── accessors (todos com fallback para o valor embutido) ──────────────────
+func biome_count() -> int:
+	return biomes.size()
+
+
+## Índice de um bioma pelo id ("forest"); -1 se não existir.
+func biome_index(id: String) -> int:
+	return int(_biome_idx.get(id, -1))
+
+
+func biome_color(i: int, fallback: Color) -> Color:
+	if i >= 0 and i < biomes.size() and typeof(biomes[i]) == TYPE_DICTIONARY:
+		var c = biomes[i].get("color", null)
+		if typeof(c) == TYPE_ARRAY and c.size() >= 3:
+			return Color(float(c[0]), float(c[1]), float(c[2]))
+	return fallback
+
+
+## kind = "tree" ou "grass".
+func biome_density(i: int, kind: String, fallback: float) -> float:
+	if i >= 0 and i < biomes.size() and typeof(biomes[i]) == TYPE_DICTIONARY:
+		var key := "tree_density" if kind == "tree" else "grass_density"
+		if biomes[i].has(key):
+			return float(biomes[i][key])
+	return fallback
+
+
+func terrain_num(key: String, fallback: float) -> float:
+	if terrain_cfg.has(key):
+		return float(terrain_cfg[key])
+	return fallback
+
+
+func terrain_noise(nm: String, key: String, fallback: float) -> float:
+	var n = terrain_cfg.get("noise", {})
+	if typeof(n) == TYPE_DICTIONARY and typeof(n.get(nm, null)) == TYPE_DICTIONARY:
+		if n[nm].has(key):
+			return float(n[nm][key])
+	return fallback
+
+
+func continent_spline(fallback: Array) -> Array:
+	var s = terrain_cfg.get("continent_spline", null)
+	if typeof(s) == TYPE_ARRAY and not s.is_empty():
+		return s
+	return fallback
+
+
+func quality_preset(q: int, fallback: Dictionary) -> Dictionary:
+	var p = quality_cfg.get("presets", {})
+	if typeof(p) == TYPE_DICTIONARY and typeof(p.get(str(q), null)) == TYPE_DICTIONARY:
+		return p[str(q)]
+	return fallback
+
+
+func quality_value(key: String, fallback: float) -> float:
+	var v = quality_cfg.get("values", {})
+	if typeof(v) == TYPE_DICTIONARY and v.has(key):
+		return float(v[key])
+	return fallback
+
+
+## Metadados data-driven de uma espécie ({} se não houver).
+func species_meta(kind: String, id: String) -> Dictionary:
+	var k = species_cfg.get(kind, {})
+	if typeof(k) == TYPE_DICTIONARY and typeof(k.get(id, null)) == TYPE_DICTIONARY:
+		return k[id]
+	return {}

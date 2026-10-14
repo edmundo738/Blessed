@@ -303,45 +303,52 @@ func is_in_water(p: Vector3) -> bool:
 func _apply_quality() -> void:
 	## Iluminacao + atmosfera por perfil/renderizador.
 	## Volumetric fog e SSR so existem em Forward+; SSAO tambem em Compatibility.
+	## Toggles e valores vem de data/quality.json (Db.quality_*); sem dados, usa
+	## o comportamento embutido (q>=1 / q>=2).
 	if environment == null:
 		return
 	var q := int(Game.settings.get("quality", 1))
 	var fp := _rm == "forward_plus"
+	var preset := Db.quality_preset(q, {"ssao": q >= 1, "volumetric_fog": q >= 1, "ssr": q >= 2, "dof": q >= 1})
+	var ssao_on := bool(preset.get("ssao", q >= 1))
+	var fog_on := bool(preset.get("volumetric_fog", q >= 1))
+	var ssr_on := bool(preset.get("ssr", q >= 2))
+	var dof_on := bool(preset.get("dof", q >= 1))
 	# tonemap cinematografico + exposicao controlada (contra os "brancos" V-02)
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	environment.tonemap_exposure = 0.98
-	environment.tonemap_white = 6.0
+	environment.tonemap_exposure = Db.quality_value("tonemap_exposure", 0.98)
+	environment.tonemap_white = Db.quality_value("tonemap_white", 6.0)
 	# profundidade atmosferica via depth fog (todos os renderers)
-	environment.fog_aerial_perspective = 0.45
+	environment.fog_aerial_perspective = Db.quality_value("fog_aerial_perspective", 0.45)
 	# SSAO (profundidade de contacto): Forward+ e Compatibility; Mobile nao
 	if _rm != "mobile":
-		environment.ssao_enabled = q >= 1
-		environment.ssao_radius = 1.1
-		environment.ssao_intensity = 1.3
+		environment.ssao_enabled = ssao_on
+		environment.ssao_radius = Db.quality_value("ssao_radius", 1.1)
+		environment.ssao_intensity = Db.quality_value("ssao_intensity", 1.3)
 	# nevoeiro volumetrico: SO Forward+
-	if fp and q >= 1:
+	if fp and fog_on:
 		environment.volumetric_fog_enabled = true
-		environment.volumetric_fog_density = 0.018
+		environment.volumetric_fog_density = Db.quality_value("fog_density", 0.018)
 		environment.volumetric_fog_albedo = Color(0.76, 0.83, 0.93)
-		environment.volumetric_fog_length = 96.0
-		environment.volumetric_fog_sky_affect = 0.4
+		environment.volumetric_fog_length = Db.quality_value("fog_length", 96.0)
+		environment.volumetric_fog_sky_affect = Db.quality_value("fog_sky_affect", 0.4)
 	else:
 		environment.volumetric_fog_enabled = false
 	# reflexos screen-space: SO Forward+, so perfil cinematografico
-	if fp and q >= 2:
+	if fp and ssr_on:
 		environment.ssr_enabled = true
-		environment.ssr_max_steps = 64
+		environment.ssr_max_steps = int(Db.quality_value("ssr_max_steps", 64))
 	else:
 		environment.ssr_enabled = false
 	# profundidade de campo (DoF): da a "sensacao de profundidade" cinematografica.
 	# CameraAttributesPractical; so Forward+/Mobile (nao Compatibility).
 	if env_node != null:
-		if _rm != "gl_compatibility" and q >= 1:
+		if _rm != "gl_compatibility" and dof_on:
 			var ca := CameraAttributesPractical.new()
 			ca.dof_blur_far_enabled = true
-			ca.dof_blur_far_distance = 55.0
-			ca.dof_blur_far_transition = 45.0
-			ca.dof_blur_amount = 0.06
+			ca.dof_blur_far_distance = Db.quality_value("dof_far_distance", 55.0)
+			ca.dof_blur_far_transition = Db.quality_value("dof_far_transition", 45.0)
+			ca.dof_blur_amount = Db.quality_value("dof_blur_amount", 0.06)
 			env_node.camera_attributes = ca
 		else:
 			env_node.camera_attributes = null

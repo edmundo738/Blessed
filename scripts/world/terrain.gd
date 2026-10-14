@@ -75,9 +75,11 @@ var n_crag: FastNoiseLite
 func _init(p_seed: int = 1) -> void:
 	seed_value = p_seed
 	# ── escala do mundo: regiões de vários km, para o mundo ter geografia e não "sal e pimenta"
-	n_continent = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.00085, 4, 0.5, 2.0, p_seed + 1)
+	n_continent = _noise(FastNoiseLite.TYPE_SIMPLEX, Db.terrain_noise("continent", "freq", 0.00085),
+		int(Db.terrain_noise("continent", "octaves", 4)), 0.5, 2.0, p_seed + 1)
 	n_detail = _noise(FastNoiseLite.TYPE_PERLIN, 0.021, 3, 0.5, 2.0, p_seed + 2)
-	n_mountain = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.0030, 6, 0.5, 2.1, p_seed + 3)
+	n_mountain = _noise(FastNoiseLite.TYPE_SIMPLEX, Db.terrain_noise("mountain", "freq", 0.0030),
+		int(Db.terrain_noise("mountain", "octaves", 6)), 0.5, 2.1, p_seed + 3)
 	n_mountain.fractal_type = FastNoiseLite.FRACTAL_RIDGED
 	n_mask = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.0011, 3, 0.5, 2.0, p_seed + 4)
 	n_moist = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.00075, 3, 0.5, 2.0, p_seed + 5)
@@ -152,16 +154,19 @@ func height(x: float, z: float) -> float:
 	# rios: só abaixo de ~30 m. Vale largo e suave + leito estreito.
 	var low := 1.0 - _smooth(6.0, 34.0, h)
 	if low > 0.01:
+		var rvalley := Db.terrain_num("river_valley", RIVER_VALLEY)
+		var rwidth := Db.terrain_num("river_width", RIVER_WIDTH)
+		var rbed := Db.terrain_num("river_bed", RIVER_BED)
 		var rx := x + n_warp2.get_noise_2d(x, z) * 34.0
 		var rz := z + n_warp2.get_noise_2d(x - 40.0, z + 40.0) * 34.0
 		var rv := absf(n_river.get_noise_2d(rx, rz))
-		if rv < RIVER_VALLEY:
-			var tv := 1.0 - _smooth(0.0, RIVER_VALLEY, rv)
+		if rv < rvalley:
+			var tv := 1.0 - _smooth(0.0, rvalley, rv)
 			# margens: o terreno desce em S até perto do nível da água
 			h = lerpf(h, minf(h, SEA_LEVEL + 1.2), tv * tv * low * 0.85)
-			if rv < RIVER_WIDTH:
-				var t := 1.0 - _smooth(0.0, RIVER_WIDTH, rv)
-				h = lerpf(h, minf(h, RIVER_BED), t * low)
+			if rv < rwidth:
+				var t := 1.0 - _smooth(0.0, rwidth, rv)
+				h = lerpf(h, minf(h, rbed), t * low)
 	# caminho
 	var d := path_distance(x, z)
 	if d < PATH_SOFT:
@@ -194,7 +199,7 @@ func _land(x: float, z: float, detail: bool = true) -> float:
 	var hot_dry := _smooth(0.58, 0.78, cl.x) * (1.0 - _smooth(0.30, 0.50, cl.y)) * (1.0 - spawn)
 
 	# 1) base pela continentalidade
-	var h := _pl(c, CONT_PTS)
+	var h := _pl(c, Db.continent_spline(CONT_PTS))
 
 	# 2) colinas suaves (mais altas onde a erosão é baixa)
 	h += n_hills.get_noise_2d(px, pz) * (5.0 + 20.0 * (1.0 - er)) * _smooth(-0.15, 0.2, c)
@@ -203,17 +208,17 @@ func _land(x: float, z: float, detail: bool = true) -> float:
 	var m := _smooth(0.04, 0.50, c) * pow(1.0 - er, 1.15)
 	if m > 0.001:
 		var ridge := clampf(n_mountain.get_noise_2d(px, pz) * 1.2 + 0.12, 0.0, 1.0)
-		var peak := pow(ridge, 1.9) * 235.0 * m * m
+		var peak := pow(ridge, 1.9) * Db.terrain_num("peak_height", 235.0) * m * m
 		# rochedos: ridged de alta frequência, só onde já é alto (dá agulhas e degraus)
 		var hi := _smooth(30.0, 120.0, peak)
 		if hi > 0.0 and detail:
-			peak += n_crag.get_noise_2d(px, pz) * 22.0 * hi
+			peak += n_crag.get_noise_2d(px, pz) * Db.terrain_num("crag_amount", 22.0) * hi
 		h += peak
 
 	# 4) mesas / planaltos (badlands): sobe e quantiza em patamares
 	var mesa_w := _smooth(0.50, 0.72, n_mesa.get_noise_2d(px, pz) * 0.5 + 0.5) * hot_dry * _smooth(0.0, 0.25, c)
 	if mesa_w > 0.001:
-		var step_h := 12.0
+		var step_h := Db.terrain_num("mesa_step", 12.0)
 		var hh := (h + 10.0 * mesa_w) / step_h
 		var f := floorf(hh)
 		var sharp := _smooth(0.30, 0.55, hh - f)
@@ -309,10 +314,10 @@ func biome_weights_s(x: float, z: float, h: float, sl: float, out: PackedFloat32
 		out[i] = 0.0
 
 	# altitude / declive
-	var snowline := 150.0 - cl.x * 70.0
+	var snowline := Db.terrain_num("snowline_base", 150.0) - cl.x * Db.terrain_num("snowline_temp_scale", 70.0)
 	out[B_SAND] = 1.0 - _smooth(-0.3, 1.8, above)
 	out[B_SNOW] = _smooth(snowline, snowline + 36.0, h) * 1.4 + _smooth(0.20, 0.04, t) * 0.8
-	out[B_ROCK] = _smooth(0.34, 0.66, sl) * 1.5 + _smooth(85.0, 135.0, h) * 0.55
+	out[B_ROCK] = _smooth(0.34, 0.66, sl) * 1.5 + _smooth(Db.terrain_num("rock_altitude_min", 85.0), Db.terrain_num("rock_altitude_max", 135.0), h) * 0.55
 
 	# clima (Whittaker)
 	var lowland := 1.0 - _smooth(1.0, 3.0, above)
@@ -350,7 +355,7 @@ func ground_color_s(x: float, z: float, h: float, sl: float, buf: PackedFloat32A
 	for i in BIOME_COUNT:
 		if buf[i] <= 0.001:
 			continue
-		c += BIOME_COLOR[i] * buf[i]
+		c += Db.biome_color(i, BIOME_COLOR[i]) * buf[i]
 	# variação local para não parecer plástico
 	var t := n_tint.get_noise_2d(x, z) * 0.07
 	var under := clampf(h - SEA_LEVEL, -2.0, 2.0) * 0.02

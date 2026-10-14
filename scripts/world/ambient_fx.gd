@@ -6,7 +6,7 @@ extends Node3D
 ## Usa CPUParticles3D de propósito: funciona em TODOS os renderers (Forward+,
 ## Mobile e Compatibility — ao contrário de GPUParticles3D, que o Compatibility
 ## não suporta) e, para contagens baixas, o custo de CPU é irrelevante.
-## A densidade e o ligar/desligar dependem do perfil de qualidade (Game.quality).
+## A densidade e o ligar/desligar dependem do perfil de qualidade (Game.settings["quality"]).
 ## Segue o jogador para haver sempre partículas à volta da câmara.
 
 var player: Node3D

@@ -1,0 +1,29 @@
+{
+  "_comment": "Afinação do gerador de terreno. Tudo opcional: o que faltar usa o valor embutido. Frequências em ciclos/metro (menor = regiões maiores).",
+  "sea_level": 0.0,
+  "river_width": 0.030,
+  "river_valley": 0.105,
+  "river_bed": -2.6,
+  "path_half_width": 2.6,
+  "path_soft": 5.2,
+  "village_radius": 17.0,
+  "noise": {
+    "continent": { "freq": 0.00085, "octaves": 4 },
+    "mountain":  { "freq": 0.0030,  "octaves": 6 },
+    "moist":     { "freq": 0.00075, "octaves": 3 },
+    "temp":      { "freq": 0.00055, "octaves": 3 },
+    "hills":     { "freq": 0.0065,  "octaves": 4 },
+    "erosion":   { "freq": 0.0016,  "octaves": 3 }
+  },
+  "continent_spline": [
+    [-1.00, -46.0], [-0.62, -30.0], [-0.42, -7.0], [-0.24, 0.8],
+    [0.00, 4.5], [0.25, 11.0], [0.55, 22.0], [1.00, 36.0]
+  ],
+  "peak_height": 235.0,
+  "crag_amount": 22.0,
+  "mesa_step": 12.0,
+  "snowline_base": 150.0,
+  "snowline_temp_scale": 70.0,
+  "rock_altitude_min": 85.0,
+  "rock_altitude_max": 135.0
+}

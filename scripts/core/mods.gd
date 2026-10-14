@@ -29,6 +29,10 @@ extends Node
 var items := {}        # id -> Dictionary (override de Db.item)
 var recipes := []      # receitas adicionais
 var props := {}        # id -> {mesh=caminho, scale=...}
+var biomes := {}       # id -> {color, tree_density, grass_density}
+var terrain := {}      # chaves de afinação do terreno (data/terrain.json)
+var quality := {}      # presets/valores de qualidade (data/quality.json)
+var species := {}      # kind -> id -> {biomes, weight, harvest, scale, ...}
 var loaded := []       # nomes dos mods carregados
 var tres_loaded := 0   # recursos .tres carregados
 
@@ -98,6 +102,27 @@ func _load(path: String) -> void:
 				if v.has("mesh"):
 					v["mesh"] = path.path_join(str(v["mesh"]))
 				props[str(k)] = v
+	# ── mundo data-driven: biomas, terreno, qualidade, espécies ──
+	var bm = parsed.get("biomes", {})
+	if typeof(bm) == TYPE_DICTIONARY:
+		for k in bm:
+			biomes[str(k)] = bm[k]
+	var tn = parsed.get("terrain", {})
+	if typeof(tn) == TYPE_DICTIONARY:
+		for k in tn:
+			terrain[str(k)] = tn[k]
+	var ql = parsed.get("quality", {})
+	if typeof(ql) == TYPE_DICTIONARY:
+		for k in ql:
+			quality[str(k)] = ql[k]
+	var sp = parsed.get("species", {})
+	if typeof(sp) == TYPE_DICTIONARY:
+		for kind in sp:
+			if typeof(species.get(kind, null)) != TYPE_DICTIONARY:
+				species[kind] = {}
+			if typeof(sp[kind]) == TYPE_DICTIONARY:
+				for id in sp[kind]:
+					species[kind][str(id)] = sp[kind][id]
 
 
 func has_item(id: String) -> bool:
