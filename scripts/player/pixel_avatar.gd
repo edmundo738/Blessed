@@ -17,6 +17,12 @@ func refresh_appearance() -> void:
 	_last_animation = ""
 
 
+func preview_texture() -> Texture2D:
+	if sprite == null or sprite.sprite_frames == null:
+		return null
+	return sprite.sprite_frames.get_frame_texture("front_idle", 0)
+
+
 func _build_sprite_frames() -> void:
 	if sprite == null:
 		sprite = AnimatedSprite3D.new()
