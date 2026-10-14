@@ -131,6 +131,7 @@ func _update_focus() -> void:
 	focus = best
 	if changed:
 		progress = 0.0
+		_impact_t = 0.0
 		Bus.focus_changed.emit(self, prompt_key())
 
 
@@ -249,13 +250,13 @@ func _handle_use(delta: float) -> void:
 			elif holding:
 				_work_tick(delta, 0.9)
 			else:
-				progress = 0.0
+				progress = maxf(0.0, progress - delta * 0.16)
 				_impact_t = 0.0
 		"harvest":
 			if holding:
 				_work_tick(delta, 1.0)
 			else:
-				progress = 0.0
+				progress = maxf(0.0, progress - delta * 0.16)
 				_impact_t = 0.0
 	_hold = holding
 	_was_holding = holding
