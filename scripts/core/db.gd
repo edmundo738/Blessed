@@ -14,8 +14,6 @@ const ITEMS := {
 	"leaf":         {"kind": "resource", "stack": 60, "icon": "leaf"},
 	"stick":        {"kind": "resource", "stack": 40, "icon": "stick"},
 	# ── comida ──────────────────────────────────────────────────────────────
-	"berry":        {"kind": "food", "stack": 20, "icon": "berry",
-					 "food": 12, "drink": 6, "risk": 0.0},
 	"mushroom":     {"kind": "food", "stack": 20, "icon": "mushroom",
 					 "food": 18, "drink": 0, "risk": 0.25},
 	"meat_raw":     {"kind": "food", "stack": 10, "icon": "meat_raw",
@@ -61,7 +59,7 @@ const RECIPES := [
 	{"id": "meat_cooked", "result": "meat_cooked", "qty": 1, "needs": {"meat_raw": 1}, "station": "campfire"},
 	{"id": "fish_cooked", "result": "fish_cooked", "qty": 1, "needs": {"fish_raw": 1}, "station": "campfire"},
 	{"id": "stew",      "result": "stew",        "qty": 1,
-	 "needs": {"meat_cooked": 1, "mushroom": 2, "berry": 2}, "station": "campfire"},
+	 "needs": {"meat_cooked": 1, "mushroom": 2, "water": 1}, "station": "campfire"},
 ]
 
 ## O que sai de cada nó do mundo quando é colhido.
@@ -69,11 +67,10 @@ const HARVEST := {
 	"tree_oak":    {"action": "chop", "tool": "axe", "hp": 6, "yields": {"wood": 3, "stick": 1, "leaf": 3}},
 	"tree_pine":   {"action": "chop", "tool": "axe", "hp": 8, "yields": {"wood": 4, "leaf": 2}},
 	"tree_birch":  {"action": "chop", "tool": "axe", "hp": 5, "yields": {"wood": 2, "stick": 2, "leaf": 3}},
-	"tree_sakura": {"action": "chop", "tool": "axe", "hp": 6, "yields": {"wood": 2, "berry": 2, "leaf": 2}},
+	"tree_sakura": {"action": "chop", "tool": "axe", "hp": 6, "yields": {"wood": 2, "leaf": 2}},
 	"tree_willow":{"action": "chop", "tool": "axe", "hp": 7, "yields": {"wood": 3, "stick": 2, "leaf": 4}},
 	"rock":        {"action": "mine", "tool": "pickaxe", "hp": 5, "yields": {"stone": 2, "flint": 1}},
-	"bush":        {"action": "pick", "tool": "", "hp": 1, "yields": {"berry": 2, "fiber": 1}},
-	"bush_berry":  {"action": "pick", "tool": "", "hp": 1, "yields": {"berry": 3}},
+	"bush":        {"action": "pick", "tool": "", "hp": 1, "yields": {"fiber": 1, "leaf": 2}},
 	"tuft":        {"action": "pick", "tool": "", "hp": 1, "yields": {"fiber": 2}},
 	"mushroom":    {"action": "pick", "tool": "", "hp": 1, "yields": {"mushroom": 1}},
 	"flint_node":  {"action": "pick", "tool": "", "hp": 1, "yields": {"flint": 2}},

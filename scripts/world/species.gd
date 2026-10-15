@@ -283,8 +283,7 @@ func _build_rocks() -> void:
 
 
 func _build_plants() -> void:
-	# arbusto de bagas: grupos sobrepostos em vez de uma única esfera.
-	# O LOD reduz lobos, mantendo a leitura da silhueta a distância.
+	# Arbusto simples; a recolha fornece fibra e folhas, sem fruto inventado.
 	var bs := Species.new()
 	bs.id = "bush"
 	bs.lods = [_shrub(7, 0.50, Color(0.24, 0.55, 0.28)),
@@ -303,26 +302,6 @@ func _build_plants() -> void:
 	bs.height = 0.7
 	bs.wind = 1.0
 	plants["bush"] = bs
-	# Variante pouco frequente e imediatamente legível: frutos vermelhos visíveis
-	# entre as folhas, em vez de uma indicação textual sem pista visual.
-	var berry_bush := Species.new()
-	berry_bush.id = "berry_bush"
-	berry_bush.lods = [_berry_shrub(7, 0.50, 4), _berry_shrub(4, 0.50, 3),
-		_berry_shrub(2, 0.50, 2)]
-	var berry_lods := BlessedBlenderAssets.lods_for("plant_berry_bush")
-	if not berry_lods.is_empty():
-		berry_bush.lods = berry_lods
-		berry_bush.materials_authored = true
-	berry_bush.tint = Color.WHITE
-	berry_bush.scale_range = Vector2(0.8, 1.3)
-	berry_bush.biomes = bs.biomes
-	berry_bush.weight = 0.18
-	berry_bush.harvest = "bush_berry"
-	berry_bush.y_offset = bs.y_offset
-	berry_bush.height = bs.height
-	berry_bush.wind = bs.wind
-	plants["berry_bush"] = berry_bush
-
 	# cogumelo
 	var mush_parts: Array = [
 		MeshKit.tapered(rng, 0.16, 0.045, 0.05, 5, 1, 0.0, false, Color(0.92, 0.88, 0.8)),
@@ -341,18 +320,6 @@ func _build_plants() -> void:
 	ms.harvest = "mushroom"
 	ms.height = 0.3
 	plants["mushroom"] = ms
-
-
-func _berry_shrub(lobes: int, radius: float, berry_count: int) -> ArrayMesh:
-	var parts: Array = [_shrub(lobes, radius, Color(0.24, 0.55, 0.28))]
-	for i in berry_count:
-		var angle := TAU * (float(i) / float(berry_count)) + 0.35
-		var p := Vector3(cos(angle) * radius * 0.72,
-			radius * (0.42 + 0.2 * float(i % 2)), sin(angle) * radius * 0.72)
-		var berry := MeshKit.blob(rng, 0.095, 1, 0.08, Vector3(0.9, 1.0, 0.9),
-			Color(0.82, 0.12, 0.12))
-		parts.append(_offset(berry, p))
-	return _merge(parts)
 
 
 func _build_structures() -> void:

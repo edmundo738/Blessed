@@ -31,7 +31,6 @@ Godot 4.7.2. As variações de escala pequenas são controladas por `data/specie
 | `tree_sakura` | TwistedTree 1 | 5,80 m | 15 511 | 11 276 / 5 457 |
 | `tree_willow` | CommonTree 3 | 7,40 m | 6 086 | 4 216 / 1 924 |
 | `plant_bush` | Bush Common with Flowers | 0,95 m | 2 618 | 1 647 / 789 |
-| `plant_berry_bush` | Bush Common, flowers replaced by berries | 1,05 m | 4 054 | 2 130 / 1 021 |
 | `plant_mushroom` | Mushroom Common | 0,50 m | 555 | 351 / 192 |
 | `rock_cluster` | Medium Rock 2 | 1,23 m | 249 | 164 / 86 |
 | `grass_clump` | Common Grass Short | 0,68 m | 153 | — |
@@ -40,22 +39,22 @@ Godot 4.7.2. As variações de escala pequenas são controladas por `data/specie
 | `clover_clump` | Clover 1 | 0,40 m | 267 | — |
 | `reed_clump` | Wispy Tall Grass | 1,12 m | 666 | — |
 
-O arbusto com bagas continua a ser uma única espécie: retirei as faces do
-material das flores da mesma origem e acrescentei bagas vermelhas nesse arbusto.
-Cogumelos, fetos, rochas e cada árvore continuam em ficheiros e grupos próprios.
+O modelo de arbusto com bagas permanece apenas como asset-fonte legado e já não é
+instanciado no jogo. Cogumelos, fetos, rochas e cada árvore continuam em ficheiros
+e grupos próprios.
 O verdete pintado da rocha foi neutralizado; não há uma planta misturada dentro
 da malha da pedra.
 
 ## Como os LODs entram no mundo
 
-- Árvores, arbustos, bagas, cogumelos e rochas têm mesh base, LOD1 e LOD2.
+- Árvores, arbustos, cogumelos e rochas têm mesh base, LOD1 e LOD2.
 - O gerador tenta os rácios de simplificação `0,58` e `0,25`; a tabela contém a
   contagem final real de vértices após exportação/importação.
-- O mundo usa três anéis de chunks: `lod 0` para o chunk do jogador e vizinhos,
-  `lod 1` até ao segundo anel, e `lod 2` no anel exterior. A seleção é por anel
-  quadrado de chunks de 48 m, não por um limite circular exato.
-- Apenas `lod 0` recebe colisões e sombras detalhadas. A relva existe nos dois
-  anéis interiores; as algas ficam no mais próximo, debaixo de água rasa.
+- O mundo usa quatro faixas por distância: `lod 0` até 60 m, `lod 1` até 120 m,
+  `lod 2` até 180 m e `lod 3` no horizonte. Uma histerese de 8 m evita alternância
+  visível; o quarto nível só desenha terreno com uma grelha mais leve.
+- Só `lod 0` recebe colisões e sombras detalhadas. A relva diminui com a distância;
+  as algas ficam no anel mais próximo, debaixo de água rasa.
 - Cada `MultiMeshInstance3D` pertence a um chunk, para o motor poder ocultar
   grupos inteiros. O self-test mediu 10 682 instâncias de vegetação no arranque.
 

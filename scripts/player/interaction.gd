@@ -110,6 +110,19 @@ func _update_focus() -> void:
 			best_score = s
 			best = {"kind": "harvest", "ref": n, "pos": p}
 
+	# Troncos abatidos continuam a ser alvos do mundo até todos os toros saírem.
+	for c in get_tree().get_nodes_in_group("fellable_logs"):
+		if not is_instance_valid(c) or not c.has_method("interaction_target"):
+			continue
+		var data: Dictionary = c.call("interaction_target")
+		if data.is_empty():
+			continue
+		var p: Vector3 = data["pos"]
+		var s := _score(p, from, dir, r)
+		if s < best_score:
+			best_score = s
+			best = {"kind": "felled_tree", "ref": c, "pos": p}
+
 	# pessoas
 	if npc_root != null:
 		for c in npc_root.get_children():
@@ -182,6 +195,8 @@ func prompt_key() -> String:
 			return "prompt.remove"
 		"npc":
 			return "prompt.talk"
+		"felled_tree":
+			return "prompt.take_log"
 		"water":
 			return "prompt.drink" if inv.count("bottle") == 0 else "prompt.fill"
 	return "prompt.use"
@@ -200,11 +215,13 @@ func _do_interact(_a: Dictionary) -> Dictionary:
 		"harvest":
 			var harvest_kind := str(focus["ref"].get("kind", ""))
 			if harvest_kind.begins_with("tree") or harvest_kind == "rock":
-				Bus.say("prompt.hold_harvest", 1.8)
-				return {"handled": false, "failed": true, "reason": "hold_to_work"}
-			# Plantas e bagas são recolhidas num gesto. Árvores e rochas exigem
+				# O mesmo F começa o corte; manter F ou o rato continua a ação.
+				return {"handled": true, "ok": true}
+			# Plantas são recolhidas num gesto. Árvores e rochas exigem
 			# ferramenta/impactos contínuos para não parecerem botões mágicos.
 			_harvest_done()
+		"felled_tree":
+			_take_felled_log()
 		"structure":
 			var e: Dictionary = focus["ref"]
 			if str(e["id"]) == "campfire" and not bool(e.get("lit", false)):
@@ -232,6 +249,7 @@ func _rest_in_bed() -> void:
 # ══════════════════════════════════════════════════════════════════════════
 func _handle_use(delta: float) -> void:
 	var holding := Input.is_action_pressed("use") and not building
+	var holding_work := (Input.is_action_pressed("interact") or holding) and not building
 	if focus.is_empty():
 		_hold = false
 		_was_holding = false
@@ -259,12 +277,15 @@ func _handle_use(delta: float) -> void:
 		"harvest":
 			var harvest_kind := str(focus["ref"].get("kind", ""))
 			var needs_held_work := harvest_kind.begins_with("tree") or harvest_kind == "rock"
-			if holding and needs_held_work:
+			if holding_work and needs_held_work:
 				_work_tick(delta, 1.0)
 			else:
 				# Plantas/frutos têm apenas ação rápida F; o rato não repete a mesma ação.
 				progress = 0.0
 				_impact_t = 0.0
+		"felled_tree":
+			progress = 0.0
+			_impact_t = 0.0
 	_hold = holding
 	_was_holding = holding
 
@@ -343,10 +364,15 @@ func _hit_feedback() -> void:
 
 func _harvest_done() -> void:
 	var n: Dictionary = focus["ref"]
-	var spec: Dictionary = Db.HARVEST.get(str(n["kind"]), {})
+	var harvest_kind := str(n["kind"])
+	var is_tree := harvest_kind.begins_with("tree")
+	var spec: Dictionary = Db.HARVEST.get(harvest_kind, {})
 	var yields: Dictionary = spec.get("yields", {})
 	var dropped_total := 0
 	for k in yields:
+		# Madeira fica no tronco abatido; o jogador retira cada toro com F.
+		if is_tree and str(k) == "wood":
+			continue
 		var qty := int(yields[k])
 		var bonus := 0.35 if str(Game.profile.get("soul", "")) != "curious" else 0.6
 		if randf() < bonus:
@@ -360,8 +386,6 @@ func _harvest_done() -> void:
 	world.mark_harvested(n)
 	Sfx.play_at("chop", focus["pos"], -4.0, 0.72)
 	fx.burst(focus["pos"], Color(0.6, 0.45, 0.3), 16)
-	if dropped_total > 0:
-		Bus.say("msg.resources_fell", 2.4)
 	Bus.node_harvested.emit(str(n["species"]), str(n["kind"]), focus["pos"])
 	Game.bump("harvest_" + str(n["kind"]))
 	progress = 0.0
@@ -370,16 +394,34 @@ func _harvest_done() -> void:
 
 func _drop_resource(id: String, qty: int, at: Vector3) -> void:
 	var packed: Script = load("res://scripts/world/dropped_item.gd")
-	var drop: Area3D = packed.new() as Area3D
+	var drop := packed.new() as RigidBody3D
+	if drop == null:
+		return
 	drop.set("item_id", id)
 	drop.set("amount", qty)
 	drop.set("inv", inv)
 	drop.set("player_ref", player)
-	world.add_child(drop)
 	var angle := randf() * TAU
-	var spread := randf_range(0.35, 0.95)
-	drop.global_position = at + Vector3(cos(angle) * spread, 0.42, sin(angle) * spread)
 	drop.set("launch_direction", Vector3(cos(angle), 0.0, sin(angle)))
+	drop.position = world.to_local(at + Vector3(0.0, 0.42, 0.0))
+	world.add_child(drop)
+
+
+func _take_felled_log() -> void:
+	if focus.is_empty() or str(focus.get("kind", "")) != "felled_tree":
+		return
+	var tree := focus.get("ref") as Node3D
+	if not is_instance_valid(tree) or not tree.has_method("take_log") \
+			or not bool(tree.call("take_log")):
+		focus = {}
+		return
+	var at := tree.global_position + Vector3(float(tree.get("fall_direction")) \
+		* float(tree.get("height")) * 0.30, float(tree.get("trunk_radius")) + 0.48, 0.18)
+	_drop_resource("wood", 1, at)
+	Game.bump("item_wood")
+	Sfx.play_at("chop", at, -12.0, randf_range(0.94, 1.08))
+	if int(tree.get("remaining_logs")) <= 0:
+		focus = {}
 
 
 func _fire_once() -> void:

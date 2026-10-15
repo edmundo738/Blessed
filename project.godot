@@ -38,6 +38,6 @@ window/stretch/aspect="expand"
 [rendering]
 
 textures/vram_compression/import_etc2_astc=true
-anti_aliasing/quality/msaa_3d=2
+anti_aliasing/quality/msaa_3d=1
 environment/defaults/default_clear_color=Color(0.035, 0.043, 0.066, 1)
 anti_aliasing/screen_space_roughness_filter/enabled=false

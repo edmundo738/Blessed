@@ -87,10 +87,6 @@ func _draw() -> void:
 				_stroke(center + Vector2(8, 15) * k, center + Vector2(-5, -8) * k, WOOD, 5.0 * k)
 			_poly(center + Vector2(-5, -10) * k, [Vector2(0, 10), Vector2(-6, 2), Vector2(-4, -3), Vector2(-1, -10), Vector2(3, -3), Vector2(7, 1), Vector2(5, 8)], GOLD)
 			draw_circle(center + Vector2(0, -7) * k, 4.0 * k, Color("ff8a45"))
-		"berry", "bush_berry":
-			for p in [Vector2(-7, -3), Vector2(4, -8), Vector2(9, 3), Vector2(-2, 8), Vector2(-11, 7)]:
-				draw_circle(center + p * k, 5.0 * k, RED)
-				draw_circle(center + (p + Vector2(-1.3, -1.5)) * k, 1.3 * k, Color("ffc1a2"))
 		"wood", "stick":
 			_stroke(center + Vector2(-13, 8) * k, center + Vector2(13, -8) * k, WOOD, 6.0 * k)
 			_stroke(center + Vector2(-12, 11) * k, center + Vector2(14, -5) * k, Color("d29a60"), 2.0 * k)

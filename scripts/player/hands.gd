@@ -10,6 +10,9 @@ var arm_l: Node3D
 var held: MeshInstance3D
 var _asset_root: Node3D
 var rng := RandomNumberGenerator.new()
+var _skin := StandardMaterial3D.new()
+var _cloth := StandardMaterial3D.new()
+var _trim := StandardMaterial3D.new()
 
 var swing_t := -1.0
 var swing_speed := 1.0
@@ -19,32 +22,83 @@ var recoil := 0.0
 
 func _ready() -> void:
 	rng.seed = 99
-	position = Vector3(0.19, -0.24, -0.42)
-	arm_r = _make_arm(Color(0.93, 0.78, 0.68), Vector3(0.075, 0.075, 0.42))
-	arm_r.position = Vector3(0, 0, 0)
-	arm_r.rotation_degrees = Vector3(-8, 6, 0)
+	_skin.vertex_color_use_as_albedo = true
+	_skin.albedo_color = Color("e3b99d")
+	_skin.roughness = 0.86
+	_cloth.vertex_color_use_as_albedo = true
+	_cloth.albedo_color = Color("596b61")
+	_cloth.roughness = 0.94
+	_trim.vertex_color_use_as_albedo = true
+	_trim.albedo_color = Color("b28b55")
+	_trim.roughness = 0.78
+	position = Vector3(0.0, -0.07, -0.30)
+	arm_r = _make_arm(1)
+	arm_r.position = Vector3(0.43, -0.34, -0.03)
+	arm_r.rotation_degrees = Vector3(-16, 10, -12)
+	arm_r.scale = Vector3.ONE * 0.76
 	add_child(arm_r)
-	arm_l = _make_arm(Color(0.90, 0.75, 0.65), Vector3(0.07, 0.07, 0.38))
-	arm_l.position = Vector3(-0.30, -0.02, -0.05)
-	arm_l.rotation_degrees = Vector3(-6, -8, 0)
+	arm_l = _make_arm(-1)
+	arm_l.position = Vector3(-0.43, -0.36, -0.12)
+	arm_l.rotation_degrees = Vector3(-20, -10, 12)
+	arm_l.scale = Vector3.ONE * 0.70
 	arm_l.visible = false
 	add_child(arm_l)
 	held = MeshInstance3D.new()
-	held.position = Vector3(0.03, -0.06, -0.44)
+	held.position = Vector3(0.06, -0.08, -0.47)
 	arm_r.add_child(held)
 
 
-func _make_arm(tint: Color, size: Vector3) -> Node3D:
+func _make_arm(side: int) -> Node3D:
 	var n := Node3D.new()
-	var mi := MeshInstance3D.new()
-	mi.mesh = MeshKit.box(size, tint)
-	mi.position = Vector3(0, 0, -size.z * 0.5)
-	n.add_child(mi)
-	var hand := MeshInstance3D.new()
-	hand.mesh = MeshKit.box(Vector3(size.x * 1.15, size.y * 1.1, size.x * 1.2), tint.lightened(0.05))
-	hand.position = Vector3(0, 0, -size.z * 1.02)
-	n.add_child(hand)
+	var sleeve := MeshInstance3D.new()
+	var sleeve_mesh := CapsuleMesh.new()
+	sleeve_mesh.radius = 0.074
+	sleeve_mesh.height = 0.38
+	sleeve_mesh.radial_segments = 8
+	sleeve_mesh.rings = 3
+	sleeve.mesh = sleeve_mesh
+	sleeve.material_override = _cloth
+	sleeve.rotation.x = PI * 0.5
+	sleeve.position = Vector3(0.0, 0.015, -0.15)
+	n.add_child(sleeve)
+	var cuff := MeshInstance3D.new()
+	var cuff_mesh := CylinderMesh.new()
+	cuff_mesh.top_radius = 0.075
+	cuff_mesh.bottom_radius = 0.075
+	cuff_mesh.height = 0.070
+	cuff_mesh.radial_segments = 8
+	cuff.mesh = cuff_mesh
+	cuff.material_override = _trim
+	cuff.rotation.x = PI * 0.5
+	cuff.position = Vector3(0.0, 0.0, -0.37)
+	n.add_child(cuff)
+	var palm := _ellipsoid(Vector3(0.105, 0.062, 0.13), _skin)
+	palm.position = Vector3(0.0, -0.012, -0.45)
+	n.add_child(palm)
+	for finger in 4:
+		var len := 0.105 - absf(float(finger) - 1.5) * 0.012
+		var x := (float(finger) - 1.5) * 0.046
+		var f := _ellipsoid(Vector3(0.019, 0.022, len), _skin)
+		f.position = Vector3(x, -0.022, -0.53 - len * 0.30)
+		n.add_child(f)
+	var thumb := _ellipsoid(Vector3(0.028, 0.026, 0.075), _skin)
+	thumb.position = Vector3(0.105 * float(side), -0.003, -0.47)
+	thumb.rotation.y = -0.5 * float(side)
+	n.add_child(thumb)
 	return n
+
+
+func _ellipsoid(scale: Vector3, material: Material) -> MeshInstance3D:
+	var part := MeshInstance3D.new()
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.5
+	sphere.height = 1.0
+	sphere.radial_segments = 8
+	sphere.rings = 4
+	part.mesh = sphere
+	part.scale = scale
+	part.material_override = material
+	return part
 
 
 ## Põe na mão a malha do item (ou esvazia).
@@ -93,10 +147,14 @@ func set_item(item_id: String) -> void:
 				[MeshKit.box(Vector3(0.34, 0.09, 0.08), Color("cbd8d5")),
 				Transform3D(Basis(Vector3.FORWARD, deg_to_rad(-12)), Vector3(0.02, 0.31, 0))]]
 		"torch":
-			parts = [[MeshKit.box(Vector3(0.08, 0.48, 0.08), Color("8b5b35")),
-				Transform3D(Basis.IDENTITY, Vector3(0, 0.08, 0))],
-				[MeshKit.blob(rng, 0.13, 1, 0.1, Vector3(0.8, 1.3, 0.8), Color("ff9b40")),
-				Transform3D(Basis.IDENTITY, Vector3(0, 0.36, 0))]]
+			parts = [[MeshKit.box(Vector3(0.055, 0.42, 0.055), Color("765136")),
+				Transform3D(Basis.IDENTITY, Vector3(0, 0.06, 0))],
+				[MeshKit.box(Vector3(0.11, 0.10, 0.09), Color("4b4238")),
+				Transform3D(Basis.IDENTITY, Vector3(0, 0.25, 0))],
+				[MeshKit.cone(0.070, 0.20, 7, Color("e88432")),
+				Transform3D(Basis.IDENTITY, Vector3(0, 0.30, 0))],
+				[MeshKit.cone(0.038, 0.135, 7, Color("ffd477")),
+				Transform3D(Basis.IDENTITY, Vector3(0, 0.31, -0.012))]]
 		"rod":
 			parts = [[MeshKit.box(Vector3(0.035, 0.68, 0.035), Color("9b693d")),
 				Transform3D(Basis(Vector3.FORWARD, deg_to_rad(-22)), Vector3(0, 0.18, 0))]]
@@ -106,8 +164,8 @@ func set_item(item_id: String) -> void:
 		"stone", "flint":
 			parts = [[MeshKit.blob(rng, 0.16, 1, 0.12, Vector3(1.0, 0.7, 0.8), Color("9ba6a3")),
 				Transform3D(Basis.IDENTITY, Vector3(0, 0.12, 0))]]
-		"berry", "bush_berry", "mushroom", "meat_raw", "meat_cooked", "fish_raw", "fish_cooked":
-			var tint := Color("c84444") if item_id == "berry" or item_id == "bush_berry" else Color("d88472")
+		"mushroom", "meat_raw", "meat_cooked", "fish_raw", "fish_cooked":
+			var tint := Color("d88472")
 			parts = [[MeshKit.blob(rng, 0.16, 1, 0.14, Vector3(1.0, 0.8, 0.85), tint),
 				Transform3D(Basis.IDENTITY, Vector3(0, 0.12, 0))]]
 		"bottle", "water":
@@ -157,9 +215,9 @@ func _process(delta: float) -> void:
 	if s >= 0.0:
 		# curva de balanço: sobe rápido, desce com peso
 		arc = sin(clampf(s, 0.0, 1.0) * PI)
-	arm_r.position = Vector3(0, 0, 0) + sway + Vector3(0, -arc * 0.10, arc * 0.13)
+	arm_r.position = Vector3(0.43, -0.34, -0.03) + sway + Vector3(0, -arc * 0.10, arc * 0.13)
 	arm_r.rotation_degrees = Vector3(-8 - arc * 55.0, 6 + arc * 8.0, arc * 6.0)
-	arm_l.position = Vector3(-0.30, -0.02, -0.05) + sway * 0.7 \
+	arm_l.position = Vector3(-0.43, -0.36, -0.12) + sway * 0.7 \
 		+ Vector3(0, -arc * 0.03, arc * 0.05)
 	arm_l.rotation_degrees = Vector3(-6 - arc * 14.0, -8, 0)
 	recoil = maxf(0.0, recoil - delta * 3.0)

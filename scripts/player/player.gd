@@ -16,15 +16,15 @@ const CROUCH_EYE := 1.05
 const RADIUS := 0.34
 const HEIGHT := 1.78
 
-const WALK := 3.6
-const SPRINT := 6.4
-const CROUCH_SPEED := 1.7
+const WALK := 4.0
+const SPRINT := 6.2
+const CROUCH_SPEED := 1.8
 const SWIM := 3.0
-const ACCEL_GROUND := 14.0
-const ACCEL_AIR := 5.5
-const FRICTION := 11.0
-const JUMP_VELOCITY := 6.4
-const GRAVITY := 17.5
+const ACCEL_GROUND := 18.0
+const ACCEL_AIR := 4.5
+const FRICTION := 15.0
+const JUMP_VELOCITY := 6.2
+const GRAVITY := 12.0
 const COYOTE := 0.14
 const JUMP_BUFFER := 0.14
 
@@ -68,6 +68,14 @@ signal jumped()
 
 func _ready() -> void:
 	name = "Player"
+	# Travessia tolerante: mantém contacto com descidas e aceita encostas
+	# jogáveis antes de as tratar como paredes.
+	motion_mode = CharacterBody3D.MOTION_MODE_GROUNDED
+	floor_max_angle = deg_to_rad(54.0)
+	floor_snap_length = 0.48
+	floor_constant_speed = true
+	floor_stop_on_slope = true
+	safe_margin = 0.04
 	add_to_group("player")
 	_build_tree()
 	Game.register_saver(self)
@@ -190,7 +198,7 @@ func _has_standing_clearance() -> bool:
 
 ## Salto de impulso sobre uma borda baixa quando o jogador já está contra ela.
 func _try_mantle(wish: Vector3) -> bool:
-	if mantle_cooldown > 0.0 or stamina < 8.0 or wish.length_squared() < 0.1:
+	if mantle_cooldown > 0.0 or stamina < 3.0 or wish.length_squared() < 0.1:
 		return false
 	if not is_on_wall():
 		return false
@@ -213,7 +221,7 @@ func _try_mantle(wish: Vector3) -> bool:
 	if ledge_hit.is_empty():
 		return false
 	var rise: float = float(ledge_hit.position.y) - global_position.y
-	if rise < 0.35 or rise > 1.45:
+	if rise < 0.2 or rise > 1.15:
 		return false
 	var landing := global_position + dir * (RADIUS + 0.48) + Vector3(0.0, rise + 0.12, 0.0)
 	var clearance := PhysicsShapeQueryParameters3D.new()
@@ -226,15 +234,15 @@ func _try_mantle(wish: Vector3) -> bool:
 	clearance.collision_mask = 1
 	if not space.intersect_shape(clearance, 1).is_empty():
 		return false
-	var climb := sqrt(2.0 * GRAVITY * (rise + 0.32))
-	velocity.y = clampf(climb, JUMP_VELOCITY, 8.2)
+	var climb := sqrt(2.0 * GRAVITY * (rise + 0.10))
+	velocity.y = clampf(climb, JUMP_VELOCITY * 0.55, JUMP_VELOCITY * 1.15)
 	var flat := Vector3(velocity.x, 0.0, velocity.z)
 	flat = flat.move_toward(dir * maxf(flat.length(), 2.5), 5.0)
 	velocity.x = flat.x
 	velocity.z = flat.z
-	stamina = maxf(0.0, stamina - 8.0)
-	mantle_cooldown = 0.45
-	Sfx.play("step_wood", -10.0, 0.72)
+	stamina = maxf(0.0, stamina - 3.0)
+	mantle_cooldown = 0.3
+	Sfx.play("jump", -8.0, 0.96)
 	return true
 
 
@@ -365,7 +373,9 @@ func _move_swim(delta: float, wish: Vector3) -> void:
 	velocity.z = flat.z
 	# flutuação: sobe devagar, afunda devagar, salto = braçada
 	var up := 0.0
-	if Input.is_action_pressed("jump"):
+	if Input.is_action_just_pressed("jump"):
+		velocity.y = maxf(velocity.y, 4.2)
+	elif Input.is_action_pressed("jump"):
 		up = 2.6
 	elif Input.is_action_pressed("crouch"):
 		up = -2.4
@@ -378,8 +388,11 @@ func _move_swim(delta: float, wish: Vector3) -> void:
 
 func _swim_check() -> void:
 	var was := swimming
-	swimming = get_parent() != null and get_parent().has_method("is_in_water") \
-		and get_parent().call("is_in_water", global_position)
+	var water_world := get_parent()
+	swimming = water_world != null and water_world.has_method("is_in_water") \
+		and water_world.call("is_in_water", global_position)
+	if swimming != was and water_world != null and water_world.has_method("set_underwater"):
+		water_world.call("set_underwater", swimming)
 	if swimming and not was:
 		Sfx.play("splash", -6.0, 1.0)
 		velocity.y *= 0.3

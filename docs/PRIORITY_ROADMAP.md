@@ -1,63 +1,80 @@
-# Blessed — prioridades do próximo ciclo
+# Blessed — prioridades de gameplay e mundo
 
-## Feito nesta passagem
+O critério de entrada continua a ser: cada objeto precisa de uma função clara,
+uma ação do jogador e um resultado que se possa ver ou sentir.
 
-- 14 modelos de vegetação/rocha de origem gratuita entraram como espécies
-  separadas, com variantes por bioma e LODs. O pinheiro escolhido não tem as
-  estacas expostas que foram rejeitadas; a rocha não contém vegetação misturada.
-- Céu com panoramas de dia, crepúsculo e noite, sol e lua ligados ao ciclo do
-  jogo, fase lunar, brilho controlado e uma camada de nuvens com parallax.
-- Poeira, pirilampos e impactos usam sprites Kenney CC0. O impacto mantém lascas
-  3D e o sprite 2D; usa GPU em Forward+ e CPU no Compatibility.
-- Godot 4.7.2: 125 verificações passaram, incluindo todos os meshes/LODs,
-  distribuição por bioma, céu e os dois caminhos de partículas.
+## P0 — Cortar, remover e recolher sem contradições
 
-## Prioridades
+**Implementado nesta passagem:** a árvore abatida conserva os materiais do modelo,
+fica no mundo com colisor próprio e oferece toros com `F`. O colisor da árvore em pé
+é removido no mesmo corte; a rocha colhida também deixa de bloquear o jogador.
+Recursos largados usam `RigidBody3D`, assentam no terreno e recolhem por proximidade,
+sem uma notificação grande por cada item. Árvores e rochas aceitam `F` mantido ou o
+botão esquerdo. O HUD mostra o comando contextual e o arranque deixa de impor missões.
 
-### P0 — Ver o jogo nos renderizadores reais e medir
+**Verificado em headless:** 128 verificações aprovadas. **Ainda precisa de validação
+gráfica:** assentamento dos troncos em declives, contacto do jogador com o tronco,
+leitura do pickup à escala normal e queda sem atravessar o terreno.
 
-Headless confirma carregamento e lógica, mas não confirma a imagem final nem FPS.
-Validar capturas a meio-dia, crepúsculo e noite em Forward+ e Compatibility/Web;
-verificar o movimento do disco solar/lunar, a costura do panorama, as nuvens e a
-leitura de cada árvore à escala do jogador. Guardar FPS/VRAM antes de mexer em
-mais resolução, densidade ou LOD.
+## P1 — Movimento e leitura do jogador
 
-**Aceitação:** sem disco duplicado gravado no panorama, sem céu transparente fora
-do passe das nuvens, sem novos erros no log e sem regressão observável nas cenas.
+Testar subidas, descidas, ravinas e saltos em terrenos reais. Afinar assistência de
+borda e colisão para que o jogador não fique preso nem deslize por encostas que parecem
+transitáveis. Depois substituir a silhueta atual do jogador e as mãos provisórias por
+um corpo e animações direcionais que comuniquem aceleração, salto, golpe, natação e
+estado de mãos vazias.
 
-### P1 — Ferramentas e mãos em primeira pessoa
+**Aceitação:** atravessa as rotas comuns sem ficar preso; o jogador pode subir saliências
+razoáveis; a pose e os efeitos confirmam a ação sem tapar o alvo.
 
-Substituir as silhuetas provisórias por meshes legíveis, acertar a escala e o
-ponto de pega, e sincronizar o balanço com golpe, mineração e uso. Preservar o
-espaço da câmara e garantir que cada item equipado mostra a ferramenta correta.
+## P2 — Ciclo inicial de sobrevivência e construção
 
-**Aceitação:** machado, picareta, tocha e comida distinguem-se à primeira vista;
-animação e som correspondem ao contacto e não tapam o alvo.
+Começar sem recursos mágicos: gravetos e pedras pequenos no chão, apanhar, combinar
+pedra e fibra para afiar uma ferramenta, cortar madeira, fazer corda e construir uma
+primeira estrutura. Cada receita deve consumir os ingredientes certos e produzir um
+objeto visível. Colocar paredes, piso e telhado em encaixe simples, com pré-visualização
+válida e remoção legível. Plantas diferentes passam a ter folhas, flores, tintas e frutos
+quando a espécie justificar esses usos.
 
-### P2 — Recolha, queda e construção
+**Aceitação:** uma sessão nova permite recolher, fabricar e construir sem texto de missão;
+cada falha de craft explica apenas o recurso em falta.
 
-Manter a regra de golpes, resistência, queda e pickups físicos já existente;
-melhorar a queda em partes persistentes e o retorno visível de madeira/folhas.
-Depois ligar receitas a bancada, cozinha, pesca e carpintaria e consolidar peças
-de construção, portas e abrigo.
+## P3 — Rios, mar e travessia
 
-**Aceitação:** recurso aparece no local, pode ser recolhido, guardado e usado
-numa receita coerente; nenhum recurso surge diretamente na mochila sem feedback.
+Dar ao mar uma superfície contínua no nível de água e modelar rios com margens graduais,
+profundidade transitável e saídas acessíveis. O canal deve acompanhar a altura do terreno;
+cachoeiras vêm depois, em quedas finitas entre cotas e reservatórios, sem água infinita.
+Separar natação, corrente, som submerso e recolha aquática para cada uma ter resposta clara.
 
-### P3 — Água e vida selvagem
+**Aceitação:** o mar não desaparece entre chunks; margens não viram crateras; o jogador
+consegue sair da água em pontos jogáveis.
 
-Resolver margens de rio e saídas de água profunda antes de aumentar vida marinha.
-Introduzir animais por habitat e comportamento, mantendo animais e pessoas 2D e
-o cenário em 3D estilizado.
+## P4 — Formas do terreno e biomas que se encontram
 
-**Aceitação:** o jogador consegue sair de cada margem jogável; cada espécie tem
-habitat, animação, reação e recurso com propósito claro.
+Reduzir costuras e faces sobrepostas do terreno atual; testar a migração a voxels numa
+área limitada antes de substituir o gerador inteiro. Fazer transições de humidade, cor e
+vegetação entre floresta, pradaria, savana, areia e rocha. Variar grupos de espécies e
+espaços vazios; colocar ruínas com silhuetas e histórias distintas, não cópias repetidas.
 
-### P4 — Som e ritmo de sessão
+**Aceitação:** não há paredes de chunk visíveis nem relva verde sobre areia seca; cada
+bioma é identificável sem cortar o mundo numa borda abrupta.
 
-Avaliar a mistura no jogo, reduzir o vento repetitivo, dar ao salto um som de
-impulso curto e variar a música original por camadas sem copiar melodias de
-referência.
+## P5 — Desempenho e sombras medidos
 
-**Aceitação:** nenhuma camada ambiente domina a sessão, efeitos não repetem a
-curto intervalo, e mudanças de fase são graduais e audíveis.
+Medir tempo de geração, FPS e uso de memória em pontos fixos, depois de o mundo aquecer.
+Priorizar chunks visíveis, afastar detalhes e colisões sem apagar o horizonte, e verificar
+sombras na malha do terreno com a luz real. Só então escolher limites de LOD e distância
+de visão por renderer.
+
+**Aceitação:** números antes/depois na mesma máquina e cena; sem pop de árvores visível,
+buracos no mar, nem sombra que desaparece ao tocar a terra.
+
+## P6 — Atmosfera e identidade visual
+
+Depois do ciclo jogável e do perfil de desempenho: trabalhar sol, lua, nuvens em camadas,
+reflexo do céu na água, névoa por clima e hora, vento visível na vegetação e paletas
+noturnas. Usar as imagens de referência como direção de composição e cor, não como texturas
+esticadas pelo cenário.
+
+**Aceitação:** cada hora e bioma tem uma paleta reconhecível; o sol e a lua iluminam de
+forma diferente; vento e névoa acrescentam atmosfera sem esconder o caminho.

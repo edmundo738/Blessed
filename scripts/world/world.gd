@@ -17,16 +17,22 @@ var _rm := RenderingServer.get_current_rendering_method()  # forward_plus | mobi
 var harvest_state := {}              # key -> tempo absoluto (s de jogo) em que volta
 # B-03: respawn estilo Minecraft — minérios/arvores longos, plantas curto.
 const RESPAWN_DAYS := {"wood": 14.0, "stone": 21.0, "iron": 30.0, "flint": 21.0,
-	"fiber": 2.0, "berry": 2.0, "plant": 1.5}
+	"fiber": 2.0, "plant": 1.5}
 const RESPAWN_DEFAULT := 7.0
+const FELLED_TREE_SCENE: PackedScene = preload("res://scenes/world/felled_tree.tscn")
 var _pool: Array = []
+var felled_trees: Dictionary = {}
+var _felled_tree_nodes: Dictionary = {}
 var _target := Vector3.ZERO
 var _last_center := Vector2i(999999, 999999)
+var _last_lod_target := Vector2(INF, INF)
 
 var view_distance := 160.0
 var grass_quality := 1
 var build_budget_ms := 5.0
 var shadows_enabled := true
+const LOD_THRESHOLDS := [60.0, 120.0, 180.0]
+const LOD_HYSTERESIS := 8.0
 
 var sun: DirectionalLight3D
 var env_node: WorldEnvironment
@@ -34,6 +40,7 @@ var environment: Environment
 var water: MeshInstance3D
 var sky_resource: Sky
 var sky_visible := true
+var underwater_active := false
 var wind := 0.16
 var _last_sky_sync_msec := -1000
 
@@ -168,11 +175,22 @@ func update_time(hour: float, daylight: float, phase: String) -> void:
 	mats.apply_time(dir, daylight, dusk, refresh_sky)
 
 	environment.ambient_light_energy = lerpf(0.58, 0.26, night)
-	environment.fog_light_color = Color(0.72, 0.83, 0.95).lerp(Color(0.07, 0.09, 0.18), night)
-	environment.fog_light_color = environment.fog_light_color.lerp(Color(1.0, 0.62, 0.42), dusk * 0.5)
-	environment.fog_density = lerpf(0.0032, 0.0062, night)
+	var fog_color := Color(0.72, 0.83, 0.95).lerp(Color(0.07, 0.09, 0.18), night)
+	fog_color = fog_color.lerp(Color(1.0, 0.62, 0.42), dusk * 0.5)
+	environment.fog_light_color = Color(0.12, 0.39, 0.52) if underwater_active else fog_color
+	environment.fog_density = 0.018 if underwater_active else lerpf(0.0032, 0.0062, night)
+	environment.fog_sky_affect = 0.42 if underwater_active else 0.18
 	environment.background_color = environment.fog_light_color
 	environment.ambient_light_color = environment.fog_light_color.lightened(0.1)
+	if underwater_active:
+		environment.ambient_light_energy = 0.36
+
+
+func set_underwater(value: bool) -> void:
+	if underwater_active == value:
+		return
+	underwater_active = value
+	update_time(Game.hour, Game.daylight(), Game.current_phase())
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -183,7 +201,7 @@ func set_target(p: Vector3) -> void:
 
 
 func radius() -> int:
-	return clampi(int(view_distance / Chunk.SIZE), 1, 6)
+	return clampi(int(ceil(view_distance / Chunk.SIZE)), 1, 7)
 
 
 func _process(_delta: float) -> void:
@@ -194,8 +212,10 @@ func _process(_delta: float) -> void:
 		water.position.x = snappedf(_target.x, 10.0)
 		water.position.z = snappedf(_target.z, 10.0)
 	if c == _last_center:
-		return
+		if Vector2(_target.x, _target.z).distance_to(_last_lod_target) < 24.0:
+			return
 	_last_center = c
+	_last_lod_target = Vector2(_target.x, _target.z)
 	_update_chunks(c, r)
 
 
@@ -205,8 +225,12 @@ func _update_chunks(c: Vector2i, r: int) -> void:
 	for dz in range(-r, r + 1):
 		for dx in range(-r, r + 1):
 			var key := Vector2i(c.x + dx, c.y + dz)
-			var d := maxi(absi(dx), absi(dz))
-			wanted[key] = 0 if d <= 1 else (1 if d <= 2 else 2)
+			var center := Vector2((key.x + 0.5) * Chunk.SIZE, (key.y + 0.5) * Chunk.SIZE)
+			var distance := center.distance_to(Vector2(_target.x, _target.z))
+			if distance > view_distance + Chunk.SIZE * 0.72:
+				continue
+			var previous := int((chunks.get(key) as Chunk).lod) if chunks.has(key) else -1
+			wanted[key] = _lod_for_distance(distance, previous)
 	# liberta o que já não interessa
 	for key in chunks.keys():
 		if not wanted.has(key):
@@ -217,7 +241,10 @@ func _update_chunks(c: Vector2i, r: int) -> void:
 			Bus.chunk_released.emit(key.x, key.y)
 	# cria/atualiza o que falta (mais perto primeiro)
 	var order := wanted.keys()
-	order.sort_custom(func(a, b): return wanted[a] < wanted[b])
+	order.sort_custom(func(a, b):
+		var da := Vector2((a.x + 0.5) * Chunk.SIZE, (a.y + 0.5) * Chunk.SIZE).distance_squared_to(Vector2(_target.x, _target.z))
+		var db := Vector2((b.x + 0.5) * Chunk.SIZE, (b.y + 0.5) * Chunk.SIZE).distance_squared_to(Vector2(_target.x, _target.z))
+		return da < db)
 	for key in order:
 		var lod: int = wanted[key]
 		var with_col := lod == 0
@@ -302,6 +329,82 @@ func hide_harvest(n: Dictionary) -> void:
 		ch.call("hide_harvest", n)
 
 
+func fell_tree(n: Dictionary) -> void:
+	var tree_id := str(n.get("species", ""))
+	if not species.trees.has(tree_id):
+		return
+	var key := harvest_key(n["pos"] as Vector3, tree_id)
+	var base: Transform3D = n.get("base_transform", Transform3D.IDENTITY)
+	var pos: Vector3 = n["pos"]
+	var scale := base.basis.get_scale()
+	var yields: Dictionary = Db.HARVEST.get(str(n.get("kind", "")), {}).get("yields", {})
+	var logs := maxi(int(yields.get("wood", 1)), 1)
+	var direction := 1.0 if posmod(roundi(pos.x), 2) == 0 else -1.0
+	var data := {
+		"species": tree_id,
+		"position": [pos.x, pos.y, pos.z],
+		"rotation_y": base.basis.get_euler().y,
+		"scale": [scale.x, scale.y, scale.z],
+		"y_offset": base.origin.y - pos.y,
+		"height": float(n.get("height", 6.0)),
+		"trunk_radius": maxf(float(n.get("collider_radius", 0.42)) * 0.34, 0.16),
+		"remaining_logs": logs,
+		"direction": direction,
+	}
+	felled_trees[key] = data
+	_spawn_felled_tree(key, data)
+
+
+func _spawn_felled_tree(key: String, data: Dictionary) -> void:
+	if _felled_tree_nodes.has(key) and is_instance_valid(_felled_tree_nodes[key]):
+		return
+	var tree_id := str(data.get("species", ""))
+	if not species.trees.has(tree_id):
+		return
+	var spec: SpeciesKit.Species = species.trees[tree_id]
+	var raw_pos: Array = data.get("position", [0.0, 0.0, 0.0])
+	var pos := Vector3(float(raw_pos[0]), float(raw_pos[1]), float(raw_pos[2]))
+	var raw_scale: Array = data.get("scale", [1.0, 1.0, 1.0])
+	var scale := Vector3(float(raw_scale[0]), float(raw_scale[1]), float(raw_scale[2]))
+	var base := Transform3D(Basis(Vector3.UP, float(data.get("rotation_y", 0.0)))
+		.scaled(scale), Vector3(0.0, float(data.get("y_offset", 0.0)), 0.0))
+	var local_mat: Material = null if spec.materials_authored else mats.foliage
+	var node := FELLED_TREE_SCENE.instantiate() as Node3D
+	if node == null:
+		return
+	node.name = "FelledTree_%s" % tree_id
+	node.position = to_local(pos) + Vector3(float(data.get("fall_offset_x", 0.0)), 0.0, 0.0)
+	node.rotation.z = float(data.get("fall_rotation", 0.0))
+	add_child(node)
+	node.call("configure", spec.lods[0], local_mat, base, float(data.get("height", spec.height)),
+		float(data.get("trunk_radius", 0.22)), int(data.get("remaining_logs", 1)),
+		self, key, tree_id, float(data.get("direction", 1.0)))
+	_felled_tree_nodes[key] = node
+	if not bool(data.get("settled", false)):
+		node.call("begin_fall")
+
+
+func felled_tree_log_taken(key: String, remaining: int) -> void:
+	if remaining <= 0:
+		felled_trees.erase(key)
+		_felled_tree_nodes.erase(key)
+		return
+	if felled_trees.has(key):
+		felled_trees[key]["remaining_logs"] = remaining
+
+
+func felled_tree_settled(key: String) -> void:
+	if felled_trees.has(key):
+		felled_trees[key]["settled"] = true
+		var node := _felled_tree_nodes.get(key) as Node3D
+		if is_instance_valid(node):
+			felled_trees[key]["fall_rotation"] = node.rotation.z
+			felled_trees[key]["fall_offset_x"] = node.position.x - to_local(Vector3(
+				float(felled_trees[key]["position"][0]),
+				float(felled_trees[key]["position"][1]),
+				float(felled_trees[key]["position"][2]))).x
+
+
 func ground_height(x: float, z: float) -> float:
 	return terrain.height(x, z)
 
@@ -323,7 +426,7 @@ func _apply_quality() -> void:
 	var ssao_on := bool(preset.get("ssao", q >= 1))
 	var fog_on := bool(preset.get("volumetric_fog", q >= 1))
 	var ssr_on := bool(preset.get("ssr", q >= 2))
-	var dof_on := bool(preset.get("dof", q >= 1))
+	var dof_on := bool(Game.settings.get("dof", true))
 	# tonemap cinematografico + exposicao controlada (contra os "brancos" V-02)
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	environment.tonemap_exposure = Db.quality_value("tonemap_exposure", 0.98)
@@ -365,7 +468,7 @@ func _apply_quality() -> void:
 
 
 func _apply_settings() -> void:
-	view_distance = float(Game.settings["view_distance"])
+	view_distance = clampf(float(Game.settings["view_distance"]), 60.0, 240.0)
 	var _new_grass := int(Game.settings["grass_quality"])
 	if _new_grass != grass_quality:
 		# a qualidade de relva mudou → liberta os chunks; são reconstruídos com a nova
@@ -379,19 +482,44 @@ func _apply_settings() -> void:
 		sun.shadow_enabled = shadows_enabled
 		sun.directional_shadow_max_distance = [60.0, 120.0, 200.0][clampi(int(Game.settings["shadows"]), 0, 2)]
 	if environment:
+		environment.fog_enabled = true
+		environment.fog_mode = Environment.FOG_MODE_DEPTH
+		environment.fog_depth_begin = view_distance * 0.48
+		environment.fog_depth_end = view_distance * 1.20
+		environment.fog_depth_curve = 1.35
 		# B-01: glow e um toggle proprio; film_grain ja nao o forca (condicao era sempre verdadeira)
-		environment.glow_enabled = bool(Game.settings.get("glow", true))
+		environment.glow_enabled = bool(Game.settings.get("glow", false))
 		environment.glow_intensity = clampf(float(Game.settings.get("glow_intensity", 0.40)), 0.0, 1.0)
 	_apply_quality()
 	_last_center = Vector2i(999999, 999999)
 
 
+func _lod_for_distance(distance: float, previous: int = -1) -> int:
+	if previous < 0 or previous > 3:
+		if distance <= LOD_THRESHOLDS[0]: return 0
+		if distance <= LOD_THRESHOLDS[1]: return 1
+		if distance <= LOD_THRESHOLDS[2]: return 2
+		return 3
+	var lod := previous
+	while lod < 3 and distance > LOD_THRESHOLDS[lod] + LOD_HYSTERESIS:
+		lod += 1
+	while lod > 0 and distance < LOD_THRESHOLDS[lod - 1] - LOD_HYSTERESIS:
+		lod -= 1
+	return lod
+
+
 func save_data() -> Dictionary:
-	return {"seed": Game.world_seed, "harvest_state": harvest_state}
+	return {"seed": Game.world_seed, "harvest_state": harvest_state,
+		"felled_trees": felled_trees.duplicate(true)}
 
 
 func load_data(_d: Dictionary) -> void:
 	harvest_state = _d.get("harvest_state", {}) if _d.get("harvest_state") is Dictionary else {}
+	for node in _felled_tree_nodes.values():
+		if is_instance_valid(node):
+			node.queue_free()
+	_felled_tree_nodes.clear()
+	felled_trees = _d.get("felled_trees", {}) if _d.get("felled_trees") is Dictionary else {}
 	# recria o gerador com a semente carregada (Game.load_game já atualizou Game.world_seed).
 	# Sem isto, o terreno continuava a ser gerado com a semente anterior ao carregar (dessincronização).
 	terrain = Terrain.new(Game.world_seed)
@@ -400,4 +528,6 @@ func load_data(_d: Dictionary) -> void:
 	for key in chunks.keys():
 		(chunks[key] as Chunk).release()
 	chunks.clear()
+	for key in felled_trees.keys():
+		_spawn_felled_tree(str(key), felled_trees[key])
 	_last_center = Vector2i(999999, 999999)

@@ -658,8 +658,8 @@ func _refresh_prompt() -> void:
 			target = Loc.t("hud.target_tree")
 		elif resource_id == "rock":
 			target = Loc.t("hud.target_rock")
-		elif resource_id == "bush_berry":
-			target = Loc.t("hud.target_berry_bush")
+		elif resource_id == "bush":
+			target = Loc.t("hud.target_bush")
 		else:
 			var yields: Dictionary = spec.get("yields", {})
 			var yield_ids := yields.keys()
@@ -676,8 +676,9 @@ func _refresh_prompt() -> void:
 			"structure": target = Db.item_name(str(f["ref"].get("id", "")))
 			"water": target = Loc.t("hud.target_water")
 			"npc": target = Loc.t("hud.target_person")
+			"felled_tree": target = Loc.t("hud.target_log")
 		prompt_bar.visible = false
-	var binding := Loc.t("hud.hold_lmb") if hold_action else "[F]"
+	var binding := Loc.t("hud.hold_interact") if hold_action else "[F]"
 	prompt_label.text = "%s   %s · %s" % [binding, target, action] if target != "" else "%s   %s" % [binding, action]
 
 

@@ -1,9 +1,9 @@
 {
   "_comment": "Afinação do gerador de terreno. Tudo opcional: o que faltar usa o valor embutido. Frequências em ciclos/metro (menor = regiões maiores).",
   "sea_level": 0.0,
-  "river_width": 0.030,
-  "river_valley": 0.105,
-  "river_bed": -2.6,
+  "river_width": 0.045,
+  "river_valley": 0.130,
+  "river_bed": -1.4,
   "path_half_width": 2.6,
   "path_soft": 5.2,
   "village_radius": 17.0,

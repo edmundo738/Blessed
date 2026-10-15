@@ -284,5 +284,3 @@ func finish() -> void:
 		var avatar: Node = p.get_node_or_null("Avatar2D")
 		if avatar != null and avatar.has_method("refresh_appearance"):
 			avatar.call("refresh_appearance")
-	Bus.objective_added.emit(Game.objective_current)
-	Bus.subtitle_requested.emit("obj.wood", 5.0)

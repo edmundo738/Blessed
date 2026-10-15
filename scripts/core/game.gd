@@ -33,7 +33,7 @@ var facts: Dictionary = {}
 var counters: Dictionary = {}
 var relationships: Dictionary = {}
 var objectives_done: Array = []
-var objective_current: String = "wood"
+var objective_current: String = ""
 
 # ── definições ───────────────────────────────────────────────────────────────
 var settings := {
@@ -46,8 +46,9 @@ var settings := {
 	"shadows": 1,              # 0 desligado, 1 normal, 2 alto
 	"head_bob": 1.0,
 	"quality": 1,              # 0 compativel, 1 equilibrado, 2 cinematografico
-	"glow": true,              # B-01: bloom independente (antes era forcado pelo film_grain)
+	"glow": false,             # Bloom começa desligado; pode ser ligado nas definições.
 	"glow_intensity": 0.18,
+	"dof": false,              # Profundidade de campo opcional, independente do perfil.
 	"film_grain": 0.5,         # reservado: grão ainda nao implementado (nao controla o glow)
 	"subtitles": true,
 	"horror": 1.0,             # 0 suave … 2 implacável
@@ -392,8 +393,10 @@ func load_game() -> bool:
 	facts = d.get("facts", {})
 	counters = d.get("counters", {})
 	relationships = d.get("relationships", {})
-	objectives_done = d.get("objectives_done", [])
-	objective_current = str(d.get("objective_current", ""))
+	# Saves antigos continham uma sequência de missões obrigatórias. A sandbox
+	# começa agora sem objetivos impostos ao jogador.
+	objectives_done = []
+	objective_current = ""
 	var systems: Dictionary = d.get("systems", {})
 	for n in _savers:
 		if is_instance_valid(n) and n.has_method("load_data") and systems.has(n.name):
@@ -412,6 +415,5 @@ func new_game(seed_value: int = 0) -> void:
 	counters.clear()
 	relationships.clear()
 	objectives_done.clear()
-	objective_current = "wood"
+	objective_current = ""
 	started = true
-	Bus.objective_added.emit(objective_current)

@@ -163,7 +163,7 @@ func _build_settings() -> void:
 	_slider("settings.sensitivity", "sensitivity", 0.05, 1.5, 0.05)
 	_slider("settings.fov", "fov", 60.0, 105.0, 1.0)
 	_slider("settings.volume", "volume", 0.0, 1.0, 0.05)
-	_slider("settings.view_distance", "view_distance", 60.0, 300.0, 10.0)
+	_slider("settings.view_distance", "view_distance", 60.0, 240.0, 12.0)
 	_option("settings.grass_quality", "grass_quality",
 		["settings.low", "settings.medium", "settings.high"])
 	_option("settings.shadows", "shadows",
@@ -172,6 +172,7 @@ func _build_settings() -> void:
 		["settings.quality_low", "settings.quality_med", "settings.quality_high"])
 	_toggle("settings.glow", "glow")
 	_slider("settings.glow_intensity", "glow_intensity", 0.0, 1.0, 0.05)
+	_toggle("settings.dof", "dof")
 	_slider("settings.head_bob", "head_bob", 0.0, 1.5, 0.1)
 	_slider("settings.horror", "horror", 0.0, 2.0, 0.1)
 	_toggle("settings.invert_y", "invert_y")
@@ -360,11 +361,6 @@ func _build_journal() -> void:
 	_title.text = Loc.t("tab.journal")
 	_label(Loc.t("app.subtitle"), 13, Color(1, 0.95, 0.7, 0.9))
 	_label("")
-	if not Game.objective_current.is_empty():
-		_label("▸ " + Loc.t("obj." + Game.objective_current), 16, Color(1, 0.95, 0.7, 1.0))
-	for o in Game.objectives_done:
-		_label("✓ " + Loc.t("obj." + str(o)), 13, Color(0.7, 0.9, 0.7, 0.8))
-	_label("")
 	_label("%s  ·  %s" % [Loc.t("hud.day", [str(Game.day)]), Game.clock_string()], 12)
 	if not str(Game.profile.get("name", "")).is_empty():
 		_label("%s  ·  %s  ·  %s" % [Game.profile["name"],
@@ -377,7 +373,6 @@ func _build_journal() -> void:
 func _build_map() -> void:
 	_title.text = Loc.t("tab.map")
 	_label("·", 12)
-	_label(Loc.t("obj.explore"), 13, Color(1, 0.95, 0.7, 0.8))
 	_label("")
 	_button(Loc.t("settings.back"), func(): open("pause"))
 

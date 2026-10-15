@@ -198,7 +198,11 @@ func load_data(d: Dictionary) -> void:
 	for i in SLOTS:
 		if i < arr.size():
 			var e: Dictionary = arr[i]
-			slots[i] = {} if str(e.get("id", "")).is_empty() else {"id": str(e["id"]), "qty": int(e["qty"])}
+			var id := str(e.get("id", ""))
+			# Compatibilidade com saves antigos: bagas removidas tornam-se cogumelos.
+			if id == "berry":
+				id = "mushroom"
+			slots[i] = {} if id.is_empty() else {"id": id, "qty": int(e["qty"])}
 		else:
 			slots[i] = {}
 	hotbar_index = int(d.get("hotbar", 0))

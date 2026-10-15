@@ -11,7 +11,7 @@ const SIZE := 48.0
 ## como uma grelha de muros. 1.2 m chega para tapar as costuras entre LODs e
 ## lê-se como sombra de contacto, não como arquitectura.
 const SKIRT := 1.2
-const RES := [48, 24, 12]          # quads por lado em cada LOD
+const RES := [48, 24, 12, 6]       # detalhe cai por faixa; o anel distante só desenha terreno
 const TREE_CELL := 3.0
 const ROCK_CELL := 6.0
 const GRASS_TARGET := 420
@@ -56,7 +56,8 @@ func build(with_collision: bool) -> void:
 	built = true
 	var o := origin()
 	_build_ground(o, with_collision)
-	_scatter(o, with_collision)
+	if lod < 3:
+		_scatter(o, with_collision)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -203,16 +204,19 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 				.scaled(Vector3(s, s * rng.randf_range(0.9, 1.15), s)),
 				Vector3(x, y, z))
 			var bi := _add(buckets, id, xform, _tint(rng), 0.0)
+			var tree_collider: CollisionShape3D = null
+			if with_collision:
+				tree_collider = _add_collider(
+					Vector3(x, h + sp.collider_scale.y * s * 0.5, z), sp.collider_scale * s)
 			harvest_nodes.append({
 				"pos": Vector3(x, h, z), "kind": sp.harvest, "species": id,
 				"hp": int(Db.HARVEST.get(sp.harvest, {}).get("hp", 5)),
 				"radius": 0.9 * s, "height": sp.height * s,
+				"collider_radius": sp.collider_scale.x * s,
+				"collider": tree_collider,
 				"base_transform": xform,
 				"alive": true, "bucket": id, "bindex": bi, "chunk": self,
 			})
-			if with_collision:
-				_add_collider(Vector3(x, h + sp.collider_scale.y * s * 0.5, z),
-					sp.collider_scale * s)
 
 	# ── rochas ────────────────────────────────────────────────────────────
 	var rc := int(SIZE / ROCK_CELL)
@@ -243,14 +247,17 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 				Vector3(x, h + sp.y_offset * s, z))
 			var bi := _add(buckets, id, xform, _tint(rng), 0.0)
 			if sp.harvest != "":
+				var rock_collider: CollisionShape3D = null
+				if with_collision:
+					rock_collider = _add_collider(Vector3(x, h + 0.3 * s, z),
+						Vector3(0.9, 0.8, 0.9) * s)
 				harvest_nodes.append({
 					"pos": Vector3(x, h, z), "kind": sp.harvest, "species": id,
 					"hp": int(Db.HARVEST.get(sp.harvest, {}).get("hp", 3)),
 					"radius": 0.8 * s, "height": 0.8 * s,
+					"collider": rock_collider,
 					"alive": true, "bucket": id, "bindex": bi, "chunk": self,
 				})
-				if with_collision:
-					_add_collider(Vector3(x, h + 0.3 * s, z), Vector3(0.9, 0.8, 0.9) * s)
 
 	# ── plantas ───────────────────────────────────────────────────────────
 	var pc := int(SIZE / 2.5)
@@ -270,8 +277,6 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 			var id := species.pick(species.plants, biome, rng.randf())
 			if id.is_empty():
 				continue
-			if id == "bush" and rng.randf() < 0.14:
-				id = "berry_bush"
 			var sp: SpeciesKit.Species = species.plants[id]
 			if world != null and world.is_harvested(Vector3(x, h, z), id):
 				continue
@@ -459,9 +464,9 @@ func _seaweed_multimesh(transforms: Array[Transform3D]) -> void:
 	_decor.append(inst)
 
 
-func _add_collider(pos: Vector3, size: Vector3) -> void:
+func _add_collider(pos: Vector3, size: Vector3) -> CollisionShape3D:
 	if _body == null:
-		return
+		return null
 	var col := CollisionShape3D.new()
 	var shape := CylinderShape3D.new()
 	shape.radius = maxf(size.x, size.z) * 0.5
@@ -470,13 +475,20 @@ func _add_collider(pos: Vector3, size: Vector3) -> void:
 	col.position = pos - _body.position
 	_body.add_child(col)
 	_colliders.append(col)
+	return col
 
 
 ## Esconde a instância de um nó já colhido (MultiMesh não tem "hide").
 func hide_harvest(n: Dictionary) -> void:
 	n["alive"] = false
 	if str(n.get("kind", "")).begins_with("tree"):
-		_show_felled_tree(n)
+		if world != null and world.has_method("fell_tree"):
+			world.call("fell_tree", n)
+	var old_collider := n.get("collider") as CollisionShape3D
+	if is_instance_valid(old_collider):
+		old_collider.set_deferred("disabled", true)
+		old_collider.queue_free()
+		_colliders.erase(old_collider)
 	var bid := str(n.get("bucket", ""))
 	if not _buckets.has(bid):
 		return
@@ -489,38 +501,6 @@ func hide_harvest(n: Dictionary) -> void:
 		return
 	mm.set_instance_transform(i, Transform3D(
 		Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO), n["pos"]))
-
-
-func _show_felled_tree(n: Dictionary) -> void:
-	var species_id := str(n.get("species", ""))
-	if not species.trees.has(species_id):
-		return
-	var base: Transform3D = n.get("base_transform", Transform3D.IDENTITY)
-	var pivot := Node3D.new()
-	pivot.name = "FelledTree"
-	add_child(pivot)
-	pivot.global_position = n["pos"]
-	var tree := MeshInstance3D.new()
-	tree.mesh = species.trees[species_id].lods[0]
-	tree.material_override = mats.foliage
-	tree.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	tree.transform = Transform3D(base.basis, Vector3(0.0,
-		base.origin.y - (n["pos"] as Vector3).y, 0.0))
-	pivot.add_child(tree)
-	# A direção alterna pelo ponto do mundo para manter a queda reproduzível.
-	var dir := 1.0 if posmod(roundi((n["pos"] as Vector3).x), 2) == 0 else -1.0
-	var fall := pivot.create_tween()
-	fall.set_parallel(true)
-	fall.tween_property(pivot, "rotation:z", -dir * 1.32, 0.68) \
-		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-	fall.tween_property(pivot, "position:x", pivot.position.x + dir * 1.9, 0.68) \
-		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-	fall.chain().tween_interval(2.2)
-	fall.tween_callback(func():
-		if is_instance_valid(pivot):
-			pivot.queue_free())
-
-
 func set_lod(new_lod: int, with_collision: bool) -> void:
 	if new_lod == lod and built:
 		return
