@@ -164,8 +164,6 @@ func _build_settings() -> void:
 	_slider("settings.fov", "fov", 60.0, 105.0, 1.0)
 	_slider("settings.volume", "volume", 0.0, 1.0, 0.05)
 	_slider("settings.view_distance", "view_distance", 60.0, 240.0, 12.0)
-	_option("settings.grass_quality", "grass_quality",
-		["settings.low", "settings.medium", "settings.high"])
 	_option("settings.shadows", "shadows",
 		["settings.off", "settings.medium", "settings.high"])
 	_option("settings.quality", "quality",

@@ -42,7 +42,6 @@ var settings := {
 	"invert_y": false,
 	"volume": 0.7,
 	"view_distance": 160.0,
-	"grass_quality": 1,        # 0 baixo, 1 médio, 2 alto
 	"shadows": 1,              # 0 desligado, 1 normal, 2 alto
 	"head_bob": 1.0,
 	"quality": 1,              # 0 compativel, 1 equilibrado, 2 cinematografico

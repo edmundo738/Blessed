@@ -447,8 +447,14 @@ func _surface_probe() -> void:
 		surface = "grass"
 		return
 	var h: float = w.call("ground_height", global_position.x, global_position.z)
-	if h < Terrain.SEA_LEVEL + 0.35:
-		surface = "water" if global_position.y < Terrain.SEA_LEVEL + 0.6 else "stone"
+	var water_height := -100000.0
+	if w.has_method("water_surface_height"):
+		water_height = w.call("water_surface_height", global_position.x, global_position.z)
+	if water_height > -99999.0 and global_position.y < water_height + 0.6 \
+			and h < water_height - 0.35:
+		surface = "water"
+	elif h < Terrain.SEA_LEVEL + 0.35:
+		surface = "stone"
 	elif global_position.y < h + 0.3:
 		surface = "grass"
 	if w.has_method("path_distance_at"):

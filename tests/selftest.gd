@@ -126,11 +126,16 @@ func _run() -> void:
 		and not Db.ITEMS.has("berry"))
 
 	var instances := 0
+	var decorative_groundcover := 0
 	for c in world.chunks.values():
 		for d in (c as Chunk)._decor:
 			if d is MultiMeshInstance3D and (d as MultiMeshInstance3D).multimesh:
 				instances += (d as MultiMeshInstance3D).multimesh.instance_count
+			if d is Node3D and str((d as Node3D).name).begins_with("Groundcover_"):
+				decorative_groundcover += 1
 	check("instâncias de vegetação", instances > 200, "n=%d" % instances)
+	check("relva decorativa removida do cenário", decorative_groundcover == 0,
+		"nós de relva=%d" % decorative_groundcover)
 
 	# Valida cada modelo Blender no recurso Godot individualmente. As espécies
 	# continuam separadas; não se empilham modelos diferentes numa única malha.

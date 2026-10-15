@@ -3,7 +3,7 @@ extends Node3D
 ## Chunk — um quadrado de mundo gerado, usado e devolvido.
 ##
 ## Um chunk tem: malha de terreno + colisão (só nos níveis perto) + MultiMesh por
-## espécie (árvores, rochas, plantas, relva) + um registo dos nós colhíveis.
+## espécie (árvores, rochas, plantas) + um registo dos nós colhíveis.
 ## Nada aqui é guardado entre chunks: o mundo é sempre rederivado do Terrain.
 
 const SIZE := 48.0
@@ -14,23 +14,26 @@ const SKIRT := 1.2
 const RES := [48, 24, 12, 6]       # detalhe cai por faixa; o anel distante só desenha terreno
 const TREE_CELL := 3.0
 const ROCK_CELL := 6.0
-const GRASS_TARGET := 420
+const WATER_LOD_RES := [24, 16, 12, 8] # costa suave perto, malha reduzida ao longe
+const GRASS_SHELL_HEIGHT := 0.36
 
 var cx := 0
 var cz := 0
 var lod := 0
 var built := false
-var grass_quality := 1
 
 var terrain: Terrain
 var species: SpeciesKit
 var mats: Materials
+var water_root: Node3D
 
 ## Nós colhíveis deste chunk: {pos, kind, species, hp, node}
 var world: Node = null                # definido pelo World; usado para respawn
 var harvest_nodes: Array = []
 
 var _mesh_inst: MeshInstance3D
+var _grass_shell_inst: MeshInstance3D
+var _water_inst: MeshInstance3D
 var _body: StaticBody3D
 var _decor: Array = []
 var _colliders: Array = []
@@ -56,6 +59,7 @@ func build(with_collision: bool) -> void:
 	built = true
 	var o := origin()
 	_build_ground(o, with_collision)
+	_build_water(o)
 	if lod < 3:
 		_scatter(o, with_collision)
 
@@ -84,6 +88,10 @@ func _build_ground(o: Vector2, with_collision: bool) -> void:
 	buf.resize(Terrain.BIOME_COUNT)
 	var normals := PackedVector3Array()
 	normals.resize(n * n)
+	var grass_cover := PackedFloat32Array()
+	grass_cover.resize(n * n)
+	var grass_dryness := PackedFloat32Array()
+	grass_dryness.resize(n * n)
 	# normais a partir da grelha (barato e sem costuras)
 	for j in n:
 		for i in n:
@@ -102,6 +110,8 @@ func _build_ground(o: Vector2, with_collision: bool) -> void:
 				/ maxf(normals[j * n + i].y, 0.001) * 0.55, 0.0, 1.0)
 			st.set_normal(normals[j * n + i])
 			var gc := terrain.ground_color_s(x, z, h, sl, buf)
+			grass_cover[j * n + i] = terrain.grass_coverage_s(h, sl, buf)
+			grass_dryness[j * n + i] = terrain.grass_dryness(buf)
 			# classes de material para o shader do terreno (ver toon_terrain.gdshader)
 			gc.a = clampf(buf[Terrain.B_SNOW], 0.0, 1.0)
 			st.set_color(gc)
@@ -141,6 +151,9 @@ func _build_ground(o: Vector2, with_collision: bool) -> void:
 	_mesh_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	_mesh_inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	add_child(_mesh_inst)
+	if lod < 2:
+		_build_grass_shells(o, n, step, heights, normals, grass_cover,
+			grass_dryness, 8 if lod == 0 else 4)
 
 	if with_collision:
 		var shape := HeightMapShape3D.new()
@@ -157,8 +170,185 @@ func _build_ground(o: Vector2, with_collision: bool) -> void:
 		_colliders.append(col)
 
 
+## Relva shell: o mesmo terreno é desenhado em fatias finas. O shader recorta
+## cada lâmina num passe opaco, reduzindo a largura até à ponta, e anima os
+## níveis superiores para o vento parecer mover um volume contínuo.
+func _build_grass_shells(o: Vector2, n: int, step: float,
+		heights: PackedFloat32Array, normals: PackedVector3Array,
+		coverage: PackedFloat32Array, dryness: PackedFloat32Array, layers: int) -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var layer_vertices := n * n
+	for layer in layers:
+		var layer_t := float(layer + 1) / float(layers)
+		for j in n:
+			for i in n:
+				var idx := j * n + i
+				var x := o.x + i * step
+				var z := o.y + j * step
+				var normal := normals[idx]
+				var pos := Vector3(x, heights[idx], z) + normal * GRASS_SHELL_HEIGHT * layer_t
+				st.set_normal(normal)
+				st.set_color(Color(coverage[idx], dryness[idx], 0.0, 1.0))
+				st.set_uv(Vector2(x, z))
+				st.set_uv2(Vector2(layer_t, 0.0))
+				st.add_vertex(pos)
+		var base := layer * layer_vertices
+		for j in RES[clampi(lod, 0, RES.size() - 1)]:
+			for i in RES[clampi(lod, 0, RES.size() - 1)]:
+				var a: int = base + j * n + i
+				var b: int = a + 1
+				var c: int = a + n + 1
+				var d: int = a + n
+				st.add_index(a); st.add_index(b); st.add_index(c)
+				st.add_index(a); st.add_index(c); st.add_index(d)
+	var mesh := st.commit()
+	if mesh == null or mesh.get_surface_count() == 0:
+		return
+	mesh.surface_set_material(0, mats.grass_shell)
+	_grass_shell_inst = MeshInstance3D.new()
+	_grass_shell_inst.name = "GrassShells"
+	_grass_shell_inst.mesh = mesh
+	_grass_shell_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_grass_shell_inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	_grass_shell_inst.extra_cull_margin = 0.8
+	add_child(_grass_shell_inst)
+	_decor.append(_grass_shell_inst)
+
+
+## A superfície de água é recortada à altura do terreno em cada chunk. Isto
+## deixa a costa visível e cria uma boca contínua para o rio, sem um plano que
+## cubra o solo seco ou siga o jogador.
+func _build_water(o: Vector2) -> void:
+	if water_root == null or mats == null:
+		return
+	var water_res: int = WATER_LOD_RES[clampi(lod, 0, WATER_LOD_RES.size() - 1)]
+	var n := water_res + 1
+	var step := SIZE / float(water_res)
+	var levels := PackedFloat32Array()
+	levels.resize(n * n)
+	var depths := PackedFloat32Array()
+	depths.resize(n * n)
+	var has_water := false
+	for j in n:
+		for i in n:
+			var x := o.x + i * step
+			var z := o.y + j * step
+			var water_sample := terrain.water_info(x, z)
+			var level := water_sample.x
+			var idx := j * n + i
+			levels[idx] = level
+			if level > -99999.0:
+				depths[idx] = water_sample.y
+			has_water = has_water or level > -99999.0
+	if not has_water:
+		return
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for j in water_res:
+		for i in water_res:
+			var a := j * n + i
+			var b := a + 1
+			var c := a + n + 1
+			var d := a + n
+			var pa := Vector2(o.x + i * step, o.y + j * step)
+			var pb := Vector2(pa.x + step, pa.y)
+			var pc := Vector2(pa.x + step, pa.y + step)
+			var pd := Vector2(pa.x, pa.y + step)
+			_add_clipped_water_triangle(st, pa, levels[a], depths[a], pb, levels[b], depths[b],
+				pc, levels[c], depths[c])
+			_add_clipped_water_triangle(st, pa, levels[a], depths[a], pc, levels[c], depths[c],
+				pd, levels[d], depths[d])
+	var mesh := st.commit()
+	if mesh == null or mesh.get_surface_count() == 0:
+		return
+	mesh.surface_set_material(0, mats.water)
+	_water_inst = MeshInstance3D.new()
+	_water_inst.name = "WaterSurface_%d_%d" % [cx, cz]
+	_water_inst.mesh = mesh
+	_water_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_water_inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	water_root.add_child(_water_inst)
+
+
+func _add_clipped_water_triangle(st: SurfaceTool, a: Vector2, la: float, da: float,
+		b: Vector2, lb: float, db: float, c: Vector2, lc: float, dc: float) -> void:
+	var polygon: Array[Dictionary] = [
+		{"p": a, "level": la, "depth": da, "wet": la > -99999.0},
+		{"p": b, "level": lb, "depth": db, "wet": lb > -99999.0},
+		{"p": c, "level": lc, "depth": dc, "wet": lc > -99999.0},
+	]
+	var clipped: Array[Dictionary] = []
+	for i in 3:
+		var current: Dictionary = polygon[i]
+		var next: Dictionary = polygon[(i + 1) % 3]
+		var current_wet := bool(current["wet"])
+		var next_wet := bool(next["wet"])
+		if current_wet and next_wet:
+			clipped.append(next)
+		elif current_wet and not next_wet:
+			clipped.append(_water_boundary(current, next, true))
+		elif not current_wet and next_wet:
+			clipped.append(_water_boundary(current, next, false))
+			clipped.append(next)
+	if clipped.size() < 3:
+		return
+	for i in range(1, clipped.size() - 1):
+		_add_water_face(st, clipped[0], clipped[i], clipped[i + 1])
+
+
+func _water_boundary(a: Dictionary, b: Dictionary, start_wet: bool) -> Dictionary:
+	var pa: Vector2 = a["p"]
+	var pb: Vector2 = b["p"]
+	var low := 0.0
+	var high := 1.0
+	for _i in 7:
+		var mid := (low + high) * 0.5
+		var p := pa.lerp(pb, mid)
+		var wet := terrain.water_surface_height(p.x, p.y) > -99999.0
+		if wet == start_wet:
+			low = mid
+		else:
+			high = mid
+	var wet_t := low if start_wet else high
+	var wet_point := pa.lerp(pb, wet_t)
+	var level := terrain.water_surface_height(wet_point.x, wet_point.y)
+	if level < -99999.0:
+		var fallback_t := clampf(wet_t + (0.015 if start_wet else -0.015), 0.0, 1.0)
+		var fallback := pa.lerp(pb, fallback_t)
+		level = terrain.water_surface_height(fallback.x, fallback.y)
+	return {"p": pa.lerp(pb, (low + high) * 0.5), "level": level,
+		"depth": 0.0, "wet": true}
+
+
+func _add_water_face(st: SurfaceTool, a: Dictionary, b: Dictionary, c: Dictionary) -> void:
+	var pa: Vector2 = a["p"]
+	var pb: Vector2 = b["p"]
+	var pc: Vector2 = c["p"]
+	var va := Vector3(pa.x, float(a["level"]), pa.y)
+	var vb := Vector3(pb.x, float(b["level"]), pb.y)
+	var vc := Vector3(pc.x, float(c["level"]), pc.y)
+	var da := Vector2(float(a["depth"]), 1.0 if float(a["level"]) > 0.4 else 0.0)
+	var db := Vector2(float(b["depth"]), 1.0 if float(b["level"]) > 0.4 else 0.0)
+	var dc := Vector2(float(c["depth"]), 1.0 if float(c["level"]) > 0.4 else 0.0)
+	if (vb - va).cross(vc - va).y < 0.0:
+		var swap := vb
+		vb = vc
+		vc = swap
+		var swap_uv := db
+		db = dc
+		dc = swap_uv
+	for vertex in [[va, da], [vb, db], [vc, dc]]:
+		var p: Vector3 = vertex[0]
+		var water_data: Vector2 = vertex[1]
+		st.set_normal(Vector3.UP)
+		st.set_uv(Vector2(p.x, p.z) * 0.12)
+		st.set_uv2(water_data)
+		st.add_vertex(p)
+
+
 # ══════════════════════════════════════════════════════════════════════════
-#  VEGETAÇÃO / ROCHAS / RELVA
+#  VEGETAÇÃO / ROCHAS
 # ══════════════════════════════════════════════════════════════════════════
 func _rng() -> RandomNumberGenerator:
 	var r := RandomNumberGenerator.new()
@@ -169,7 +359,6 @@ func _rng() -> RandomNumberGenerator:
 func _scatter(o: Vector2, with_collision: bool) -> void:
 	var rng := _rng()
 	var buckets := {}      # id -> {transforms, tints, mesh, wind, height}
-	var groundcover: Dictionary = {}
 	var seaweed_t: Array[Transform3D] = []
 	var buf := PackedFloat32Array()
 	buf.resize(Terrain.BIOME_COUNT)
@@ -299,67 +488,16 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 			var z := o.y + rng.randf() * SIZE
 			var h := terrain.height(x, z)
 			var depth := Terrain.SEA_LEVEL - h
-			if depth < 0.8 or depth > 2.1 or rng.randf() > 0.68:
+			if not terrain.is_ocean(x, z) or depth < 0.8 or depth > 2.1 or rng.randf() > 0.68:
 				continue
 			var scale := rng.randf_range(0.55, 0.92)
 			seaweed_t.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU)
 				.scaled(Vector3(scale, scale, scale)), Vector3(x, h + 0.05, z)))
 
-	# ── relva: tufos em manchas, instanciados por chunk ────────────────────
-	if lod <= 1:
-		var quality := clampi(grass_quality, 0, 2)
-		var target := int(GRASS_TARGET * [0.35, 1.0, 2.0][quality])
-		if lod == 1:
-			# O LOD distante usa uma malha 4x mais leve e mantém mais cobertura
-			# para a troca de detalhe não abrir uma faixa nua à volta do jogador.
-			target = int(target * 0.55)
-		var placed := 0
-		var guard := 0
-		while placed < target and guard < target * 6:
-			guard += 1
-			var x := o.x + rng.randf() * SIZE
-			var z := o.y + rng.randf() * SIZE
-			var h := terrain.height(x, z)
-			if h < Terrain.SEA_LEVEL + 0.35:
-				continue
-			var sl := terrain.slope(x, z)
-			if sl > 0.5:
-				continue
-			if terrain.path_distance(x, z) < 2.2:
-				continue
-			var biome := terrain.dominant_s(x, z, h, sl)
-			var patch := terrain.groundcover_patch_factor(x, z)
-			var patch_density := lerpf(0.38, 1.25, patch)
-			if rng.randf() > clampf(SpeciesKit.grass_density(biome) * 2.2 * patch_density, 0.0, 1.0):
-				continue
-			var s := rng.randf_range(0.75, 1.35)
-			var cover_id := "grass_lod" if lod == 1 else "grass_clump"
-			if lod == 0:
-				var variant_roll := rng.randf()
-				if biome == Terrain.B_MARSH and variant_roll < 0.52:
-					cover_id = "reed_clump"
-				elif biome == Terrain.B_FOREST and variant_roll < 0.20:
-					cover_id = "fern_clump"
-				elif biome in [Terrain.B_MEADOW, Terrain.B_GROVE]:
-					if variant_roll < 0.10:
-						cover_id = "flower_clump"
-					elif variant_roll < 0.20:
-						cover_id = "clover_clump"
-			if not groundcover.has(cover_id):
-				groundcover[cover_id] = {"t": [], "c": []}
-			(groundcover[cover_id]["t"] as Array).append(Transform3D(
-				Basis(Vector3.UP, rng.randf() * TAU)
-				.scaled(Vector3(s, s * rng.randf_range(0.8, 1.3), s)), Vector3(x, h - 0.03, z)))
-			(groundcover[cover_id]["c"] as Array).append(
-				terrain.ground_color_s(x, z, h, sl, buf).lightened(rng.randf_range(-0.05, 0.12)))
-			placed += 1
-
 	# ── cria os MultiMesh ─────────────────────────────────────────────────
 	_buckets = buckets
 	for id in buckets:
 		_make_multimesh(str(id), buckets[id])
-	for cover_id in groundcover:
-		_grass_multimesh(str(cover_id), groundcover[cover_id]["t"], groundcover[cover_id]["c"])
 	_seaweed_multimesh(seaweed_t)
 
 
@@ -441,61 +579,6 @@ func _make_multimesh(id: String, b: Dictionary) -> void:
 	_decor.append(inst)
 
 
-func _grass_multimesh(asset_id: String, t: Array, c: Array) -> void:
-	if t.is_empty():
-		return
-	var rng := RandomNumberGenerator.new()
-	rng.seed = hash(Vector2i(cx, cz)) ^ 0x9E37
-	var authored_cover := BlessedBlenderAssets.mesh_for(asset_id)
-	var shell_grass := lod == 0 and asset_id == "grass_clump"
-	var mesh: ArrayMesh
-	if shell_grass:
-		mesh = MeshKit.grass_shell_tuft(rng, 6, 3, 0.68, 0.045)
-	elif lod == 1:
-		mesh = mats.distant_grass_mesh()
-	elif authored_cover != null:
-		mesh = mats.wind_foliage_mesh(authored_cover)
-	else:
-		mesh = MeshKit.grass_shell_tuft(rng, 5, 3, 0.62, 0.05)
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_custom_data = true
-	mm.use_colors = true  # sem isto a cor de vértice é multiplicada por 0 => preto
-	mm.mesh = mesh
-	mm.instance_count = t.size()
-	var fades: Array = [[26.0, 50.0, 78.0], [31.0, 63.0, 100.0]]
-	var fade: float = fades[clampi(lod, 0, 1)][clampi(grass_quality, 0, 2)]
-	var grass_bounds := AABB()
-	for i in t.size():
-		var xform: Transform3D = t[i]
-		mm.set_instance_transform(i, xform)
-		mm.set_instance_color(i, Color.WHITE)
-		var col: Color = c[i]
-		mm.set_instance_custom_data(i, Color(col.r, col.g, col.b, fade))
-		# AABB explícito inclui a deformação do vento e mantém o culling por
-		# chunk apertado, em vez de deixar a relva aumentar o volume visível.
-		var p := xform.origin
-		var extent := Vector3.ONE * 1.5
-		if i == 0:
-			grass_bounds = AABB(p - extent, extent * 2.0)
-		else:
-			grass_bounds = grass_bounds.expand(p - extent).expand(p + extent)
-	mm.custom_aabb = grass_bounds
-	var inst := MultiMeshInstance3D.new()
-	inst.name = "Groundcover_%s" % asset_id
-	inst.multimesh = mm
-	# Relva perto recebe shells recortados; as outras plantas preservam as
-	# texturas importadas com vento; o LOD médio agrupa tudo num tufo barato.
-	if shell_grass or (authored_cover == null and lod == 0):
-		inst.material_override = mats.grass_shell
-	elif lod == 1 or authored_cover == null:
-		inst.material_override = mats.grass
-	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-	add_child(inst)
-	_decor.append(inst)
-
-
 func _seaweed_multimesh(transforms: Array[Transform3D]) -> void:
 	if transforms.is_empty():
 		return
@@ -568,6 +651,12 @@ func release() -> void:
 		if is_instance_valid(d):
 			d.queue_free()
 	_decor.clear()
+	if is_instance_valid(_water_inst):
+		var water_parent := _water_inst.get_parent()
+		if water_parent != null:
+			water_parent.remove_child(_water_inst)
+		_water_inst.queue_free()
+		_water_inst = null
 	if is_instance_valid(_mesh_inst):
 		_mesh_inst.queue_free()
 		_mesh_inst = null

@@ -136,8 +136,8 @@ func _update_focus() -> void:
 
 	# água (só se não houver mais nada)
 	if best.is_empty():
-		var hit := _ray_terrain(from, dir, r * 1.6)
-		if hit != Vector3.INF and hit.y < Terrain.SEA_LEVEL + 0.25:
+		var hit := _ray_water_surface(from, dir, r * 1.6)
+		if hit != Vector3.INF:
 			best = {"kind": "water", "ref": null, "pos": hit}
 
 	var changed := not _same(best)
@@ -175,6 +175,39 @@ func _ray_terrain(from: Vector3, dir: Vector3, max_d: float) -> Vector3:
 		var g: float = world.ground_height(p.x, p.z)
 		if p.y <= g + 0.1:
 			return Vector3(p.x, g, p.z)
+		t += 0.25
+	return Vector3.INF
+
+
+func _ray_water_surface(from: Vector3, dir: Vector3, max_d: float) -> Vector3:
+	# Procura a superfície real do rio ou do mar, sem confundir o leito com água.
+	if world == null or not world.has_method("water_surface_height"):
+		return Vector3.INF
+	var previous_t := 0.0
+	var previous_surface: float = world.call("water_surface_height", from.x, from.z)
+	var previous_valid := previous_surface > -99999.0
+	var previous_delta := from.y - previous_surface if previous_valid else 0.0
+	var t := 0.25
+	while t <= max_d:
+		var p := from + dir * t
+		var surface: float = world.call("water_surface_height", p.x, p.z)
+		if surface > -99999.0:
+			var delta := p.y - surface
+			if previous_valid and delta <= 0.0 and previous_delta > 0.0:
+				var fraction := previous_delta / maxf(previous_delta - delta, 0.001)
+				var hit_t := lerpf(previous_t, t, fraction)
+				var hit := from + dir * hit_t
+				hit.y = world.call("water_surface_height", hit.x, hit.z)
+				return hit
+			if absf(delta) <= 0.12:
+				var near_hit := p
+				near_hit.y = surface
+				return near_hit
+			previous_delta = delta
+			previous_valid = true
+		else:
+			previous_valid = false
+		previous_t = t
 		t += 0.25
 	return Vector3.INF
 

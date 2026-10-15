@@ -18,7 +18,6 @@ var _foliage_card_shader: Shader
 var _grass_material_cache: Dictionary = {}
 var _grass_materials: Array[ShaderMaterial] = []
 var _grass_mesh_cache: Dictionary = {}
-var _distant_grass_mesh: ArrayMesh
 var _grass_sun_dir := Vector3(0.0, -1.0, 0.0)
 var _grass_shadow := Color(0.45, 0.50, 0.82)
 var _grass_ambient := 0.74
@@ -34,6 +33,7 @@ func _init() -> void:
 	var fs: Shader = load("res://shaders/toon_foliage.gdshader")
 	_grass_shader = load("res://shaders/toon_grass.gdshader")
 	_foliage_card_shader = load("res://shaders/toon_foliage_cards.gdshader")
+	var gss: Shader = load("res://shaders/grass_shells.gdshader")
 	var ws: Shader = load("res://shaders/stylized_water.gdshader")
 	var ss: Shader = load("res://shaders/anime_sky.gdshader")
 
@@ -52,9 +52,9 @@ func _init() -> void:
 
 	grass = grass_material_for()
 	grass_shell = ShaderMaterial.new()
-	grass_shell.shader = _grass_shader
-	grass_shell.set_shader_parameter("use_texture", false)
-	_apply_grass_style(grass_shell)
+	grass_shell.shader = gss
+	grass_shell.set_shader_parameter("wind_strength", 0.34)
+	grass_shell.set_shader_parameter("wind_speed", 1.15)
 
 	var sts: Shader = load("res://shaders/toon_structure.gdshader")
 	structure = ShaderMaterial.new()
@@ -119,13 +119,6 @@ func wind_foliage_mesh(source: ArrayMesh, wind_height: float = 0.75) -> ArrayMes
 	return result
 
 
-## Malha compartilhada e leve para o nível de detalhe médio.
-func distant_grass_mesh() -> ArrayMesh:
-	if _distant_grass_mesh == null:
-		_distant_grass_mesh = MeshKit.grass_impostor()
-	return _distant_grass_mesh
-
-
 func _apply_grass_style(material: ShaderMaterial) -> void:
 	material.set_shader_parameter("shadow_tint", _grass_shadow)
 	material.set_shader_parameter("sun_dir", _grass_sun_dir)
@@ -143,7 +136,6 @@ func apply_time(sun_dir: Vector3, daylight: float, dusk: float, update_sky: bool
 	foliage.set_shader_parameter("sun_dir", sd)
 	for grass_material in _grass_materials:
 		grass_material.set_shader_parameter("sun_dir", sd)
-	grass_shell.set_shader_parameter("sun_dir", sd)
 	structure.set_shader_parameter("sun_dir", sd)
 	water.set_shader_parameter("sun_dir", sd)
 	# à noite a tinta de sombra fica azulada e as bandas suavizam
@@ -155,14 +147,12 @@ func apply_time(sun_dir: Vector3, daylight: float, dusk: float, update_sky: bool
 	_grass_shadow = Color(0.45, 0.50, 0.82).lerp(Color(0.16, 0.20, 0.44), night)
 	for grass_material in _grass_materials:
 		grass_material.set_shader_parameter("shadow_tint", _grass_shadow)
-	grass_shell.set_shader_parameter("shadow_tint", _grass_shadow)
 	terrain.set_shader_parameter("band_soft", lerpf(0.45, 0.62, night))
 	terrain.set_shader_parameter("ambient_gain", lerpf(0.66, 0.36, night))
 	foliage.set_shader_parameter("ambient_gain", lerpf(0.74, 0.38, night))
 	_grass_ambient = lerpf(0.74, 0.38, night)
 	for grass_material in _grass_materials:
 		grass_material.set_shader_parameter("ambient_gain", _grass_ambient)
-	grass_shell.set_shader_parameter("ambient_gain", _grass_ambient)
 	structure.set_shader_parameter("ambient_gain", lerpf(0.74, 0.38, night))
 
 	# The sky also builds Godot's reflection cubemap. Updating it only five times
@@ -185,6 +175,6 @@ func apply_time(sun_dir: Vector3, daylight: float, dusk: float, update_sky: bool
 func set_wind(strength: float) -> void:
 	foliage.set_shader_parameter("wind_strength", strength)
 	_wind_strength = strength * 1.4
+	grass_shell.set_shader_parameter("wind_strength", strength * 1.7)
 	for grass_material in _grass_materials:
 		grass_material.set_shader_parameter("wind_strength", _wind_strength)
-	grass_shell.set_shader_parameter("wind_strength", _wind_strength)

@@ -8,7 +8,14 @@ extends Node3D
 var list: Array = []          # {id, pos, rot, lit, node, light}
 var species: SpeciesKit
 var mats: Materials
-var _fire_material: StandardMaterial3D
+var _fire_material: ShaderMaterial
+var _smoke_material: StandardMaterial3D
+var _ember_material: StandardMaterial3D
+var _fire_mesh: ArrayMesh
+var _smoke_mesh: QuadMesh
+var _ember_mesh: SphereMesh
+
+const SMOKE_TEXTURE := preload("res://content/fx/kenney/particles/smoke_02.png")
 
 
 func _ready() -> void:
@@ -19,9 +26,15 @@ func _ready() -> void:
 func setup(p_species: SpeciesKit, p_mats: Materials) -> void:
 	species = p_species
 	mats = p_mats
-	_fire_material = StandardMaterial3D.new()
-	_fire_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_fire_material.albedo_color = Color(1.0, 0.62, 0.22)
+	_fire_material = ShaderMaterial.new()
+	_fire_material.shader = load("res://shaders/campfire_flame.gdshader")
+	_fire_material.set_shader_parameter("flame_speed", 1.0)
+	_fire_material.set_shader_parameter("flame_energy", 2.4)
+	_smoke_material = _make_smoke_material()
+	_ember_material = _make_ember_material()
+	_fire_mesh = _make_flame_mesh()
+	_smoke_mesh = _make_smoke_mesh()
+	_ember_mesh = _make_ember_mesh()
 
 
 func place(id: String, pos: Vector3, rot_y: float, lit: bool = false) -> Dictionary:
@@ -104,14 +117,124 @@ func _attach_light(entry: Dictionary) -> void:
 	l.position = Vector3(0, st.size.y * 0.7 + 0.3, 0)
 	(entry["node"] as Node3D).add_child(l)
 	entry["light"] = l
-	# chama visível
-	var flame := MeshInstance3D.new()
-	flame.mesh = MeshKit.blob(RandomNumberGenerator.new(), 0.22, 1, 0.3,
-		Vector3(0.8, 1.5, 0.8), Color(1, 1, 1))
-	flame.material_override = _fire_material
-	flame.position = Vector3(0, st.size.y * 0.42, 0)
-	(entry["node"] as Node3D).add_child(flame)
+	_add_fire_vfx(entry, st)
 	Sfx.loop("fire", "fire_loop", -18.0)
+
+
+func _add_fire_vfx(entry: Dictionary, st: SpeciesKit.Structure) -> void:
+	var root := Node3D.new()
+	root.name = "CampfireVfx"
+	root.position = Vector3(0, st.size.y * 0.42, 0)
+	(entry["node"] as Node3D).add_child(root)
+
+	var flame := MeshInstance3D.new()
+	flame.name = "LayeredFlame"
+	flame.mesh = _fire_mesh
+	flame.material_override = _fire_material
+	flame.position.y = 0.38
+	flame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	flame.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	root.add_child(flame)
+
+	var quality := clampi(int(Game.settings.get("quality", 1)), 0, 2)
+	if quality > 0:
+		var smoke := CPUParticles3D.new()
+		smoke.name = "Smoke"
+		smoke.amount = [0, 7, 12][quality]
+		smoke.lifetime = 2.0
+		smoke.preprocess = 1.2
+		smoke.local_coords = true
+		smoke.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+		smoke.emission_sphere_radius = 0.12
+		smoke.direction = Vector3(0.0, 1.0, 0.0)
+		smoke.spread = 19.0
+		smoke.gravity = Vector3(0.0, 0.16, 0.0)
+		smoke.initial_velocity_min = 0.10
+		smoke.initial_velocity_max = 0.25
+		smoke.angular_velocity_min = -12.0
+		smoke.angular_velocity_max = 12.0
+		smoke.scale_amount_min = 0.65
+		smoke.scale_amount_max = 1.25
+		smoke.mesh = _smoke_mesh
+		smoke.material_override = _smoke_material
+		smoke.position.y = 0.62
+		root.add_child(smoke)
+
+		var embers := CPUParticles3D.new()
+		embers.name = "Embers"
+		embers.amount = [0, 5, 9][quality]
+		embers.lifetime = 0.85
+		embers.preprocess = 0.25
+		embers.local_coords = true
+		embers.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+		embers.emission_sphere_radius = 0.17
+		embers.direction = Vector3(0.0, 1.0, 0.0)
+		embers.spread = 32.0
+		embers.gravity = Vector3(0.0, -1.6, 0.0)
+		embers.initial_velocity_min = 0.25
+		embers.initial_velocity_max = 0.85
+		embers.scale_amount_min = 0.8
+		embers.scale_amount_max = 1.35
+		embers.color = Color(1.0, 0.52, 0.18, 1.0)
+		embers.mesh = _ember_mesh
+		embers.material_override = _ember_material
+		embers.position.y = 0.55
+		root.add_child(embers)
+
+
+func _make_flame_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for plane in 6:
+		var angle := TAU * float(plane) / 6.0
+		var side := Vector3(cos(angle), 0.0, sin(angle)) * 0.23
+		var p0 := -side + Vector3(0.0, 0.0, 0.0)
+		var p1 := side + Vector3(0.0, 0.0, 0.0)
+		var p2 := side * 0.035 + Vector3(0.0, 0.92, 0.0)
+		var p3 := -side * 0.035 + Vector3(0.0, 0.92, 0.0)
+		for vertex in [[p0, Vector2(0, 0)], [p1, Vector2(1, 0)], [p2, Vector2(1, 1)],
+				[p0, Vector2(0, 0)], [p2, Vector2(1, 1)], [p3, Vector2(0, 1)]]:
+			st.set_uv(vertex[1])
+			st.add_vertex(vertex[0])
+	return st.commit()
+
+
+
+func _make_smoke_material() -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
+	material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	material.albedo_texture = SMOKE_TEXTURE
+	material.albedo_color = Color(0.22, 0.24, 0.30, 0.26)
+	return material
+
+
+func _make_ember_material() -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(1.0, 0.42, 0.08)
+	material.emission_enabled = true
+	material.emission = Color(1.0, 0.18, 0.025)
+	material.emission_energy_multiplier = 2.2
+	return material
+
+
+func _make_smoke_mesh() -> QuadMesh:
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.36, 0.36)
+	return quad
+
+
+func _make_ember_mesh() -> SphereMesh:
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.026
+	sphere.height = 0.052
+	sphere.radial_segments = 5
+	sphere.rings = 2
+	return sphere
 
 
 ## Fontes de luz acesas (o Survival e as criaturas perguntam por isto).

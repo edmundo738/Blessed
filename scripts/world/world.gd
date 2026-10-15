@@ -6,7 +6,7 @@ extends Node3D
 ##   • nunca constrói mais do que cabe no orçamento de um frame (por omissão 5 ms)
 ##   • os chunks são reaproveitados de um pool, não criados de raiz
 ##   • o LOD é decidido pela distância e só muda quando precisa mesmo
-##   • a relva e a colisão existem só onde o jogador pode estar
+##   • a colisão existe só onde o jogador pode estar
 
 var terrain: Terrain
 var species: SpeciesKit
@@ -28,7 +28,6 @@ var _last_center := Vector2i(999999, 999999)
 var _last_lod_target := Vector2(INF, INF)
 
 var view_distance := 160.0
-var grass_quality := 1
 var build_budget_ms := 5.0
 var shadows_enabled := true
 const LOD_THRESHOLDS := [60.0, 120.0, 180.0]
@@ -37,7 +36,7 @@ const LOD_HYSTERESIS := 8.0
 var sun: DirectionalLight3D
 var env_node: WorldEnvironment
 var environment: Environment
-var water: MeshInstance3D
+var water: Node3D
 var sky_resource: Sky
 var sky_visible := true
 var underwater_active := false
@@ -128,17 +127,8 @@ func set_sky_visible(value: bool) -> void:
 
 
 func _build_water() -> void:
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(1400, 1400)
-	plane.subdivide_width = 40
-	plane.subdivide_depth = 40
-	water = MeshInstance3D.new()
+	water = Node3D.new()
 	water.name = "Water"
-	water.mesh = plane
-	water.material_override = mats.water
-	water.position = Vector3(0, Terrain.SEA_LEVEL, 0)
-	water.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	water.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	add_child(water)
 
 
@@ -207,10 +197,6 @@ func radius() -> int:
 func _process(_delta: float) -> void:
 	var c := Vector2i(int(floor(_target.x / Chunk.SIZE)), int(floor(_target.z / Chunk.SIZE)))
 	var r := radius()
-	if water:
-		# a água segue o jogador em passos de 10 m para o shader não "nadar"
-		water.position.x = snappedf(_target.x, 10.0)
-		water.position.z = snappedf(_target.z, 10.0)
 	if c == _last_center:
 		if Vector2(_target.x, _target.z).distance_to(_last_lod_target) < 24.0:
 			return
@@ -272,7 +258,6 @@ func _take_chunk(key: Vector2i, lod: int) -> Chunk:
 		ch.terrain = terrain
 		ch.species = species
 		ch.mats = mats
-		ch.grass_quality = grass_quality
 		ch.world = self
 		add_child(ch)
 	else:
@@ -281,7 +266,7 @@ func _take_chunk(key: Vector2i, lod: int) -> Chunk:
 	ch.cx = key.x
 	ch.cz = key.y
 	ch.lod = lod
-	ch.grass_quality = grass_quality
+	ch.water_root = water
 	return ch
 
 
@@ -409,8 +394,15 @@ func ground_height(x: float, z: float) -> float:
 	return terrain.height(x, z)
 
 
+func water_surface_height(x: float, z: float) -> float:
+	return terrain.water_surface_height(x, z)
+
+
 func is_in_water(p: Vector3) -> bool:
-	return terrain.height(p.x, p.z) < Terrain.SEA_LEVEL and p.y < Terrain.SEA_LEVEL + 0.6
+	var surface := terrain.water_surface_height(p.x, p.z)
+	if surface < -99999.0:
+		return false
+	return p.y < surface + 0.65 and terrain.height(p.x, p.z) < surface - 0.35
 
 
 func _apply_quality() -> void:
@@ -469,14 +461,6 @@ func _apply_quality() -> void:
 
 func _apply_settings() -> void:
 	view_distance = clampf(float(Game.settings["view_distance"]), 60.0, 240.0)
-	var _new_grass := int(Game.settings["grass_quality"])
-	if _new_grass != grass_quality:
-		# a qualidade de relva mudou → liberta os chunks; são reconstruídos com a nova
-		# qualidade no próximo _update_chunks (aplica a mudança AO VIVO, não só em chunks novos)
-		for _k in chunks.keys():
-			(chunks[_k] as Chunk).release()
-		chunks.clear()
-	grass_quality = _new_grass
 	shadows_enabled = int(Game.settings["shadows"]) > 0
 	if sun:
 		sun.shadow_enabled = shadows_enabled

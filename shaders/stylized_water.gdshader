@@ -1,32 +1,7 @@
 shader_type spatial;
-// Água estilizada — OPACA.
-//
-// Duas razões, ambas documentadas pela própria documentação do Godot:
-//
-// 1. Escrever ALPHA num shader espacial põe o material no passe TRANSPARENTE,
-//    onde a ordenação é por objecto e não por triângulo ("surfaces in the back
-//    appearing to be in front"). Este plano tem 1400x1400 m: uma superfície
-//    transparente deste tamanho é meio caminho andado para se ver o mundo
-//    através dela.
-//
-// 2. `hint_depth_texture` não serve aqui. A doc diz que materiais transparentes
-//    nem aparecem em hint_depth_texture, e a reconstrução da profundidade muda
-//    entre renderers: Forward+/Mobile usam NDC 0..1, o Compatibility usa
-//    NDC -1..1 — e desde o Godot 4.3 o depth buffer é "reverse-z", com o near
-//    em 1.0 em vez de 0.0. O código anterior usava a convenção do Forward+ e
-//    a exportação web corre em Compatibility, por isso a "profundidade" da
-//    água era lixo. Sem a textura de profundidade o mesmo shader dá o mesmo
-//    resultado nos dois renderers.
-//
-// A água é a ÚNICA superfície transparente que sobra no jogo (céu, terreno e
-// folhagem são opacos). Uma única superfície transparente por cima de um mundo
-// opaco ordena-se bem: não há o "raio X" que várias superfícies transparentes
-// sobrepostas causavam. Por isso pode usar blend_mix + ALPHA com segurança.
-//
-// Continua SEM hint_depth_texture: a reconstrução da profundidade difere entre
-// Forward+ (NDC 0..1) e Compatibility (NDC -1..1, reverse-z desde o 4.3), e a
-// exportação web corre em Compatibility. Sem ela, o mesmo shader dá o mesmo
-// resultado nos dois renderers.
+// Água anime: superfície translúcida, cor por profundidade do leito e ondas
+// com cristas recortadas. A profundidade vem nos UV2 gerados pelo terreno, sem
+// uma leitura de depth texture por pixel; isso funciona nos renderers suportados.
 render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_toon;
 
 uniform vec4 deep_color : source_color = vec4(0.10, 0.36, 0.52, 1.0);
@@ -37,6 +12,8 @@ uniform float alpha : hint_range(0.0, 1.0) = 0.82;
 uniform float wave_speed : hint_range(0.0, 4.0) = 0.55;
 uniform float wave_scale : hint_range(0.5, 40.0) = 9.0;
 uniform float sun_glow : hint_range(0.0, 2.0) = 0.30;
+uniform float crest_strength : hint_range(0.0, 0.8) = 0.22;
+uniform float shore_foam_strength : hint_range(0.0, 1.0) = 0.52;
 uniform vec3 sun_dir = vec3(-0.4, 0.8, 0.3);
 
 varying vec3 v_world;
@@ -51,20 +28,27 @@ float wave(vec2 p, float t) {
 
 void vertex() {
 	v_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	vec2 p = v_world.xz * 0.12;   // marulho largo (~50 m), nao um ladrilho
-	VERTEX.y += wave(p, TIME * wave_speed) * 0.05;
+	vec2 p = v_world.xz * 0.12;   // ondas largas e contínuas entre chunks
+	float amplitude = mix(0.035, 0.11, UV2.y);
+	VERTEX.y += wave(p, TIME * wave_speed) * amplitude;
 }
 
 void fragment() {
 	float t = TIME * wave_speed;
 	vec2 p = v_world.xz * 0.12;
 	float w = wave(p, t) * 0.5 + 0.5;   // suave, SEM floor() -> sem plateaus/bolas
+	float depth = clamp(UV2.x / 8.0, 0.0, 1.0);
+	float shore = 1.0 - smoothstep(0.0, 0.85, UV2.x);
 
-	// profundo raso com transicao larga
-	vec3 col = mix(deep_color.rgb, shallow_color.rgb, smoothstep(0.25, 0.75, w) * 0.7);
+	// A cor vem da espessura da água; o movimento só acrescenta leitura de onda.
+	vec3 col = mix(shallow_color.rgb, deep_color.rgb, depth * 0.92);
+	float wave_band = smoothstep(0.58, 0.80, w) * 0.13;
+	col = mix(col, sky_tint.rgb, wave_band);
 
-	// espuma fina e rara, apenas nas cristas mais altas
-	col = mix(col, foam_color.rgb, smoothstep(0.90, 0.98, w) * 0.12);
+	// Linhas claras estilizadas nas cristas e espuma limitada às margens rasas.
+	float crest = smoothstep(0.74, 0.93, w) * crest_strength;
+	float foam = max(crest * 0.55, shore * (0.24 + crest) * shore_foam_strength);
+	col = mix(col, foam_color.rgb, clamp(foam, 0.0, 0.72));
 
 	// reflexo largo do sol (brilho de agua, nao um holofote)
 	vec3 n = normalize(NORMAL + vec3((w - 0.5) * 0.2, 0.0, (0.5 - w) * 0.2));
@@ -73,6 +57,6 @@ void fragment() {
 
 	ALBEDO = col;
 	ALPHA = alpha;
-	ROUGHNESS = 0.12;
-	SPECULAR = 0.35;
+	ROUGHNESS = 0.22;
+	SPECULAR = 0.24;
 }
