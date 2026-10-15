@@ -33,6 +33,7 @@ var harvest_nodes: Array = []
 
 var _mesh_inst: MeshInstance3D
 var _grass_shell_inst: MeshInstance3D
+var _grass_cards_inst: MultiMeshInstance3D
 var _water_inst: MeshInstance3D
 var _body: StaticBody3D
 var _decor: Array = []
@@ -151,9 +152,14 @@ func _build_ground(o: Vector2, with_collision: bool) -> void:
 	_mesh_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	_mesh_inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	add_child(_mesh_inst)
-	if lod < 2:
+	if lod < 3:
+		# Mantém os mesmos níveis de altura nos três LODs para não abrir uma
+		# costura vertical quando dois chunks vizinhos usam resoluções distintas.
+		var shell_layers := 8
 		_build_grass_shells(o, n, step, heights, normals, grass_cover,
-			grass_dryness, 8 if lod == 0 else 4)
+			grass_dryness, shell_layers)
+	if lod == 0:
+		_build_grass_cards(o, n, step, heights, normals, grass_cover, grass_dryness)
 
 	if with_collision:
 		var shape := HeightMapShape3D.new()
@@ -214,6 +220,98 @@ func _build_grass_shells(o: Vector2, n: int, step: float,
 	_grass_shell_inst.extra_cull_margin = 0.8
 	add_child(_grass_shell_inst)
 	_decor.append(_grass_shell_inst)
+
+
+## Folhas mais largas perto do jogador. Uma malha partilhada é desenhada por
+## MultiMesh; cobertura, inclinação e secura vêm da grelha já calculada para o
+## terreno, evitando amostrar ruído procedural outra vez para cada tufo.
+func _build_grass_cards(o: Vector2, n: int, step: float,
+		heights: PackedFloat32Array, normals: PackedVector3Array,
+		coverage: PackedFloat32Array, dryness: PackedFloat32Array) -> void:
+	if mats.grass_card_mesh == null:
+		return
+	var quality := clampi(int(Game.settings.get("quality", 1)), 0, 2)
+	var spacing: float = [1.02, 0.90, 0.80][quality]
+	var cells: int = int(ceil(SIZE / spacing))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(Vector3i(cx, terrain.seed_value, cz))
+	var transforms: Array[Transform3D] = []
+	var instance_data: Array[Color] = []
+	for iz in cells:
+		for ix in cells:
+			var x: float = o.x + (float(ix) + rng.randf_range(0.08, 0.92)) * spacing
+			var z: float = o.y + (float(iz) + rng.randf_range(0.08, 0.92)) * spacing
+			if x >= o.x + SIZE or z >= o.y + SIZE:
+				continue
+			var field := _sample_grass_grid(coverage, n, step, x, z, o)
+			if field < 0.07:
+				continue
+			var density := clampf((field - 0.07) / 0.48, 0.0, 1.0)
+			density = density * density * (3.0 - 2.0 * density) * 0.94
+			if rng.randf() > density:
+				continue
+			var dry := _sample_grass_grid(dryness, n, step, x, z, o)
+			var height := _sample_grass_grid(heights, n, step, x, z, o)
+			var normal := _sample_grass_normal(normals, n, step, x, z, o)
+			var orientation := Basis(Quaternion(Vector3.UP, normal)) \
+				* Basis(Vector3.UP, rng.randf() * TAU)
+			var scale := rng.randf_range(0.82, 1.28)
+			var height_scale := scale * lerpf(1.05, 0.78, dry) * rng.randf_range(0.92, 1.12)
+			orientation = orientation.scaled(Vector3(scale, height_scale, scale))
+			transforms.append(Transform3D(orientation, Vector3(x, height, z)))
+			instance_data.append(Color(dry, rng.randf(), 0.0, 1.0))
+	if transforms.is_empty():
+		return
+	var multimesh := MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.use_custom_data = true
+	multimesh.mesh = mats.grass_card_mesh
+	multimesh.instance_count = transforms.size()
+	for i in transforms.size():
+		multimesh.set_instance_transform(i, transforms[i])
+		multimesh.set_instance_custom_data(i, instance_data[i])
+	var min_height := heights[0]
+	var max_height := heights[0]
+	for sampled_height in heights:
+		min_height = minf(min_height, sampled_height)
+		max_height = maxf(max_height, sampled_height)
+	multimesh.custom_aabb = AABB(Vector3(o.x - 2.0, min_height - 2.0, o.y - 2.0),
+		Vector3(SIZE + 4.0, max_height - min_height + 5.0, SIZE + 4.0))
+	_grass_cards_inst = MultiMeshInstance3D.new()
+	_grass_cards_inst.name = "GrassCards"
+	_grass_cards_inst.multimesh = multimesh
+	_grass_cards_inst.material_override = mats.grass_cards
+	_grass_cards_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_grass_cards_inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	_grass_cards_inst.extra_cull_margin = 0.8
+	add_child(_grass_cards_inst)
+	_decor.append(_grass_cards_inst)
+
+
+func _sample_grass_grid(values: PackedFloat32Array, n: int, step: float,
+		x: float, z: float, o: Vector2) -> float:
+	var gx := clampf((x - o.x) / step, 0.0, float(n - 1))
+	var gz := clampf((z - o.y) / step, 0.0, float(n - 1))
+	var ix := mini(int(floor(gx)), n - 2)
+	var iz := mini(int(floor(gz)), n - 2)
+	var tx := gx - float(ix)
+	var tz := gz - float(iz)
+	var a := lerpf(values[iz * n + ix], values[iz * n + ix + 1], tx)
+	var b := lerpf(values[(iz + 1) * n + ix], values[(iz + 1) * n + ix + 1], tx)
+	return lerpf(a, b, tz)
+
+
+func _sample_grass_normal(values: PackedVector3Array, n: int, step: float,
+		x: float, z: float, o: Vector2) -> Vector3:
+	var gx := clampf((x - o.x) / step, 0.0, float(n - 1))
+	var gz := clampf((z - o.y) / step, 0.0, float(n - 1))
+	var ix := mini(int(floor(gx)), n - 2)
+	var iz := mini(int(floor(gz)), n - 2)
+	var tx := gx - float(ix)
+	var tz := gz - float(iz)
+	var a := values[iz * n + ix].lerp(values[iz * n + ix + 1], tx)
+	var b := values[(iz + 1) * n + ix].lerp(values[(iz + 1) * n + ix + 1], tx)
+	return a.lerp(b, tz).normalized()
 
 
 ## A superfície de água é recortada à altura do terreno em cada chunk. Isto
@@ -328,9 +426,11 @@ func _add_water_face(st: SurfaceTool, a: Dictionary, b: Dictionary, c: Dictionar
 	var va := Vector3(pa.x, float(a["level"]), pa.y)
 	var vb := Vector3(pb.x, float(b["level"]), pb.y)
 	var vc := Vector3(pc.x, float(c["level"]), pc.y)
-	var da := Vector2(float(a["depth"]), 1.0 if float(a["level"]) > 0.4 else 0.0)
-	var db := Vector2(float(b["depth"]), 1.0 if float(b["level"]) > 0.4 else 0.0)
-	var dc := Vector2(float(c["depth"]), 1.0 if float(c["level"]) > 0.4 else 0.0)
+	# Mar fica no nível 0; o rio nasce acima dele e desce até à foz. UV2.y
+	# controla a força das ondas, portanto o mar recebe 1 e o rio 0.
+	var da := Vector2(float(a["depth"]), 1.0 if float(a["level"]) <= 0.4 else 0.0)
+	var db := Vector2(float(b["depth"]), 1.0 if float(b["level"]) <= 0.4 else 0.0)
+	var dc := Vector2(float(c["depth"]), 1.0 if float(c["level"]) <= 0.4 else 0.0)
 	if (vb - va).cross(vc - va).y < 0.0:
 		var swap := vb
 		vb = vc

@@ -30,9 +30,10 @@ fechado, o teste que o apanha entra no `tests/selftest.gd` para não voltar.
    Não abortam nada (devolvem default) mas poluem o Output. Causa provável:
    algum nó a ler/escrever transform global durante a construção, antes de
    entrar na árvore. Próximo a perseguir.
-8. **Rasterizador por software não lê readback de MultiMesh** no build wasm —
-   por isso as capturas `docs/shots/` mostram terreno/casas mas não a relva/
-   árvores. Não é um bug do jogo; é limite da ferramenta de diagnóstico.
+8. **Rasterizador por software não reproduz os shaders procedurais da relva** —
+   as capturas de `docs/shots/` não mostram corretamente o recorte e o volume
+   de shells/cartões. A captura pode enumerar as instâncias, mas não comprova
+   o resultado visual desses shaders; é um limite da ferramenta de diagnóstico.
 
 ## LIMITES DO SANDBOX (não corrigíveis aqui)
 9. **Sem GPU/browser** → não se valida o ecrã real; usa-se `tools/render_shot.py`.

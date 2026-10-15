@@ -74,6 +74,11 @@ void fragment() {
 }
 
 void light() {
+	if (!LIGHT_IS_DIRECTIONAL) {
+		float local_diffuse = max(dot(NORMAL, LIGHT), 0.0);
+		DIFFUSE_LIGHT += ALBEDO * LIGHT_COLOR * local_diffuse
+			* clamp(ATTENUATION, 0.0, 1.0) * v_fade;
+	} else {
 	float ndl = dot(NORMAL, LIGHT);
 	float lit = ndl * 0.5 + 0.5;
 	float band = floor(lit * bands) / bands;
@@ -93,4 +98,5 @@ void light() {
 	float ndh = max(dot(NORMAL, H), 0.0);
 	float spec = pow(ndh, 42.0) * 0.18;
 	SPECULAR_LIGHT += LIGHT_COLOR * spec * clamp(ATTENUATION, 0.0, 1.0) * v_fade;
+	}
 }

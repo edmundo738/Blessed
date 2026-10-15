@@ -44,6 +44,11 @@ void fragment() {
 }
 
 void light() {
+	if (!LIGHT_IS_DIRECTIONAL) {
+		float local_diffuse = max(dot(NORMAL, LIGHT), 0.0);
+		DIFFUSE_LIGHT += ALBEDO * LIGHT_COLOR * local_diffuse
+			* clamp(ATTENUATION, 0.0, 1.0);
+	} else {
 	float ndl = dot(NORMAL, LIGHT);
 	float lit = ndl * 0.5 + 0.5;
 	float band = floor(lit * bands) / bands;
@@ -53,4 +58,5 @@ void light() {
 	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 2.5);
 	col += LIGHT_COLOR * rim * rim_strength * (0.35 + band);
 	DIFFUSE_LIGHT += col * LIGHT_COLOR * ambient_gain;
+	}
 }

@@ -332,6 +332,13 @@ void fragment() {
 }
 
 void light() {
+	// A luz local da fogueira mantém a queda radial contínua; só o sol e a lua
+	// usam bandas toon, que antes recortavam o círculo em placas facetadas.
+	if (!LIGHT_IS_DIRECTIONAL) {
+		float local_diffuse = max(dot(NORMAL, LIGHT), 0.0);
+		DIFFUSE_LIGHT += ALBEDO * LIGHT_COLOR * local_diffuse
+			* clamp(ATTENUATION, 0.0, 1.0);
+	} else {
 	float ndl = dot(NORMAL, LIGHT);
 	float lit = ndl * 0.5 + 0.5;
 	float band = floor(lit * bands) / bands;
@@ -355,4 +362,5 @@ void light() {
 	float gloss = 1.0 - ROUGHNESS;
 	float spec = pow(ndh, mix(10.0, 160.0, gloss)) * gloss * spec_strength;
 	SPECULAR_LIGHT += LIGHT_COLOR * spec * shadow * vec3(1.0, 0.98, 0.94);
+	}
 }

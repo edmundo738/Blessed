@@ -49,6 +49,7 @@ func _ready() -> void:
 	terrain = Terrain.new(Game.world_seed)
 	species = SpeciesKit.new(Game.world_seed)
 	mats = Materials.new()
+	mats.set_wind(wind)
 	_build_environment()
 	_build_sky()
 	_build_water()

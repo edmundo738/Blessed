@@ -10,6 +10,8 @@ var terrain: ShaderMaterial
 var foliage: ShaderMaterial
 var grass: ShaderMaterial
 var grass_shell: ShaderMaterial
+var grass_cards: ShaderMaterial
+var grass_card_mesh: ArrayMesh
 var water: ShaderMaterial
 var sky: ShaderMaterial
 var structure: ShaderMaterial
@@ -26,6 +28,7 @@ var _wind_strength := 0.22
 const SKY_DAY := preload("res://content/fx/kenney/sky/skybox-day.png")
 const SKY_MORNING := preload("res://content/fx/kenney/sky/skybox-morning.png")
 const SKY_NIGHT := preload("res://content/fx/kenney/sky/skybox-night.png")
+const GRASS_ATLAS := preload("res://content/models/runtime/quaternius/Grass.png")
 
 
 func _init() -> void:
@@ -34,8 +37,10 @@ func _init() -> void:
 	_grass_shader = load("res://shaders/toon_grass.gdshader")
 	_foliage_card_shader = load("res://shaders/toon_foliage_cards.gdshader")
 	var gss: Shader = load("res://shaders/grass_shells.gdshader")
+	var gcs: Shader = load("res://shaders/grass_cards.gdshader")
 	var ws: Shader = load("res://shaders/stylized_water.gdshader")
 	var ss: Shader = load("res://shaders/anime_sky.gdshader")
+	var wind_noise := _make_wind_noise()
 
 	terrain = ShaderMaterial.new()
 	terrain.shader = ts
@@ -53,8 +58,17 @@ func _init() -> void:
 	grass = grass_material_for()
 	grass_shell = ShaderMaterial.new()
 	grass_shell.shader = gss
+	grass_shell.set_shader_parameter("grass_texture", GRASS_ATLAS)
+	grass_shell.set_shader_parameter("wind_noise", wind_noise)
 	grass_shell.set_shader_parameter("wind_strength", 0.34)
 	grass_shell.set_shader_parameter("wind_speed", 1.15)
+	grass_cards = ShaderMaterial.new()
+	grass_cards.shader = gcs
+	grass_cards.set_shader_parameter("grass_texture", GRASS_ATLAS)
+	grass_cards.set_shader_parameter("wind_noise", wind_noise)
+	grass_cards.set_shader_parameter("wind_strength", 0.24)
+	grass_cards.set_shader_parameter("wind_speed", 1.0)
+	grass_card_mesh = MeshKit.grass_card_clump(10)
 
 	var sts: Shader = load("res://shaders/toon_structure.gdshader")
 	structure = ShaderMaterial.new()
@@ -65,6 +79,7 @@ func _init() -> void:
 
 	water = ShaderMaterial.new()
 	water.shader = ws
+	water.set_shader_parameter("flow_noise", wind_noise)
 
 	sky = ShaderMaterial.new()
 	sky.shader = ss
@@ -176,5 +191,30 @@ func set_wind(strength: float) -> void:
 	foliage.set_shader_parameter("wind_strength", strength)
 	_wind_strength = strength * 1.4
 	grass_shell.set_shader_parameter("wind_strength", strength * 1.7)
+	grass_cards.set_shader_parameter("wind_strength", strength * 1.2)
 	for grass_material in _grass_materials:
 		grass_material.set_shader_parameter("wind_strength", _wind_strength)
+
+
+func _make_wind_noise() -> Texture2D:
+	var noise := FastNoiseLite.new()
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	noise.seed = 317
+	noise.frequency = 0.075
+	noise.fractal_octaves = 3
+	# Blend wrapped samples at the image edges so both wind shaders can repeat
+	# the small map without a visible seam across the terrain.
+	var image := Image.create(128, 128, false, Image.FORMAT_R8)
+	for y in 128:
+		var ty := float(y) / 128.0
+		ty = ty * ty * (3.0 - 2.0 * ty)
+		for x in 128:
+			var tx := float(x) / 128.0
+			tx = tx * tx * (3.0 - 2.0 * tx)
+			var a := lerpf(noise.get_noise_2d(x, y), noise.get_noise_2d(x - 128, y), tx)
+			var b := lerpf(noise.get_noise_2d(x, y - 128),
+				noise.get_noise_2d(x - 128, y - 128), tx)
+			var value := clampf(lerpf(a, b, ty) * 0.5 + 0.5, 0.0, 1.0)
+			image.set_pixel(x, y, Color(value, 0.0, 0.0, 1.0))
+	image.generate_mipmaps()
+	return ImageTexture.create_from_image(image)

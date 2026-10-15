@@ -179,6 +179,55 @@ static func grass_tuft(rng: RandomNumberGenerator, blades: int, h: float,
 	return st.commit()
 
 
+## Tufo para a faixa próxima: cartões cruzados de baixa geometria, UVs no
+## atlas real de grama e normais viradas para cima para manter a luz estável.
+static func grass_card_clump(blades: int = 10) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for blade in blades:
+		var b := float(blade)
+		var angle := TAU * b / float(maxi(blades, 1)) + sin(b * 4.73) * 0.19
+		var direction := Vector2(cos(angle), sin(angle))
+		var across := Vector2(-direction.y, direction.x)
+		var root_offset := Vector2(sin(b * 6.17), cos(b * 3.91)) * 0.105
+		var height := 0.43 + fposmod(b * 0.618, 1.0) * 0.22
+		var lean := 0.075 + fposmod(b * 0.371, 1.0) * 0.15
+		var half_width := 0.045 + fposmod(b * 0.287, 1.0) * 0.024
+		var base := Vector3(root_offset.x, 0.0, root_offset.y)
+		var tip := base + Vector3(direction.x * lean, height, direction.y * lean)
+		var middle := base.lerp(tip, 0.56) \
+			+ Vector3(direction.x * lean * 0.10, 0.0, direction.y * lean * 0.10)
+		var base_left := base + Vector3(across.x * half_width, 0.0, across.y * half_width)
+		var base_right := base - Vector3(across.x * half_width, 0.0, across.y * half_width)
+		var mid_left := middle + Vector3(across.x * half_width * 0.56, 0.0,
+			across.y * half_width * 0.56)
+		var mid_right := middle - Vector3(across.x * half_width * 0.56, 0.0,
+			across.y * half_width * 0.56)
+		var palette := float(blade % 2)
+		var uv_base_left := Vector2(palette, 1.0)
+		var uv_base_right := Vector2(palette, 1.0)
+		var uv_mid := Vector2(palette, 0.48)
+		var uv_tip := Vector2(palette, 0.0)
+		var base_tint := Color(0.58, 0.69, 0.46)
+		var mid_tint := Color(0.76, 0.88, 0.60)
+		var tip_tint := Color(0.92, 0.99, 0.76)
+		_grass_card_tri(st, base_left, base_right, mid_right,
+			uv_base_left, uv_base_right, uv_mid, base_tint, base_tint, mid_tint)
+		_grass_card_tri(st, base_left, mid_right, mid_left,
+			uv_base_left, uv_mid, uv_mid, base_tint, mid_tint, mid_tint)
+		_grass_card_tri(st, mid_left, mid_right, tip,
+			uv_mid, uv_mid, uv_tip, mid_tint, mid_tint, tip_tint)
+	return st.commit()
+
+
+static func _grass_card_tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3,
+		uv_a: Vector2, uv_b: Vector2, uv_c: Vector2,
+		color_a: Color, color_b: Color, color_c: Color) -> void:
+	st.set_normal(Vector3.UP); st.set_color(color_a); st.set_uv(uv_a); st.add_vertex(a)
+	st.set_normal(Vector3.UP); st.set_color(color_b); st.set_uv(uv_b); st.add_vertex(b)
+	st.set_normal(Vector3.UP); st.set_color(color_c); st.set_uv(uv_c); st.add_vertex(c)
+
+
 static func _stripe(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3,
 		tint: Color, shade: float) -> void:
 	var dark := Color(tint.r * (0.55 + shade * 0.2), tint.g * (0.6 + shade * 0.2), tint.b * (0.55 + shade * 0.2))

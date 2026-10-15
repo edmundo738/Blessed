@@ -256,21 +256,25 @@ func is_ocean(x: float, z: float) -> bool:
 
 
 func grass_coverage_s(h: float, sl: float, weights: PackedFloat32Array) -> float:
-	if h < SEA_LEVEL + 0.25:
+	if h < SEA_LEVEL + 1.8:
 		return 0.0
-	var wet_green := weights[B_MEADOW] * 0.92 + weights[B_FOREST] * 0.76 \
-		+ weights[B_GROVE] * 0.84 + weights[B_MARSH] * 0.72
-	var dry_green := weights[B_SAVANNA] * 0.66 + weights[B_DIRT] * 0.24 \
-		+ weights[B_MUD] * 0.30
-	var sparse := weights[B_SNOW] * 0.05 + weights[B_ROCK] * 0.03 \
-		+ (weights[B_SAND] + weights[B_DESERT]) * 0.015 + weights[B_BADLANDS] * 0.01
+	var wet_green := weights[B_MEADOW] * 1.05 + weights[B_FOREST] * 0.94 \
+		+ weights[B_GROVE] * 1.0 + weights[B_MARSH] * 0.64
+	var dry_green := weights[B_SAVANNA] * 0.82 + weights[B_DIRT] * 0.16 \
+		+ weights[B_MUD] * 0.22
+	var barren := weights[B_SAND] * 1.25 + weights[B_DESERT] * 1.20 \
+		+ weights[B_BADLANDS] * 1.35 + weights[B_SNOW] * 0.48 \
+		+ weights[B_ROCK] * 0.30
+	var biome_fade := 1.0 - _smooth(0.06, 0.52, barren)
+	var shore_fade := _smooth(SEA_LEVEL + 1.8, SEA_LEVEL + 4.2, h)
 	var slope_mask := 1.0 - _smooth(0.28, 0.68, sl)
-	return clampf((wet_green + dry_green + sparse) * slope_mask, 0.0, 0.96)
+	return clampf((wet_green + dry_green) * biome_fade * shore_fade * slope_mask, 0.0, 0.98)
 
 
 func grass_dryness(weights: PackedFloat32Array) -> float:
-	return clampf(weights[B_SAVANNA] * 0.55 + weights[B_DESERT] * 0.9 \
-		+ weights[B_BADLANDS] * 0.85 + weights[B_DIRT] * 0.25, 0.0, 1.0)
+	return clampf(weights[B_SAVANNA] * 0.68 + weights[B_DESERT] * 0.96 \
+		+ weights[B_BADLANDS] * 0.92 + weights[B_SAND] * 0.68 \
+		+ weights[B_DIRT] * 0.32, 0.0, 1.0)
 
 
 ## Terreno "cru", sem rio/caminho/aldeia.

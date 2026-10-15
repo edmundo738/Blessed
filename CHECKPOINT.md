@@ -6,6 +6,21 @@
 > O histórico de auditoria abaixo preserva resultados antigos; quando diferirem, prevalecem
 > este marco mais recente e `docs/AUDIT_2026-10-14.md`.
 
+## Marco mais recente — água, luz local e relva (2026-10-15)
+
+- Água usa shader opaco de dupla face, ondas/espuma estilizadas e paleta diferente
+  debaixo da superfície; o tipo mar/rio agora é passado ao shader corretamente.
+- Luzes locais usam decaimento contínuo nos materiais toon, sem bandas que
+  facetavam o alcance da fogueira.
+- Relva combina cartões MultiMesh com a textura Quaternius perto do jogador,
+  shells com a mesma paleta até ao LOD distante e pintura do terreno no horizonte.
+  A cobertura respeita pradaria/savana e transições, excluindo areia de praia,
+  deserto e declives fortes; os níveis dos shells coincidem entre LODs.
+- **Verificado:** arranque Godot 4.7.2 headless e compilação dos shaders sem
+  erros. O renderizador de diagnóstico não reproduz o mascaramento do shader
+  procedural de shells/cartões; a aparência e o FPS no renderer real ainda
+  precisam de confirmação no jogo.
+
 ## Marco mais recente — vegetação e céu (2026-10-14)
 
 - 14 famílias de modelos gratuitos Quaternius CC0 foram integradas como assets separados,
@@ -40,7 +55,7 @@ PT/EN, save/load. O cenário é híbrido: geração GDScript e um kit de modelos
 |--------------------|----------|-------|
 | Mundo/chunks       | OK       | selftest + rasterizador (`docs/shots/`) |
 | Controlos          | OK       | selftest (tabela de teclas) |
-| Água               | semi-transparente, sem depth-texture | selftest + shader |
+| Água               | shader opaco dupla face, ondas/espuma; sem depth-texture | shader e arranque Godot headless; aparência no renderer real pendente |
 | Céu/sombra/LOD     | céu Kenney CC0 2K, sol/lua e nuvens dinâmicos; LODs por anel | importação e contratos no selftest; imagem/FPS GPU ainda não medidos |
 | Relva/árvores      | 14 famílias Quaternius CC0, espécies separadas e LODs | meshes, dimensões e instâncias validados no Godot headless; aparência no renderer por validar |
 | NPC                | componente sprite 2D com variações; sem aldeões ativos na cena atual | script incluído no selftest; aldeões não aparecem na cena |

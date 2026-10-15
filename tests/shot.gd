@@ -222,8 +222,12 @@ func _write_multimesh(buf: StreamPeerBuffer, mi: MultiMeshInstance3D) -> bool:
 		return false
 	var arr: Array = mm.mesh.surface_get_arrays(0)
 	var lv: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
-	var ln: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
-	var lidx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+	var ln := PackedVector3Array()
+	if arr[Mesh.ARRAY_NORMAL] is PackedVector3Array:
+		ln = arr[Mesh.ARRAY_NORMAL]
+	var lidx := PackedInt32Array()
+	if arr[Mesh.ARRAY_INDEX] is PackedInt32Array:
+		lidx = arr[Mesh.ARRAY_INDEX]
 	if lv.size() == 0:
 		return false
 	var gt := mi.global_transform
@@ -306,9 +310,15 @@ func _write_mesh(buf: StreamPeerBuffer, mi: MeshInstance3D) -> bool:
 	# só a superfície 0 chega para diagnóstico; o resto é registado no log
 	var arr: Array = mesh.surface_get_arrays(0)
 	var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
-	var norms: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
-	var cols: PackedColorArray = arr[Mesh.ARRAY_COLOR]
-	var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+	var norms := PackedVector3Array()
+	if arr[Mesh.ARRAY_NORMAL] is PackedVector3Array:
+		norms = arr[Mesh.ARRAY_NORMAL]
+	var cols := PackedColorArray()
+	if arr[Mesh.ARRAY_COLOR] is PackedColorArray:
+		cols = arr[Mesh.ARRAY_COLOR]
+	var idx := PackedInt32Array()
+	if arr[Mesh.ARRAY_INDEX] is PackedInt32Array:
+		idx = arr[Mesh.ARRAY_INDEX]
 	if verts.size() == 0:
 		return false
 	var has_cols: bool = cols.size() == verts.size()
