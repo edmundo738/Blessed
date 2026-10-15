@@ -305,11 +305,14 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 			seaweed_t.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU)
 				.scaled(Vector3(scale, scale, scale)), Vector3(x, h + 0.05, z)))
 
-	# ── relva (só MultiMesh, sem colisão, com fade por distância) ─────────
+	# ── relva: tufos em manchas, instanciados por chunk ────────────────────
 	if lod <= 1:
-		var target := int(GRASS_TARGET * [0.35, 1.0, 2.0][clampi(grass_quality, 0, 2)])
+		var quality := clampi(grass_quality, 0, 2)
+		var target := int(GRASS_TARGET * [0.35, 1.0, 2.0][quality])
 		if lod == 1:
-			target = int(target * 0.35)
+			# O LOD distante usa uma malha 4x mais leve e mantém mais cobertura
+			# para a troca de detalhe não abrir uma faixa nua à volta do jogador.
+			target = int(target * 0.55)
 		var placed := 0
 		var guard := 0
 		while placed < target and guard < target * 6:
@@ -325,20 +328,23 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 			if terrain.path_distance(x, z) < 2.2:
 				continue
 			var biome := terrain.dominant_s(x, z, h, sl)
-			if rng.randf() > SpeciesKit.grass_density(biome) * 2.2:
+			var patch := terrain.groundcover_patch_factor(x, z)
+			var patch_density := lerpf(0.38, 1.25, patch)
+			if rng.randf() > clampf(SpeciesKit.grass_density(biome) * 2.2 * patch_density, 0.0, 1.0):
 				continue
 			var s := rng.randf_range(0.75, 1.35)
-			var cover_id := "grass_clump"
-			var variant_roll := rng.randf()
-			if biome == Terrain.B_MARSH and variant_roll < 0.52:
-				cover_id = "reed_clump"
-			elif biome == Terrain.B_FOREST and variant_roll < 0.20:
-				cover_id = "fern_clump"
-			elif biome in [Terrain.B_MEADOW, Terrain.B_GROVE]:
-				if variant_roll < 0.10:
-					cover_id = "flower_clump"
-				elif variant_roll < 0.20:
-					cover_id = "clover_clump"
+			var cover_id := "grass_lod" if lod == 1 else "grass_clump"
+			if lod == 0:
+				var variant_roll := rng.randf()
+				if biome == Terrain.B_MARSH and variant_roll < 0.52:
+					cover_id = "reed_clump"
+				elif biome == Terrain.B_FOREST and variant_roll < 0.20:
+					cover_id = "fern_clump"
+				elif biome in [Terrain.B_MEADOW, Terrain.B_GROVE]:
+					if variant_roll < 0.10:
+						cover_id = "flower_clump"
+					elif variant_roll < 0.20:
+						cover_id = "clover_clump"
 			if not groundcover.has(cover_id):
 				groundcover[cover_id] = {"t": [], "c": []}
 			(groundcover[cover_id]["t"] as Array).append(Transform3D(
@@ -386,22 +392,48 @@ func _make_multimesh(id: String, b: Dictionary) -> void:
 	if sp == null:
 		return
 	mesh = sp.lods[clampi(lod, 0, sp.lods.size() - 1)]
+	# Os modelos de copa usam cartões alfa. Mantemos a máscara e os LODs do
+	# artista, mas animamos os vértices por instância em vez de deixar folhas imóveis.
+	if sp.materials_authored and (species.trees.has(id) or id == "bush"):
+		mesh = mats.wind_foliage_mesh(mesh, sp.height)
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_custom_data = true
 	mm.use_colors = true  # sem isto a cor de vértice é multiplicada por 0 => preto
 	mm.mesh = mesh
 	mm.instance_count = t.size()
+	var tree_bounds := AABB()
+	var has_tree_bounds := false
 	for i in t.size():
-		mm.set_instance_transform(i, t[i])
+		var xform: Transform3D = t[i]
+		mm.set_instance_transform(i, xform)
 		mm.set_instance_color(i, Color.WHITE)
 		var tint: Color = c[i]
 		mm.set_instance_custom_data(i, Color(tint.r, tint.g, tint.b, float(b["fade"])))
+		if species.trees.has(id) or id == "bush":
+			# O shader abana as copas para fora da caixa estática da malha; fornece
+			# limites conservadores por chunk para o culling não cortar folhas ao vento.
+			var scale_x := xform.basis.x.length()
+			var scale_y := xform.basis.y.length()
+			var scale_z := xform.basis.z.length()
+			var radius := maxf(1.5, sp.height * 0.45) * maxf(scale_x, scale_z) + 0.8
+			var p: Vector3 = xform.origin
+			var low := Vector3(p.x - radius, p.y - 1.0, p.z - radius)
+			var high := Vector3(p.x + radius, p.y + sp.height * scale_y + 1.0,
+				p.z + radius)
+			if not has_tree_bounds:
+				tree_bounds = AABB(low, high - low)
+				has_tree_bounds = true
+			else:
+				tree_bounds = tree_bounds.expand(low).expand(high)
+	if has_tree_bounds:
+		mm.custom_aabb = tree_bounds
 	b["mm"] = mm
 	var inst := MultiMeshInstance3D.new()
 	inst.multimesh = mm
 	inst.material_override = null if sp.materials_authored else mats.foliage
-	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if lod == 0 \
+	var keeps_realtime_shadow := lod == 0 and species.trees.has(id)
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if keeps_realtime_shadow \
 		else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	inst.visibility_range_end = 0.0
@@ -415,27 +447,49 @@ func _grass_multimesh(asset_id: String, t: Array, c: Array) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(Vector2i(cx, cz)) ^ 0x9E37
 	var authored_cover := BlessedBlenderAssets.mesh_for(asset_id)
-	var mesh: ArrayMesh = authored_cover if authored_cover != null else \
-		MeshKit.grass_tuft(rng, 4, 0.62, 0.05, Color(1, 1, 1))
+	var shell_grass := lod == 0 and asset_id == "grass_clump"
+	var mesh: ArrayMesh
+	if shell_grass:
+		mesh = MeshKit.grass_shell_tuft(rng, 6, 3, 0.68, 0.045)
+	elif lod == 1:
+		mesh = mats.distant_grass_mesh()
+	elif authored_cover != null:
+		mesh = mats.wind_foliage_mesh(authored_cover)
+	else:
+		mesh = MeshKit.grass_shell_tuft(rng, 5, 3, 0.62, 0.05)
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_custom_data = true
 	mm.use_colors = true  # sem isto a cor de vértice é multiplicada por 0 => preto
 	mm.mesh = mesh
 	mm.instance_count = t.size()
-	var fade: float = [30.0, 55.0, 85.0][clampi(grass_quality, 0, 2)]
+	var fades: Array = [[26.0, 50.0, 78.0], [31.0, 63.0, 100.0]]
+	var fade: float = fades[clampi(lod, 0, 1)][clampi(grass_quality, 0, 2)]
+	var grass_bounds := AABB()
 	for i in t.size():
-		mm.set_instance_transform(i, t[i])
+		var xform: Transform3D = t[i]
+		mm.set_instance_transform(i, xform)
 		mm.set_instance_color(i, Color.WHITE)
 		var col: Color = c[i]
 		mm.set_instance_custom_data(i, Color(col.r, col.g, col.b, fade))
+		# AABB explícito inclui a deformação do vento e mantém o culling por
+		# chunk apertado, em vez de deixar a relva aumentar o volume visível.
+		var p := xform.origin
+		var extent := Vector3.ONE * 1.5
+		if i == 0:
+			grass_bounds = AABB(p - extent, extent * 2.0)
+		else:
+			grass_bounds = grass_bounds.expand(p - extent).expand(p + extent)
+	mm.custom_aabb = grass_bounds
 	var inst := MultiMeshInstance3D.new()
+	inst.name = "Groundcover_%s" % asset_id
 	inst.multimesh = mm
-	# Blender palette colors are baked into GLB vertex colors. Keep the shared
-	# shader for toon light and wind on both authored and code fallback meshes.
-	# Quaternius groundcover has its own authored texture/material. Keep it intact;
-	# use the shared wind shader only for the procedural fallback mesh.
-	inst.material_override = null if authored_cover != null else mats.grass
+	# Relva perto recebe shells recortados; as outras plantas preservam as
+	# texturas importadas com vento; o LOD médio agrupa tudo num tufo barato.
+	if shell_grass or (authored_cover == null and lod == 0):
+		inst.material_override = mats.grass_shell
+	elif lod == 1 or authored_cover == null:
+		inst.material_override = mats.grass
 	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	add_child(inst)

@@ -166,6 +166,7 @@ func _run() -> void:
 			"base/1/2: %d/%d/%d vértices" % [base_count, lod1_count, lod2_count])
 
 	var blender_trees_in_world := 0
+	var wind_shader_trees_in_world := 0
 	for c in world.chunks.values():
 		for decor in (c as Chunk)._decor:
 			if decor is not MultiMeshInstance3D or (decor as MultiMeshInstance3D).multimesh == null:
@@ -173,11 +174,20 @@ func _run() -> void:
 			var used_mesh: Mesh = (decor as MultiMeshInstance3D).multimesh.mesh
 			for tree_id in world.species.trees:
 				var tree_species: SpeciesKit.Species = world.species.trees[tree_id]
-				if not tree_species.lods.is_empty() and used_mesh == tree_species.lods[0]:
+				if not tree_species.lods.is_empty() \
+						and used_mesh.get_surface_count() == tree_species.lods[0].get_surface_count() \
+						and _mesh_vertex_count(used_mesh) == _mesh_vertex_count(tree_species.lods[0]):
 					blender_trees_in_world += (decor as MultiMeshInstance3D).multimesh.instance_count
+					for surface in used_mesh.get_surface_count():
+						var mat := used_mesh.surface_get_material(surface) as ShaderMaterial
+						if mat != null and mat.shader != null \
+								and mat.shader.resource_path.ends_with("toon_foliage_cards.gdshader"):
+							wind_shader_trees_in_world += (decor as MultiMeshInstance3D).multimesh.instance_count
+							break
 					break
-	check("chunks usam modelos Blender para as árvores", blender_trees_in_world > 0,
-			"%d instâncias" % blender_trees_in_world)
+	check("chunks usam árvores Blender com vento nas folhas",
+		blender_trees_in_world > 0 and wind_shader_trees_in_world > 0,
+		"%d instâncias; %d com shader de folhas" % [blender_trees_in_world, wind_shader_trees_in_world])
 
 	# ── 2. biomas variados ────────────────────────────────────────────────
 	var biomes := {}

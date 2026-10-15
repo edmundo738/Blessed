@@ -61,6 +61,7 @@ var n_mask: FastNoiseLite
 var n_moist: FastNoiseLite
 var n_temp: FastNoiseLite
 var n_grove: FastNoiseLite
+var n_groundcover: FastNoiseLite
 var n_river: FastNoiseLite
 var n_tint: FastNoiseLite
 var n_warp: FastNoiseLite
@@ -85,6 +86,9 @@ func _init(p_seed: int = 1) -> void:
 	n_moist = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.00075, 3, 0.5, 2.0, p_seed + 5)
 	n_temp = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.00055, 3, 0.5, 2.0, p_seed + 6)
 	n_grove = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.0040, 2, 0.5, 2.0, p_seed + 7)
+	# Manchas largas de vegetação com bordas suaves. A amostra usa coordenadas
+	# globais, por isso atravessa limites de chunks sem criar grelhas visíveis.
+	n_groundcover = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.028, 2, 0.5, 2.0, p_seed + 17)
 	n_river = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.0024, 4, 0.5, 2.4, p_seed + 8)
 	n_tint = _noise(FastNoiseLite.TYPE_PERLIN, 0.09, 2, 0.5, 2.0, p_seed + 9)
 	n_warp = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.0009, 2, 0.5, 2.0, p_seed + 10)
@@ -382,6 +386,15 @@ func dominant_s(x: float, z: float, h: float, sl: float) -> int:
 			bv = buf[i]
 			best = i
 	return best
+
+
+## Valor 0..1 que agrupa relva em manchas naturais, sem interromper a
+## continuidade entre chunks. O ruído de deformação quebra formas demasiado redondas.
+func groundcover_patch_factor(x: float, z: float) -> float:
+	var wx := n_warp2.get_noise_2d(x + 91.0, z - 37.0) * 4.5
+	var wz := n_warp2.get_noise_2d(x - 53.0, z + 117.0) * 4.5
+	var sample := n_groundcover.get_noise_2d(x + wx, z + wz) * 0.5 + 0.5
+	return _smooth(0.20, 0.78, sample)
 
 
 # ══════════════════════════════════════════════════════════════════════════

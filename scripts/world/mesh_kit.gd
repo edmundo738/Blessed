@@ -179,6 +179,82 @@ static func grass_tuft(rng: RandomNumberGenerator, blades: int, h: float,
 	return st.commit()
 
 
+## Tufo próximo com poucas lâminas em três camadas. O shader recorta cada
+## secção e afina as camadas externas para dar volume sem transparência alpha.
+static func grass_shell_tuft(rng: RandomNumberGenerator, blades: int = 6,
+		layers: int = 3, h: float = 0.68, w: float = 0.045) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for b in blades:
+		var a := rng.randf() * TAU
+		var lean := rng.randf_range(0.10, 0.42)
+		var bh := h * rng.randf_range(0.62, 1.16)
+		var bw := w * rng.randf_range(0.72, 1.35)
+		var dir := Vector2(cos(a), sin(a))
+		var perp := Vector2(-dir.y, dir.x)
+		var root := Vector3(dir.x * rng.randf_range(0.0, 0.035), 0.0,
+			dir.y * rng.randf_range(0.0, 0.035))
+		for layer_index in layers:
+			var layer := float(layer_index) / float(maxi(layers - 1, 1))
+			var base := root
+			# Desloca cada secção na normal da lâmina para criar volume sem
+			# empilhar folhas inteiras em planos transparentes.
+			var shell_offset := Vector3(perp.x, 0.0, perp.y) * (layer - 0.5) * bw * 0.72
+			base += shell_offset
+			var tip := base + Vector3(dir.x * lean * bh, bh, dir.y * lean * bh)
+			var mid := (base + tip) * 0.5 + Vector3(dir.x * lean * bh * 0.22, 0.0,
+				dir.y * lean * bh * 0.22)
+			var p0 := base + Vector3(perp.x * bw, 0.0, perp.y * bw)
+			var p1 := base - Vector3(perp.x * bw, 0.0, perp.y * bw)
+			var m0 := mid + Vector3(perp.x * bw * 0.48, 0.0, perp.y * bw * 0.48)
+			var m1 := mid - Vector3(perp.x * bw * 0.48, 0.0, perp.y * bw * 0.48)
+			_shell_quad(st, p0, p1, m1, m0, Vector2(0, 0), Vector2(1, 0),
+				Vector2(1, 0.52), Vector2(0, 0.52), layer)
+			_shell_quad(st, m0, m1, tip, tip, Vector2(0, 0.52), Vector2(1, 0.52),
+				Vector2(0.5, 1), Vector2(0.5, 1), layer)
+	st.generate_normals()
+	return st.commit()
+
+
+## Distante e sólido: poucos triângulos, sem textura nem shell layers.
+static func grass_impostor(h: float = 0.68, w: float = 0.19) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for blade in 3:
+		var a := float(blade) * PI / 3.0
+		var dir := Vector2(cos(a), sin(a))
+		var perp := Vector2(-dir.y, dir.x)
+		var base := Vector3.ZERO
+		var tip := Vector3(dir.x * 0.07, h, dir.y * 0.07)
+		var mid := Vector3(dir.x * 0.035, h * 0.52, dir.y * 0.035)
+		var p0 := base + Vector3(perp.x * w, 0, perp.y * w)
+		var p1 := base - Vector3(perp.x * w, 0, perp.y * w)
+		var m0 := mid + Vector3(perp.x * w * 0.45, 0, perp.y * w * 0.45)
+		var m1 := mid - Vector3(perp.x * w * 0.45, 0, perp.y * w * 0.45)
+		_stripe(st, p0, p1, m0, m1, Color(0.73, 0.88, 0.47), 0.0)
+		_stripe(st, m0, m1, tip, tip, Color(0.80, 0.94, 0.53), 0.55)
+	st.generate_normals()
+	return st.commit()
+
+
+static func _shell_quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3,
+		uva: Vector2, uvb: Vector2, uvc: Vector2, uvd: Vector2, layer: float) -> void:
+	var low := Color(0.58, 0.76, 0.34, layer)
+	var high := Color(0.82, 0.96, 0.55, layer)
+	_shell_vertex(st, a, uva, low)
+	_shell_vertex(st, b, uvb, low)
+	_shell_vertex(st, c, uvc, high)
+	_shell_vertex(st, a, uva, low)
+	_shell_vertex(st, c, uvc, high)
+	_shell_vertex(st, d, uvd, high)
+
+
+static func _shell_vertex(st: SurfaceTool, p: Vector3, uv: Vector2, color: Color) -> void:
+	st.set_uv(uv)
+	st.set_color(color)
+	st.add_vertex(p)
+
+
 static func _stripe(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3,
 		tint: Color, shade: float) -> void:
 	var dark := Color(tint.r * (0.55 + shade * 0.2), tint.g * (0.6 + shade * 0.2), tint.b * (0.55 + shade * 0.2))
