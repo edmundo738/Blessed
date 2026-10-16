@@ -101,6 +101,21 @@ func _run() -> void:
 	if right.length_squared() < 1e-6:
 		right = Vector3.RIGHT
 	var up := right.cross(fwd).normalized()
+	var fov := 75.0
+	# --player: a vista EXATA da 1.ª pessoa — a câmara do jogador, com a direção
+	# e o balanço reais. Era o que faltava para julgar as mãos: elas estão
+	# penduradas nessa câmara, não na câmara sintética do shot, e com o yaw
+	# sintético (-35°) apareciam rodadas para o lado errado do ecrã.
+	if _args.has("--player") and player != null:
+		var cam := player.get("camera") as Camera3D
+		if cam != null:
+			var cb := cam.global_transform.basis
+			right = cb.x.normalized()
+			up = cb.y.normalized()
+			fwd = -cb.z.normalized()
+			eye = cam.global_position
+			fov = cam.fov
+			print("SHOT_PLAYER: eye=(%.2f, %.2f, %.2f) fov=%.1f" % [eye.x, eye.y, eye.z, fov])
 
 	var buf := StreamPeerBuffer.new()
 	buf.put_data("BSH1".to_utf8_buffer())
@@ -110,7 +125,7 @@ func _run() -> void:
 	buf.put_float(right.x); buf.put_float(right.y); buf.put_float(right.z)
 	buf.put_float(up.x); buf.put_float(up.y); buf.put_float(up.z)
 	buf.put_float(-fwd.x); buf.put_float(-fwd.y); buf.put_float(-fwd.z)
-	buf.put_float(75.0)                      # fov
+	buf.put_float(fov)                       # fov
 	buf.put_float(16.0 / 9.0)                # aspect
 	buf.put_float(0.05)                      # near
 	buf.put_float(900.0)                     # far
@@ -226,6 +241,25 @@ func _dist_point_aabb(p: Vector3, bb: AABB) -> float:
 ## isso não há uma segunda tabela de valores a manter em dois sítios.
 func _write_material_params(buf: StreamPeerBuffer, mat: Material) -> void:
 	var entries: Array = []
+	# StandardMaterial3D: sem isto o rasterizador só sabia a cor de vértice, e as
+	# mãos (esfera/cápsula com material_override de cor lisa) saíam BRANCAS no
+	# render — foi assim que uma mão castanha pareceu um cilindro branco partido.
+	var std := mat as StandardMaterial3D
+	if std != null:
+		var ac := std.albedo_color
+		entries.append({"name": "__std_albedo", "kind": 3,
+			"v": [ac.r, ac.g, ac.b, ac.a], "path": ""})
+		entries.append({"name": "__std_vcol", "kind": 4,
+			"v": [1.0 if std.vertex_color_use_as_albedo else 0.0, 0.0, 0.0, 0.0], "path": ""})
+		entries.append({"name": "__std_rough", "kind": 0,
+			"v": [std.roughness, 0.0, 0.0, 0.0], "path": ""})
+		entries.append({"name": "__std_cull", "kind": 0,
+			"v": [float(std.cull_mode), 0.0, 0.0, 0.0], "path": ""})
+		if std.emission_enabled:
+			var ec := std.emission
+			var en: float = std.emission_energy
+			entries.append({"name": "__std_emit", "kind": 3,
+				"v": [ec.r * en, ec.g * en, ec.b * en, 1.0], "path": ""})
 	var shader_material := mat as ShaderMaterial
 	if shader_material != null and shader_material.shader != null:
 		for uniform in shader_material.shader.get_shader_uniform_list(true):
@@ -404,6 +438,8 @@ func _write_mesh(buf: StreamPeerBuffer, mi: MeshInstance3D) -> bool:
 			mat_name = sh.resource_path.get_file()
 			if "cull_disabled" in sh.code:
 				cull = 1
+	elif mat is StandardMaterial3D and (mat as StandardMaterial3D).cull_mode == BaseMaterial3D.CULL_DISABLED:
+		cull = 1
 
 	var t := mi.global_transform
 	var b := t.basis

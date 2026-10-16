@@ -512,7 +512,11 @@ def render(hdr, meshes, W=640, H=360):
         # costas. Medido: 178.469 de 235.000 triângulos marcados ao contrário.
         geo = np.cross(b - a, c - a)
         facing = np.einsum("ij,ij->i", geo, eye - a)
-        keep = facing < 0 if m_["cull"] == 0 else np.ones(I.shape[0], bool)
+        cull_mode = m_["cull"]
+        if cull_mode == 0 and params.get("__std_cull") is not None \
+                and pval(params, "__std_cull", 0.0) >= 2.0:
+            cull_mode = 1          # StandardMaterial3D com CULL_DISABLED
+        keep = facing < 0 if cull_mode == 0 else np.ones(I.shape[0], bool)
         if not keep.any():
             n_tri_culled += I.shape[0]
             continue
@@ -534,6 +538,16 @@ def render(hdr, meshes, W=640, H=360):
         # shading por vértice (Gouraud) — mesma função dos shaders
         na, nb, nc = N[I[keep, 0]], N[I[keep, 1]], N[I[keep, 2]]
         ca_, cb_, cc_ = C[I[keep, 0]], C[I[keep, 1]], C[I[keep, 2]]
+        # StandardMaterial3D: albedo = albedo_color (× cor de vértice, se o
+        # material pedir). Sem cor de vértice a malha lisa lia-se como branca.
+        if params.get("__std_albedo") is not None:
+            base = np.array(pval(params, "__std_albedo", (1, 1, 1, 1))[:3])
+            if pval(params, "__std_vcol", 0.0) > 0.5:
+                ca_, cb_, cc_ = ca_ * base, cb_ * base, cc_ * base
+            else:
+                ca_ = np.broadcast_to(base, ca_.shape).copy()
+                cb_ = np.broadcast_to(base, cb_.shape).copy()
+                cc_ = np.broadcast_to(base, cc_.shape).copy()
         pix_channels = None
         if pixel_kind:
             # Interpolação por pixel (as duas malhas de relva decidem máscara,

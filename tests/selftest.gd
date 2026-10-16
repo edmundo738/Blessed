@@ -14,6 +14,7 @@ extends Node
 var main: Node
 var passed := 0
 var failed := 0
+var skipped := 0
 var lines: Array = []
 
 
@@ -30,6 +31,23 @@ func check(what: String, ok: bool, detail: String = "") -> void:
 	# falha do motor a meio do teste deixa de apagar tudo o que já tinha passado
 	# (foi assim que uma paragem da build web escondeu onde o teste morreu).
 	print(line)
+
+
+## Verificação que NÃO pode ser feita nesta build do motor. Não conta como
+## falha (não há nada partido), mas fica escrita no relatório: um relatório só
+## com "OK" e "FALHA" fazia parecer que 30 verificações dos modelos Blender
+## tinham corrido quando na build web não corriam de todo.
+func skip(what: String, detail: String = "", count: int = 1) -> void:
+	skipped += count
+	var line := "  SALTA %s%s" % [what, "" if detail.is_empty() else "  (" + detail + ")"]
+	lines.append(line)
+	print(line)
+
+
+## Esta build do motor traz o módulo glTF? Sem `GLTFDocument`/`GLTFState` não há
+## forma de abrir um .glb: nem o editor, nem o `Assets`, nem este teste.
+func _gltf_available() -> bool:
+	return ClassDB.class_exists("GLTFDocument") and ClassDB.class_exists("GLTFState")
 
 
 func setup(p_main: Node) -> void:
@@ -167,7 +185,19 @@ func _run() -> void:
 		"rock_cluster", "grass_clump", "fern_clump", "flower_clump", "reed_clump",
 		"seaweed_cluster", "clover_clump", "pickup_berry", "pickup_leaf", "pickup_log", "tool_axe",
 		"tool_pickaxe"]
-	for asset_id in blender_asset_ids:
+	var gltf_here := _gltf_available()
+	var blender_ids: Array = []
+	var lod_asset_ids := ["tree_oak", "tree_birch", "tree_pine", "tree_sakura", "tree_willow",
+		"rock_cluster", "plant_bush", "plant_berry_bush", "plant_mushroom"]
+	var lod_ids: Array = []
+	if gltf_here:
+		blender_ids = blender_asset_ids
+		lod_ids = lod_asset_ids
+	else:
+		skip("modelos Blender: 20 GLB de espécies e ferramentas + 9 LODs",
+			"esta build do motor não traz GLTFDocument/GLTFState (ver KNOWN_ISSUES #14)",
+			blender_asset_ids.size() + lod_asset_ids.size())
+	for asset_id in blender_ids:
 		var asset_mesh: ArrayMesh = BlessedBlenderAssets.mesh_for(asset_id)
 		var asset_vertices: int = _mesh_vertex_count(asset_mesh)
 		var asset_size: Vector3 = asset_mesh.get_aabb().size if asset_mesh != null else Vector3.ZERO
@@ -180,8 +210,7 @@ func _run() -> void:
 			"%d vértices, %d superfícies, Y %.2f m" % [asset_vertices,
 				asset_mesh.get_surface_count() if asset_mesh != null else 0, asset_size.y])
 
-	for lod_asset_id in ["tree_oak", "tree_birch", "tree_pine", "tree_sakura", "tree_willow",
-		"rock_cluster", "plant_bush", "plant_berry_bush", "plant_mushroom"]:
+	for lod_asset_id in lod_ids:
 		var base_mesh: ArrayMesh = BlessedBlenderAssets.mesh_for(lod_asset_id)
 		var lod1_mesh: ArrayMesh = BlessedBlenderAssets.mesh_for("%s_lod1" % lod_asset_id)
 		var lod2_mesh: ArrayMesh = BlessedBlenderAssets.mesh_for("%s_lod2" % lod_asset_id)
@@ -213,9 +242,13 @@ func _run() -> void:
 							wind_shader_trees_in_world += (decor as MultiMeshInstance3D).multimesh.instance_count
 							break
 					break
-	check("chunks usam árvores Blender com vento nas folhas",
-		blender_trees_in_world > 0 and wind_shader_trees_in_world > 0,
-		"%d instâncias; %d com shader de folhas" % [blender_trees_in_world, wind_shader_trees_in_world])
+	if gltf_here:
+		check("chunks usam árvores Blender com vento nas folhas",
+			blender_trees_in_world > 0 and wind_shader_trees_in_world > 0,
+			"%d instâncias; %d com shader de folhas" % [blender_trees_in_world, wind_shader_trees_in_world])
+	else:
+		skip("chunks usam árvores Blender com vento nas folhas",
+			"sem glTF nesta build os Biomas caem nos substitutos procedurais")
 
 	# ── 2. biomas variados ────────────────────────────────────────────────
 	var biomes := {}
@@ -718,12 +751,16 @@ func _run() -> void:
 	for l in lines:
 		print(l)
 	print("──────────────────────────────────────────────────")
-	print("RESULTADO: %d ok, %d falhas" % [passed, failed])
+	if skipped > 0:
+		print("RESULTADO: %d ok, %d falhas, %d saltadas" % [passed, failed, skipped])
+	else:
+		print("RESULTADO: %d ok, %d falhas" % [passed, failed])
 	print("SELFTEST_%s" % ["PASS" if failed == 0 else "FAIL"])
 	# escreve também para um ficheiro para o CI/agentes lerem
 	var f := FileAccess.open("user://selftest.txt", FileAccess.WRITE)
 	if f:
-		f.store_string("%d ok, %d falhas\n%s\n" % [passed, failed, "\n".join(lines)])
+		f.store_string("%d ok, %d falhas, %d saltadas\n%s\n"
+			% [passed, failed, skipped, "\n".join(lines)])
 		f.close()
 	get_tree().quit(0 if failed == 0 else 1)
 
