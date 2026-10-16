@@ -1,0 +1,589 @@
+class_name Interaction
+extends Node
+## Interaction — a ponte entre o jogador e o mundo.
+##
+## Um só sítio decide "o que estou a olhar" e "o que acontece se carregar".
+## Cada alvo devolve um contrato simples: tipo, prompt e uma ação. Assim
+## acrescentar pesca, uma porta ou um NPC novo não toca em mais nada.
+
+const REACH := 4.2
+const CURIOUS_REACH_MULT := 1.35
+const MAX_ANGLE := 0.62          # radianos a partir do centro do ecrã
+
+var player: Player
+var world: World
+var survival: Survival
+var inv: Inventory
+var structures: Structures
+var fx: Node3D
+var npc_root: Node3D
+
+var focus: Dictionary = {}
+var progress := 0.0
+var building := false
+var build_rot := 0.0
+var ghost: MeshInstance3D
+var ghost_mat: StandardMaterial3D
+var _hold := false
+var _was_holding := false
+var _impact_t := 0.0
+
+
+func _ready() -> void:
+	name = "Interaction"
+	_make_ghost()
+	Game.register_command("interact", self, _can_interact, _do_interact, "prompt.use")
+	Game.register_command("craft", self, _can_craft, _do_craft, "tab.crafting")
+	Game.register_command("place", self, _can_place, _do_place, "prompt.place")
+	Game.register_command("remove_structure", self, _can_remove, _do_remove, "prompt.remove")
+	Game.register_command("toggle_build", self, _can_toggle_build, _do_toggle_build, "prompt.place")
+
+
+func _make_ghost() -> void:
+	ghost_mat = StandardMaterial3D.new()
+	ghost_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ghost_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	ghost_mat.albedo_color = Color(0.6, 0.95, 0.7, 0.45)
+	ghost_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	ghost = MeshInstance3D.new()
+	ghost.name = "BuildGhost"
+	ghost.material_override = ghost_mat
+	ghost.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	ghost.visible = false
+	add_child(ghost)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if Game.paused or not Game.started:
+		return
+	if event.is_action_pressed("build"):
+		Game.request("toggle_build")
+	elif event.is_action_pressed("interact") and building:
+		build_rot += PI * 0.25
+		Sfx.play("ui_click", -16.0, 0.9)
+	elif event.is_action_pressed("interact"):
+		Game.request("interact")
+
+
+func _process(delta: float) -> void:
+	if Game.paused or not Game.started:
+		return
+	_update_focus()
+	_handle_use(delta)
+	_update_ghost()
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  O QUE ESTOU A OLHAR
+# ══════════════════════════════════════════════════════════════════════════
+## Alcance efetivo. A alma "curious" vê mais longe: é a promessa do prólogo
+## ("Encontras mais ao explorar") tornada mecânica observável.
+func reach() -> float:
+	if str(Game.profile.get("soul", "")) == "curious":
+		return REACH * CURIOUS_REACH_MULT
+	return REACH
+
+
+func _update_focus() -> void:
+	var cam := player.camera
+	var from := cam.global_position
+	var dir := -cam.global_transform.basis.z
+	var r := reach()
+	var best := {}
+	var best_score := 1e18
+
+	# estruturas
+	for e in structures.near(from, r):
+		var p: Vector3 = e["pos"] + Vector3(0, 0.7, 0)
+		var s := _score(p, from, dir, r)
+		if s < best_score:
+			best_score = s
+			best = {"kind": "structure", "ref": e, "pos": p}
+
+	# nós colhíveis
+	for n in world.harvestables_near(from, r):
+		if not bool(n.get("alive", true)):
+			continue
+		var p: Vector3 = (n["pos"] as Vector3) + Vector3(0, float(n["height"]) * 0.45, 0)
+		var s := _score(p, from, dir, r)
+		if s < best_score:
+			best_score = s
+			best = {"kind": "harvest", "ref": n, "pos": p}
+
+	# Troncos abatidos continuam a ser alvos do mundo até todos os toros saírem.
+	for c in get_tree().get_nodes_in_group("fellable_logs"):
+		if not is_instance_valid(c) or not c.has_method("interaction_target"):
+			continue
+		var data: Dictionary = c.call("interaction_target")
+		if data.is_empty():
+			continue
+		var p: Vector3 = data["pos"]
+		var s := _score(p, from, dir, r)
+		if s < best_score:
+			best_score = s
+			best = {"kind": "felled_tree", "ref": c, "pos": p}
+
+	# pessoas
+	if npc_root != null:
+		for c in npc_root.get_children():
+			if not (c is Node3D) or not c.has_method("interaction_target"):
+				continue
+			var p: Vector3 = (c as Node3D).global_position + Vector3(0, 1.4, 0)
+			var s := _score(p, from, dir, r * 0.85)
+			if s < best_score:
+				best_score = s
+				best = {"kind": "npc", "ref": c, "pos": p}
+
+	# água (só se não houver mais nada)
+	if best.is_empty():
+		var hit := _ray_water_surface(from, dir, r * 1.6)
+		if hit != Vector3.INF:
+			best = {"kind": "water", "ref": null, "pos": hit}
+
+	var changed := not _same(best)
+	focus = best
+	if changed:
+		progress = 0.0
+		_impact_t = 0.0
+		Bus.focus_changed.emit(self, prompt_key())
+
+
+func _same(other: Dictionary) -> bool:
+	if other.is_empty() and focus.is_empty():
+		return true
+	if other.is_empty() or focus.is_empty():
+		return false
+	return other.get("kind") == focus.get("kind") and other.get("ref") == focus.get("ref")
+
+
+func _score(p: Vector3, from: Vector3, dir: Vector3, max_d: float) -> float:
+	var to := p - from
+	var d := to.length()
+	if d > max_d or d < 0.001:
+		return 1e18
+	var ang := to.normalized().angle_to(dir)
+	if ang > MAX_ANGLE:
+		return 1e18
+	return d + ang * 5.0
+
+
+func _ray_terrain(from: Vector3, dir: Vector3, max_d: float) -> Vector3:
+	# marcha curta: barato e não precisa de física para o terreno
+	var t := 0.0
+	while t < max_d:
+		var p := from + dir * t
+		var g: float = world.ground_height(p.x, p.z)
+		if p.y <= g + 0.1:
+			return Vector3(p.x, g, p.z)
+		t += 0.25
+	return Vector3.INF
+
+
+func _ray_water_surface(from: Vector3, dir: Vector3, max_d: float) -> Vector3:
+	# Procura a superfície real do rio ou do mar, sem confundir o leito com água.
+	if world == null or not world.has_method("water_surface_height"):
+		return Vector3.INF
+	var previous_t := 0.0
+	var previous_surface: float = world.call("water_surface_height", from.x, from.z)
+	var previous_valid := previous_surface > -99999.0
+	var previous_delta := from.y - previous_surface if previous_valid else 0.0
+	var t := 0.25
+	while t <= max_d:
+		var p := from + dir * t
+		var surface: float = world.call("water_surface_height", p.x, p.z)
+		if surface > -99999.0:
+			var delta := p.y - surface
+			if previous_valid and delta <= 0.0 and previous_delta > 0.0:
+				var fraction := previous_delta / maxf(previous_delta - delta, 0.001)
+				var hit_t := lerpf(previous_t, t, fraction)
+				var hit := from + dir * hit_t
+				hit.y = world.call("water_surface_height", hit.x, hit.z)
+				return hit
+			if absf(delta) <= 0.12:
+				var near_hit := p
+				near_hit.y = surface
+				return near_hit
+			previous_delta = delta
+			previous_valid = true
+		else:
+			previous_valid = false
+		previous_t = t
+		t += 0.25
+	return Vector3.INF
+
+
+func prompt_key() -> String:
+	if focus.is_empty():
+		return ""
+	match str(focus["kind"]):
+		"harvest":
+			var spec: Dictionary = Db.HARVEST.get(str(focus["ref"]["kind"]), {})
+			return "prompt." + str(spec.get("action", "pick"))
+		"structure":
+			var e: Dictionary = focus["ref"]
+			if str(e["id"]) == "campfire" and not bool(e.get("lit", false)):
+				return "prompt.light"
+			if str(e["id"]) == "bed":
+				return "prompt.rest"
+			return "prompt.remove"
+		"npc":
+			return "prompt.talk"
+		"felled_tree":
+			return "prompt.take_log"
+		"water":
+			return "prompt.drink" if inv.count("bottle") == 0 else "prompt.fill"
+	return "prompt.use"
+
+
+func _can_interact(_a: Dictionary) -> bool:
+	return not focus.is_empty()
+
+
+func _do_interact(_a: Dictionary) -> Dictionary:
+	if focus.is_empty():
+		return {"handled": false, "ok": false}
+	match str(focus["kind"]):
+		"npc", "water":
+			_fire_once()
+		"harvest":
+			var harvest_kind := str(focus["ref"].get("kind", ""))
+			if harvest_kind.begins_with("tree") or harvest_kind == "rock":
+				# O mesmo F começa o corte; manter F ou o rato continua a ação.
+				return {"handled": true, "ok": true}
+			# Plantas são recolhidas num gesto. Árvores e rochas exigem
+			# ferramenta/impactos contínuos para não parecerem botões mágicos.
+			_harvest_done()
+		"felled_tree":
+			_take_felled_log()
+		"structure":
+			var e: Dictionary = focus["ref"]
+			if str(e["id"]) == "campfire" and not bool(e.get("lit", false)):
+				structures.light(e)
+				Sfx.play("craft", -10.0, 1.3)
+			elif str(e["id"]) == "bed":
+				_rest_in_bed()
+			else:
+				Game.request("remove_structure", {"entry": e})
+	return {"handled": true, "ok": true}
+
+
+## Descansar na cama: repõe stats e avança até de manhã.
+func _rest_in_bed() -> void:
+	var to_morning := fmod(7.0 - Game.hour + 24.0, 24.0)
+	if to_morning > 12.0 or to_morning < 0.5:
+		to_morning = 6.0
+	survival.rest(to_morning, 1.0)
+	Sfx.play("ui_click", -10.0, 0.8)
+	Bus.say("prompt.rest", 2.5)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  USAR (com progresso para cortar/minar)
+# ══════════════════════════════════════════════════════════════════════════
+func _handle_use(delta: float) -> void:
+	var holding := Input.is_action_pressed("use") and not building
+	var holding_work := (Input.is_action_pressed("interact") or holding) and not building
+	if focus.is_empty():
+		_hold = false
+		_was_holding = false
+		progress = 0.0
+		_impact_t = 0.0
+		return
+	var kind := str(focus["kind"])
+	match kind:
+		"npc", "water":
+			if holding and not _was_holding:
+				_fire_once()
+			progress = 0.0
+		"structure":
+			var e: Dictionary = focus["ref"]
+			if str(e["id"]) == "campfire" and not bool(e.get("lit", false)):
+				if holding and not _was_holding:
+					structures.light(e)
+					Sfx.play("craft", -10.0, 1.3)
+			elif str(e["id"]) == "bed":
+				if holding and not _was_holding:
+					_rest_in_bed()
+			else:
+				progress = maxf(0.0, progress - delta * 0.16)
+				_impact_t = 0.0
+		"harvest":
+			var harvest_kind := str(focus["ref"].get("kind", ""))
+			var needs_held_work := harvest_kind.begins_with("tree") or harvest_kind == "rock"
+			if holding_work and needs_held_work:
+				_work_tick(delta, 1.0)
+			else:
+				# Plantas/frutos têm apenas ação rápida F; o rato não repete a mesma ação.
+				progress = 0.0
+				_impact_t = 0.0
+		"felled_tree":
+			progress = 0.0
+			_impact_t = 0.0
+	_hold = holding
+	_was_holding = holding
+
+
+func _work_tick(delta: float, seconds: float) -> void:
+	if str(focus["kind"]) == "harvest":
+		_hold_work(delta, seconds)
+	elif str(focus["kind"]) == "structure":
+		_hold_work(delta, seconds)
+		if progress < 1.0 or focus.is_empty():
+			return
+		Game.request("remove_structure", {"entry": focus["ref"]})
+		progress = 0.0
+		_impact_t = 0.0
+
+
+func _hold_work(delta: float, seconds: float) -> void:
+	_hold = true
+	if focus.is_empty():
+		return
+	if str(focus["kind"]) == "harvest":
+		var node: Dictionary = focus["ref"]
+		var kind := str(node.get("kind", ""))
+		var spec: Dictionary = Db.HARVEST.get(kind, {})
+		var max_hp := maxf(float(node.get("max_hp", spec.get("hp", 1))), 1.0)
+		node["max_hp"] = max_hp
+		_impact_t -= delta
+		if _impact_t > 0.0:
+			return
+		_impact_t = 0.52
+		var tool_id := inv.hotbar_id()
+		var required := str(spec.get("tool", ""))
+		var damage := 1.0
+		if not required.is_empty():
+			var tool: Dictionary = Db.item(tool_id)
+			var power: Dictionary = tool.get("power", {})
+			damage = float(power.get(str(spec.get("action", "")), 0.55))
+		node["hp"] = maxf(0.0, float(node.get("hp", max_hp)) - damage)
+		progress = 1.0 - float(node["hp"]) / max_hp
+		player.hands.swing(0.35)
+		player.hands.recoil_kick(0.35 if tool_id == required else 0.2)
+		_hit_feedback()
+		if float(node["hp"]) <= 0.0:
+			_harvest_done()
+		return
+	var tool_id := inv.hotbar_id()
+	var power := 1.0
+	progress = minf(1.0, progress + delta * power * survival.work_multiplier() / maxf(seconds, 0.05))
+	_impact_t -= delta
+	if _impact_t <= 0.0:
+		_impact_t = 0.52
+		player.hands.swing(0.32)
+		_hit_feedback()
+
+
+func _hit_feedback() -> void:
+	if focus.is_empty():
+		return
+	var p: Vector3 = focus["pos"]
+	match str(focus["kind"]):
+		"harvest":
+			var id := str(focus["ref"]["kind"])
+			if id.begins_with("tree"):
+				Sfx.play_at("chop", p, -8.0, randf_range(0.95, 1.08))
+				fx.burst(p, Color(0.55, 0.38, 0.24), 8)
+			elif id == "rock":
+				Sfx.play_at("mine", p, -8.0, randf_range(0.95, 1.1))
+				fx.burst(p, Color(0.7, 0.7, 0.76), 10)
+			else:
+				Sfx.play_at("pick", p, -12.0)
+				fx.burst(p, Color(0.45, 0.7, 0.35), 6)
+		"structure":
+			Sfx.play_at("chop", p, -10.0, 1.2)
+			fx.burst(p, Color(0.6, 0.42, 0.28), 6)
+
+
+func _harvest_done() -> void:
+	var n: Dictionary = focus["ref"]
+	var harvest_kind := str(n["kind"])
+	var is_tree := harvest_kind.begins_with("tree")
+	var spec: Dictionary = Db.HARVEST.get(harvest_kind, {})
+	var yields: Dictionary = spec.get("yields", {})
+	var dropped_total := 0
+	for k in yields:
+		# Madeira fica no tronco abatido; o jogador retira cada toro com F.
+		if is_tree and str(k) == "wood":
+			continue
+		var qty := int(yields[k])
+		var bonus := 0.35 if str(Game.profile.get("soul", "")) != "curious" else 0.6
+		if randf() < bonus:
+			qty += 1
+		# Colher altera o mundo; não teletransporta o recurso para a mochila.
+		# Cada tipo de material cria um pickup físico visível para o jogador.
+		_drop_resource(str(k), qty, n["pos"] as Vector3)
+		dropped_total += qty
+	n["alive"] = false
+	world.hide_harvest(n)
+	world.mark_harvested(n)
+	Sfx.play_at("chop", focus["pos"], -4.0, 0.72)
+	fx.burst(focus["pos"], Color(0.6, 0.45, 0.3), 16)
+	Bus.node_harvested.emit(str(n["species"]), str(n["kind"]), focus["pos"])
+	Game.bump("harvest_" + str(n["kind"]))
+	progress = 0.0
+	focus = {}
+
+
+func _drop_resource(id: String, qty: int, at: Vector3) -> void:
+	var packed: Script = load("res://scripts/world/dropped_item.gd")
+	var drop := packed.new() as RigidBody3D
+	if drop == null:
+		return
+	drop.set("item_id", id)
+	drop.set("amount", qty)
+	drop.set("inv", inv)
+	drop.set("player_ref", player)
+	var angle := randf() * TAU
+	drop.set("launch_direction", Vector3(cos(angle), 0.0, sin(angle)))
+	drop.position = world.to_local(at + Vector3(0.0, 0.42, 0.0))
+	world.add_child(drop)
+
+
+func _take_felled_log() -> void:
+	if focus.is_empty() or str(focus.get("kind", "")) != "felled_tree":
+		return
+	var tree := focus.get("ref") as Node3D
+	if not is_instance_valid(tree) or not tree.has_method("take_log") \
+			or not bool(tree.call("take_log")):
+		focus = {}
+		return
+	var at := tree.global_position + Vector3(float(tree.get("fall_direction")) \
+		* float(tree.get("height")) * 0.30, float(tree.get("trunk_radius")) + 0.48, 0.18)
+	_drop_resource("wood", 1, at)
+	Game.bump("item_wood")
+	Sfx.play_at("chop", at, -12.0, randf_range(0.94, 1.08))
+	if int(tree.get("remaining_logs")) <= 0:
+		focus = {}
+
+
+func _fire_once() -> void:
+	match str(focus["kind"]):
+		"npc":
+			var npc: Node = focus["ref"]
+			if npc.has_method("talk_to"):
+				npc.call("talk_to")
+		"water":
+			if inv.count("bottle") > 0:
+				inv.remove("bottle", 1)
+				inv.add("water", 1)
+				Sfx.play("splash", -10.0, 1.2)
+				Bus.say("msg.water_filled", 2.0)
+			else:
+				survival.drink(22.0)
+				Sfx.play("drink", -9.0)
+				Bus.say("msg.drink", 2.0)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  CONSTRUIR
+# ══════════════════════════════════════════════════════════════════════════
+func _can_toggle_build(_a: Dictionary) -> bool:
+	return true
+
+
+func _do_toggle_build(_a: Dictionary) -> Dictionary:
+	if building:
+		building = false
+		ghost.visible = false
+		return {"building": false}
+	var id := inv.hotbar_id()
+	if not Db.is_placeable(id):
+		# mensagem certa: não é "faltam materiais", é "isso não se coloca"
+		Bus.say("prompt.blocked", 2.0)
+		return {"building": false, "failed": true, "reason": "not_placeable"}
+	building = true
+	build_rot = snappedf(player.yaw + PI, PI * 0.25)
+	return {"building": true}
+
+
+func _ghost_place() -> Dictionary:
+	var cam := player.camera
+	var from := cam.global_position
+	var dir := -cam.global_transform.basis.z
+	var hit := _ray_terrain(from, dir, 8.0)
+	if hit == Vector3.INF:
+		var flat := from + dir * 3.0
+		hit = Vector3(flat.x, world.ground_height(flat.x, flat.z), flat.z)
+	hit.x = snappedf(hit.x, 0.5)
+	hit.z = snappedf(hit.z, 0.5)
+	return {"pos": hit, "rot": build_rot}
+
+
+func _update_ghost() -> void:
+	if not building:
+		ghost.visible = false
+		return
+	var id := inv.hotbar_id()
+	if not Db.is_placeable(id):
+		building = false
+		ghost.visible = false
+		return
+	var st: SpeciesKit.Structure = world.species.structures[str(Db.item(id)["place"])]
+	if ghost.mesh != st.mesh:
+		ghost.mesh = st.mesh
+		ghost.position = Vector3.ZERO
+	var place := _ghost_place()
+	ghost.global_position = place["pos"] + Vector3(0, st.size.y * 0.5, 0)
+	ghost.rotation.y = place["rot"]
+	ghost.visible = true
+	var ok := inv.count(id) > 0
+	ghost_mat.albedo_color = Color(0.6, 0.95, 0.7, 0.45) if ok else Color(1.0, 0.4, 0.4, 0.45)
+
+
+func _can_place(_a: Dictionary) -> bool:
+	return building and inv.count(inv.hotbar_id()) > 0
+
+
+func _do_place(_a: Dictionary) -> Dictionary:
+	var id := inv.hotbar_id()
+	var place := _ghost_place()
+	if not inv.remove(id, 1):
+		return {"failed": true}
+	structures.place(str(Db.item(id)["place"]), place["pos"], place["rot"], false)
+	Sfx.play_at("place", place["pos"], -6.0)
+	Game.bump("place_" + str(Db.item(id)["place"]))
+	player.hands.swing(0.2)
+	if inv.count(id) <= 0:
+		building = false
+	return {"placed": str(id), "pos": place["pos"]}
+
+
+func _can_remove(_a: Dictionary) -> bool:
+	return _a.has("entry")
+
+
+func _do_remove(args: Dictionary) -> Dictionary:
+	var e: Dictionary = args["entry"]
+	structures.remove(e)
+	inv.add(str(e["id"]), 1)
+	Sfx.play_at("chop", e["pos"], -8.0, 1.1)
+	fx.burst(e["pos"] + Vector3(0, 0.6, 0), Color(0.6, 0.44, 0.3), 12)
+	return {"removed": str(e["id"])}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  BANCADA
+# ══════════════════════════════════════════════════════════════════════════
+func nearby_stations() -> Array:
+	return structures.stations_near(player.global_position, 4.5)
+
+
+func _can_craft(args: Dictionary) -> bool:
+	var r := Db.recipe(str(args.get("recipe", "")))
+	if r.is_empty():
+		return false
+	var st := str(r.get("station", ""))
+	return st.is_empty() or st in nearby_stations()
+
+
+func _do_craft(args: Dictionary) -> Dictionary:
+	var r := Db.recipe(str(args.get("recipe", "")))
+	if r.is_empty():
+		return {"failed": true, "reason": "no_recipe"}
+	# importante: um craft que não aconteceu TEM de vir como falha,
+	# senão o OBSERVABLE RESULT mente a quem chamou o comando
+	var ok := inv.craft(r)
+	if not ok:
+		return {"failed": true, "crafted": false, "reason": "no_materials"}
+	return {"crafted": true, "result": str(r["result"])}

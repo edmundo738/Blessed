@@ -1,0 +1,11 @@
+{
+  "name": "Exemplo — Ruínas Antigas",
+  "items": {
+    "reliquia": { "kind": "resource", "stack": 10, "icon": "stone", "name": "Relíquia Antiga" },
+    "fragmento": { "kind": "resource", "stack": 20, "icon": "flint", "name": "Fragmento de Pedra" }
+  },
+  "recipes": [
+    { "id": "reliquia_polida", "result": "reliquia", "qty": 1, "needs": { "fragmento": 3, "fiber": 1 }, "station": "" }
+  ],
+  "props": {}
+}

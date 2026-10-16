@@ -1,0 +1,1 @@
+# Keep editable Blender sources out of Godot imports; runtime meshes live in runtime/.

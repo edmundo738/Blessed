@@ -1,0 +1,13 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/world.gd" id="1"]
+
+[node name="World" type="Node3D"]
+script = ExtResource("1")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+shadow_enabled = true
+directional_shadow_max_distance = 120.0
+light_angular_distance = 1.2
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]

@@ -1,0 +1,22 @@
+{
+  "_comment": "Presets de qualidade gráfica (0=compatível, 1=equilibrado, 2=cinematográfico). Os toggles dizem o que liga em cada perfil; os valores afinam o efeito. A lógica condicional por renderizador (Forward+/Compatibility) fica no código; isto são os botões.",
+  "presets": {
+    "0": { "ssao": false, "volumetric_fog": false, "ssr": false, "dof": false },
+    "1": { "ssao": true,  "volumetric_fog": false, "ssr": false, "dof": false },
+    "2": { "ssao": true,  "volumetric_fog": true,  "ssr": true,  "dof": false }
+  },
+  "values": {
+    "tonemap_exposure": 0.98,
+    "tonemap_white": 6.0,
+    "fog_aerial_perspective": 0.32,
+    "ssao_radius": 1.1,
+    "ssao_intensity": 1.0,
+    "fog_density": 0.009,
+    "fog_length": 120.0,
+    "fog_sky_affect": 0.22,
+    "ssr_max_steps": 64,
+    "dof_far_distance": 72.0,
+    "dof_far_transition": 45.0,
+    "dof_blur_amount": 0.035
+  }
+}
