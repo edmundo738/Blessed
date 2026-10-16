@@ -29,7 +29,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             # cross-origin isolation (so com build de threads/SharedArrayBuffer)
             self.send_header("Cross-Origin-Opener-Policy", "same-origin")
             self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
-        self.send_header("Cache-Control", "no-store")
+        # Cache curta: o .pck tem decenas de MB e um "no-store" obrigava a
+        # descarregá-lo de novo em cada recarga da página. Curta, para uma
+        # exportação nova não ficar presa em cache.
+        ext = os.path.splitext(self.path.split("?")[0])[1].lower()
+        if ext in (".html", ""):
+            self.send_header("Cache-Control", "no-store")
+        else:
+            self.send_header("Cache-Control", "public, max-age=300")
         super().end_headers()
 
 if not os.path.isdir(DIR):

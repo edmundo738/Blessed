@@ -46,9 +46,33 @@ const setStatus = (t) => { if (status) status.textContent = t; };
 
 try {
 	setStatus('a descarregar o mundo…');
-	const resp = await fetch('blessed.pck', { cache: 'no-store' });
+	// Sem `no-store`: o .pck tem dezenas de MB e uma recarga da página não pode
+	// obrigar a descarregá-lo outra vez. O progresso é mostrado porque a espera
+	// é longa — um ecrã parado num build grande lê-se como avaria.
+	const resp = await fetch('blessed.pck');
 	if (!resp.ok) throw new Error('blessed.pck em falta (' + resp.status + ')');
-	const pck = new Uint8Array(await resp.arrayBuffer());
+	const total = Number(resp.headers.get('content-length') || 0);
+	let pck;
+	if (resp.body && resp.body.getReader) {
+		const reader = resp.body.getReader();
+		const chunks = [];
+		let got = 0;
+		for (;;) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			chunks.push(value);
+			got += value.length;
+			const pct = total ? Math.floor((got / total) * 100) : 0;
+			setStatus('a descarregar o mundo… ' + pct + '%  (' +
+				(got / 1048576).toFixed(1) + ' MB' + (total ? ' de ' + (total / 1048576).toFixed(1) + ' MB' : '') + ')');
+		}
+		const all = new Uint8Array(got);
+		let at = 0;
+		for (const c of chunks) { all.set(c, at); at += c.length; }
+		pck = all;
+	} else {
+		pck = new Uint8Array(await resp.arrayBuffer());
+	}
 
 	setStatus('a arrancar o motor…');
 	const Module = await Godot({
