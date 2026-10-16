@@ -14,8 +14,8 @@ var player: Node3D
 var dust: CPUParticles3D
 var flies: CPUParticles3D
 
-const DUST_SPRITE := preload("res://content/fx/kenney/particles/smoke_02.png")
-const FIREFLY_SPRITE := preload("res://content/fx/kenney/particles/star_02.png")
+const DUST_SPRITE_PATH := "res://content/fx/kenney/particles/smoke_02.png"
+const FIREFLY_SPRITE_PATH := "res://content/fx/kenney/particles/star_02.png"
 
 
 func _ready() -> void:
@@ -72,7 +72,7 @@ func _make_dust() -> CPUParticles3D:
 	p.initial_velocity_max = 0.22
 	p.scale_amount_min = 0.5
 	p.scale_amount_max = 1.3
-	p.mesh = _billboard_quad(Vector2(0.20, 0.20), Color(0.86, 0.82, 0.70, 0.20), DUST_SPRITE)
+	p.mesh = _billboard_quad(Vector2(0.20, 0.20), Color(0.86, 0.82, 0.70, 0.20), Assets.texture(DUST_SPRITE_PATH))
 	p.color = Color(1, 1, 1, 1)
 	return p
 
@@ -92,7 +92,7 @@ func _make_flies() -> CPUParticles3D:
 	p.initial_velocity_max = 0.45
 	p.scale_amount_min = 0.6
 	p.scale_amount_max = 1.1
-	p.mesh = _billboard_quad(Vector2(0.105, 0.105), Color(1.65, 1.45, 0.62, 0.88), FIREFLY_SPRITE)
+	p.mesh = _billboard_quad(Vector2(0.105, 0.105), Color(1.65, 1.45, 0.62, 0.88), Assets.texture(FIREFLY_SPRITE_PATH))
 	p.emitting = false
 	return p
 

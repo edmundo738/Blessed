@@ -11,6 +11,7 @@ const QUATERNIUS_IDS := [
 	"grass_clump", "fern_clump", "flower_clump", "clover_clump", "reed_clump",
 ]
 static var _mesh_cache: Dictionary = {}
+static var _product_cache: Dictionary = {}
 
 
 static func path_for(asset_id: String) -> String:
@@ -27,15 +28,42 @@ static func path_for(asset_id: String) -> String:
 	return RUNTIME_DIR + asset_id + ".glb"
 
 
+## O ficheiro está MESMO carregável? `ResourceLoader.exists()` responde que sim
+## só por existir o `.gltf.import` — e depois o carregamento falha com duas
+## linhas de erro vermelho por cada modelo (o produto `.godot/imported/**.scn`
+## não existe fora do editor). Aqui pergunta-se pelo PRODUTO: sem ele, não há
+## modelo e usa-se a geometria gerada por código, em silêncio.
 static func has_asset(asset_id: String) -> bool:
-	return ResourceLoader.exists(path_for(asset_id))
+	return not product_path(path_for(asset_id)).is_empty()
+
+
+## Produto importado (`.import` → `[remap] path`); vazio se nunca foi importado.
+static func product_path(path: String) -> String:
+	var key := "prod|" + path
+	if _product_cache.has(key):
+		return _product_cache[key] as String
+	var product := ""
+	var sidecar := path + ".import"
+	if FileAccess.file_exists(sidecar):
+		var text := FileAccess.get_file_as_string(sidecar)
+		var at := text.find("path=\"res://")
+		if at >= 0:
+			var start := at + len("path=\"")
+			var end := text.find("\"", start)
+			if end > start:
+				var candidate := text.substr(start, end - start)
+				if FileAccess.file_exists(candidate):
+					product = candidate
+	_product_cache[key] = product
+	return product
 
 
 static func scene_for(asset_id: String) -> PackedScene:
 	var path := path_for(asset_id)
-	if not ResourceLoader.exists(path):
+	var product := product_path(path)
+	if product.is_empty():
 		return null
-	return load(path) as PackedScene
+	return ResourceLoader.load(product) as PackedScene
 
 
 static func mesh_for(asset_id: String) -> ArrayMesh:

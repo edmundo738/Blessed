@@ -6,7 +6,58 @@
 > O histórico de auditoria abaixo preserva resultados antigos; quando diferirem, prevalecem
 > este marco mais recente e `docs/AUDIT_2026-10-14.md`.
 
-## Marco mais recente — água, luz local e relva (2026-10-15)
+## Marco mais recente — GAMEPLAY: colheita, ferramentas, bancada, água e loot (2026-10-16)
+
+Foco desta passagem: **a interação do jogador**. Nada aqui é ambiente — é o que a
+pessoa faz e o que ela vê acontecer.
+
+- **A mira acerta no que se está a olhar.** `interaction.gd` deixou de escolher o
+  alvo por um ponto médio inventado (`pos + altura*0.45`) com um cone de 35°: agora
+  faz raio contra a FORMA (cilindro do tronco + copa, elipsoide da rocha, esfera da
+  planta, caixa da estrutura, segmento do tronco caído). Apontar ao tronco corta a
+  árvore; apontar para o lado não apanha nada; o alcance é respeitado.
+- **Três verbos distintos**, como o Minecraft: rato esquerdo = trabalhar (segurar),
+  F = pegar/interagir (toro, encher, acender, dormir, falar), rato direito (ou X) =
+  usar o que está na mão (comer, beber, colocar, pescar). Antes F e o rato faziam
+  o mesmo.
+- **Diferença real entre mãos, madeira e pedra.** Machado dá `power.chop` (1,1
+  madeira / 2,2 pedra) e as mãos só 0,30-0,38 por golpe (árvore de 6 hp: 18 golpes
+  à mão contra 6 com machado de madeira). A **pedra exige picareta** (`needs`): sem
+  ela o nó não perde vida e o HUD diz o que falta. Trabalhar consome energia.
+- **Ciclo de progressão fechado e sem dependência circular:** mãos → madeira, ramo,
+  folha, fibra e **pedra solta** (`flint_node` dá pedra) → bancada (4 madeira + 2
+  ramos) → machado/picareta de madeira → pedra a sério → ferramentas de pedra.
+  `stations_near` passou a reconhecer a bancada colocada (antes só a fogueira
+  contava e as receitas novas eram impossíveis).
+- **Água que não prende ninguém:** rio raso atravessa-se a pé (vadear, mais lento);
+  só acima de 1,35 m de profundidade é que se nada; quem está submerso sobe sozinho
+  até à tona e fica neutro lá em cima. A criatura deixou de seguir o leito do rio
+  (afundava-se e ficava presa) e passa a nadar à superfície.
+- **Loot que não é feio:** cada família de item tem malha própria (ferramenta com
+  cabo e cabeça, peixe com barbatana, sopa em tigela, mesa), o item assenta e gira
+  devagar depois do arremesso, é atraído por um íman a 2,1 m e **flutua** se cair
+  na água em vez de se perder no fundo.
+- **Verificado:** `selftest` headless (wasm 4.7.2) — **141 ok, 0 falhas, 31
+  saltadas**. As verificações novas medem resultado observável: o raio apanha o
+  tronco e não o resto, a pedra sem picareta não perde vida, com picareta perde, o
+  machado reduz o número de golpes, a bancada é exigida e reconhecida, comer com o
+  rato direito tira o item da mão, a pesca dá peixe, o item é atraído, o item na
+  água sobe. As 31 saltadas são de ambiente (sem cache de importação `.godot/` os
+  modelos Blender não existem e usam-se as malhas geradas por código; em
+  `gl_compatibility` não há passes de partícula) — falham por motivo declarado, não
+  por bug.
+
+- **Há caça no mundo (o ciclo da comida fecha):** `meat_raw`, `meat_cooked` e o
+  guisado não tinham NENHUMA fonte — não existia um único animal. Agora o
+  `Wildlife` mantém até 5 animais de dia (nascem longe e à vista, desaparecem a
+  62 m), eles pastam em bando, fogem do jogador, nadam se caírem à água e largam
+  carne quando são abatidos (rato esquerdo; o machado poupa golpes). Carne crua →
+  assada na fogueira → guisado.
+- **O menu de craft mostra os degraus que faltam** ("Ainda não tens a estação
+  destas receitas: bancada — machado de pedra, picareta, cama…") em vez de as
+  esconder, que era o que fazia parecer que o craft tinha acabado.
+
+## Marco anterior — água, luz local e relva (2026-10-15)
 
 - Água usa shader opaco de dupla face, ondas/espuma estilizadas e paleta diferente
   debaixo da superfície; o tipo mar/rio agora é passado ao shader corretamente.
@@ -21,7 +72,7 @@
   procedural de shells/cartões; a aparência e o FPS no renderer real ainda
   precisam de confirmação no jogo.
 
-## Marco mais recente — vegetação e céu (2026-10-14)
+## Marco anterior — vegetação e céu (2026-10-14)
 
 - 14 famílias de modelos gratuitos Quaternius CC0 foram integradas como assets separados,
   com ficheiro-fonte Blender editável e LODs. O kit procedural anterior foi preservado.

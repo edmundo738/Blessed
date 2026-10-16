@@ -148,12 +148,28 @@ func _build_input_map() -> void:
 			if not InputMap.action_has_event(action, ev):
 				InputMap.action_add_event(action, ev)
 	# botões do rato
+	#   esquerdo → `use`      : trabalhar (segurar)
+	#   direito  → `use_item` : usar o que está na mão
+	# Antes o rato só tinha o esquerdo e o direito não fazia nada — metade das
+	# mãos ficava sem função nenhuma.
 	if not InputMap.has_action("use"):
 		InputMap.add_action("use")
 	var mb := InputEventMouseButton.new()
 	mb.button_index = MOUSE_BUTTON_LEFT
 	if not InputMap.action_has_event("use", mb):
 		InputMap.action_add_event("use", mb)
+	if not InputMap.has_action("use_item"):
+		InputMap.add_action("use_item")
+	var rb := InputEventMouseButton.new()
+	rb.button_index = MOUSE_BUTTON_RIGHT
+	if not InputMap.action_has_event("use_item", rb):
+		InputMap.action_add_event("use_item", rb)
+	# `X` é a alternativa de teclado (o `R` já é a bênção). Serve para quem joga
+	# sem rato direito ou quer a mão direita no teclado.
+	var rk := InputEventKey.new()
+	rk.physical_keycode = KEY_X
+	if not InputMap.action_has_event("use_item", rk):
+		InputMap.action_add_event("use_item", rk)
 	# barra rápida 1..9
 	for i in 9:
 		var a := "hotbar_%d" % (i + 1)

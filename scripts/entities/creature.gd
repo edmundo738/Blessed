@@ -82,7 +82,7 @@ func _make_texture() -> Texture2D:
 func _physics_process(delta: float) -> void:
 	if not alive or target == null or Game.paused:
 		return
-	velocity.y -= 16.0 * delta
+	velocity.y = maxf(velocity.y - 16.0 * delta, -32.0)
 	var to := target.global_position - global_position
 	var flat := Vector3(to.x, 0, to.z)
 	var dist := flat.length()
@@ -102,22 +102,48 @@ func _physics_process(delta: float) -> void:
 			return
 		light_push += -flat.normalized() * 2.0
 
-	var wish := flat.normalized() * speed * (0.55 + boldness)
+	# Água: a criatura NADA. Antes seguia o `ground_height` (o leito do rio) e
+	# afundava-se até desaparecer — depois ficava presa lá em baixo a empurrar o
+	# chão, sem chegar a lado nenhum.
+	var in_water := false
+	var surface := 0.0
+	var g: float = 0.0
+	if world != null:
+		if world.has_method("ground_height"):
+			g = float(world.call("ground_height", global_position.x, global_position.z))
+		if world.has_method("water_surface_height"):
+			surface = float(world.call("water_surface_height",
+				global_position.x, global_position.z))
+		if world.has_method("is_in_water"):
+			in_water = bool(world.call("is_in_water", global_position))
+		# só NADA onde não se pode andar; um riacho atravessa-se a pé
+		if in_water:
+			in_water = surface - g > 1.2
+
+	var swim := 0.55 if in_water else 1.0
+	var wish := flat.normalized() * speed * (0.55 + boldness) * swim
 	if light_push.length_squared() > 0.001:
-		wish = light_push.normalized() * speed * 1.2
+		wish = light_push.normalized() * speed * 1.2 * swim
 	velocity.x = move_toward(velocity.x, wish.x, 9.0 * delta)
 	velocity.z = move_toward(velocity.z, wish.z, 9.0 * delta)
 
-	if world != null and world.has_method("ground_height"):
-		var g: float = world.call("ground_height", global_position.x, global_position.z)
-		global_position.y = lerpf(global_position.y, g, 1.0 - exp(-12.0 * delta))
+	var target_y := g
+	if in_water:
+		# à superfície, com a cabeça fora: chega a nadar e a sair na margem
+		target_y = maxf(surface - 1.1, g)
+		velocity.y = 0.0    # quem nada não cai: a flutuação trata da altura
+	global_position.y = lerpf(global_position.y, target_y,
+		1.0 - exp(-(6.0 if in_water else 12.0) * delta))
 
 	move_and_slide()
 
 	# olha para o jogador
 	if flat.length_squared() > 0.01:
 		rotation.y = atan2(flat.x, flat.z)
-	_body.rotation.z = sin(float(Time.get_ticks_msec()) * 0.004) * 0.08
+	var t := float(Time.get_ticks_msec()) * 0.004
+	_body.rotation.z = sin(t) * 0.08
+	# na água balança mais e afunda um pouco na linha de água: lê-se como nadar
+	_body.position.y = 1.05 + (sin(t * 1.7) * 0.09 - 0.35 if in_water else 0.0)
 
 	# contacto
 	touch_t = maxf(0.0, touch_t - delta)

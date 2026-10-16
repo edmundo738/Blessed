@@ -256,7 +256,17 @@ func _build_rocks() -> void:
 			MeshKit.rock(rng, lerpf(0.55, 1.15, float(i) / 2.0))
 		var s := Species.new()
 		s.id = "rock_%d" % i
-		s.lods = blender_rocks if not blender_rocks.is_empty() else [m, m, m]
+		# NÃO escrever isto como ternário: `s.lods = A if cond else [m, m, m]` deixa
+		# o array literal pelo caminho na conversão para `Array[ArrayMesh]` e o
+		# resultado é um array VAZIO (medido: lods=0). Espécie sem LODs = MultiMesh
+		# com `mesh = null`: as três variedades de rocha desapareciam do mundo e a
+		# instância morta rebentava o motor de quem lhe lesse a malha
+		# (`RuntimeError: null function or function signature mismatch`).
+		if blender_rocks.is_empty():
+			var fallback: Array[ArrayMesh] = [m, m, m]
+			s.lods = fallback
+		else:
+			s.lods = blender_rocks
 		s.tint = Color(0.85, 0.85, 0.92)
 		s.scale_range = Vector2(0.8, 1.5)
 		s.biomes = PackedInt32Array([Terrain.B_ROCK, Terrain.B_MEADOW, Terrain.B_SAND, Terrain.B_MARSH])
@@ -341,6 +351,27 @@ func _build_structures() -> void:
 		MeshKit.box(Vector3(1.1, 0.22, 2.1), Color(0.5, 0.36, 0.25)),
 		_offset(MeshKit.box(Vector3(1.0, 0.26, 1.9), Color(0.35, 0.62, 0.35)), Vector3(0, 0.22, 0)),
 	]), Vector3(1.1, 0.5, 2.1), true, 0.0)
+	# Bancada: a mesa onde se fazem ferramentas a sério. Tem de ser visível de
+	# longe (é um marco de progressão) — tampo, quatro pernas e ferramentas em
+	# cima, para se perceber o que é antes de chegar perto.
+	_add_struct("workbench", _merge([
+		_offset(MeshKit.box(Vector3(1.5, 0.12, 0.9), Color(0.62, 0.45, 0.30)),
+			Vector3(0, 0.92, 0)),
+		_offset(MeshKit.box(Vector3(0.13, 0.9, 0.13), Color(0.48, 0.34, 0.22)),
+			Vector3(-0.6, 0.45, -0.32)),
+		_offset(MeshKit.box(Vector3(0.13, 0.9, 0.13), Color(0.48, 0.34, 0.22)),
+			Vector3(0.6, 0.45, -0.32)),
+		_offset(MeshKit.box(Vector3(0.13, 0.9, 0.13), Color(0.48, 0.34, 0.22)),
+			Vector3(-0.6, 0.45, 0.32)),
+		_offset(MeshKit.box(Vector3(0.13, 0.9, 0.13), Color(0.48, 0.34, 0.22)),
+			Vector3(0.6, 0.45, 0.32)),
+		# uma serra/lâmina e um cabo em cima
+		_offset(MeshKit.box(Vector3(0.52, 0.05, 0.11), Color(0.74, 0.74, 0.78)),
+			Vector3(-0.28, 1.03, 0.12)),
+		_offset(MeshKit.box(Vector3(0.09, 0.09, 0.36), Color(0.4, 0.28, 0.18)),
+			Vector3(0.44, 1.02, -0.1)),
+	]), Vector3(1.6, 1.06, 1.0), true, 0.0)
+
 	_add_struct("torch", _merge([
 		MeshKit.tapered(rng, 0.9, 0.06, 0.045, 5, 2, 0.0, false, Color(0.4, 0.28, 0.18)),
 		_offset(MeshKit.blob(rng, 0.14, 1, 0.2, Vector3.ONE, Color(1.0, 0.7, 0.3)), Vector3(0, 0.95, 0)),

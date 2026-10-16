@@ -27,8 +27,19 @@ const ITEMS := {
 	"stew":         {"kind": "food", "stack": 5, "icon": "stew",
 					 "food": 70, "drink": 25, "risk": 0.0},
 	# ── ferramentas / utilidades ────────────────────────────────────────────
-	"axe":          {"kind": "tool", "stack": 1, "icon": "axe", "power": {"chop": 2.2}},
-	"pickaxe":      {"kind": "tool", "stack": 1, "icon": "pickaxe", "power": {"mine": 2.4}},
+	# Duas famílias, três potências: madeira (apanha-se à mão), pedra (minera-se
+	# com picareta de madeira), e as mãos — que cortam devagar mas NÃO picam
+	# pedra. Sem isto não havia diferença nenhuma entre ter ferramenta ou não:
+	# era esse o buraco de progressão que o jogador sentia como "o craft não
+	# funciona".
+	"wood_axe":     {"kind": "tool", "stack": 1, "icon": "wood_axe",
+					 "power": {"chop": 1.1}, "tier": 1, "tool": "axe"},
+	"wood_pickaxe": {"kind": "tool", "stack": 1, "icon": "wood_pickaxe",
+					 "power": {"mine": 1.0}, "tier": 1, "tool": "pickaxe"},
+	"axe":          {"kind": "tool", "stack": 1, "icon": "axe", "power": {"chop": 2.2},
+					 "tier": 2, "tool": "axe"},
+	"pickaxe":      {"kind": "tool", "stack": 1, "icon": "pickaxe", "power": {"mine": 2.4},
+					 "tier": 2, "tool": "pickaxe"},
 	"rod":          {"kind": "tool", "stack": 1, "icon": "rod", "power": {"fish": 1.0}},
 	"torch":        {"kind": "tool", "stack": 5, "icon": "torch", "light": 5.0, "fuel": 180.0},
 	"bottle":       {"kind": "tool", "stack": 1, "icon": "bottle", "capacity": 100.0},
@@ -40,22 +51,39 @@ const ITEMS := {
 	"floor":        {"kind": "structure", "stack": 20, "icon": "floor", "place": "floor"},
 	"pillar":       {"kind": "structure", "stack": 20, "icon": "pillar", "place": "pillar"},
 	"bed":          {"kind": "structure", "stack": 2, "icon": "bed", "place": "bed"},
+	"workbench":    {"kind": "structure", "stack": 4, "icon": "workbench",
+					 "place": "workbench"},
 }
 
 ## Receitas: `needs` são consumidos, `result` é criado. `station` vazio = mãos.
+## Cadeia de progressão (e o motivo de cada degrau existir):
+##   mãos -> tronco, ramo, folha, fibra e PEDRAS SOLTAS (`flint_node`)
+##   bancada (wood 4 + stick 2, à mão) -> destranca as ferramentas e a fogueira
+##   picareta de madeira -> pedra -> picareta/machado de pedra -> construir
+## O ciclo partido que existia: o machado e a picareta pediam PEDRA, e a pedra
+## só saía de rochas, que exigiam picareta. Ninguém saía do sítio.
 const RECIPES := [
 	{"id": "stick",     "result": "stick",       "qty": 2, "needs": {"wood": 1}},
 	{"id": "leaf_fiber", "result": "fiber",       "qty": 1, "needs": {"leaf": 3}},
 	{"id": "torch",     "result": "torch",       "qty": 2, "needs": {"stick": 1, "fiber": 1}},
-	{"id": "axe",       "result": "axe",         "qty": 1, "needs": {"stick": 2, "stone": 2, "fiber": 2}},
-	{"id": "pickaxe",   "result": "pickaxe",     "qty": 1, "needs": {"stick": 2, "stone": 3, "fiber": 1}},
-	{"id": "rod",       "result": "rod",         "qty": 1, "needs": {"stick": 3, "fiber": 3}},
+	{"id": "workbench", "result": "workbench",   "qty": 1, "needs": {"wood": 4, "stick": 2}},
+	{"id": "wood_axe",  "result": "wood_axe",    "qty": 1, "needs": {"stick": 2, "wood": 1},
+	 "station": "workbench"},
+	{"id": "wood_pickaxe", "result": "wood_pickaxe", "qty": 1, "needs": {"stick": 2, "wood": 2},
+	 "station": "workbench"},
+	{"id": "axe",       "result": "axe",         "qty": 1, "needs": {"stick": 2, "stone": 2, "fiber": 2},
+	 "station": "workbench"},
+	{"id": "pickaxe",   "result": "pickaxe",     "qty": 1, "needs": {"stick": 2, "stone": 3, "fiber": 1},
+	 "station": "workbench"},
+	{"id": "rod",       "result": "rod",         "qty": 1, "needs": {"stick": 3, "fiber": 3},
+	 "station": "workbench"},
 	{"id": "bottle",    "result": "bottle",      "qty": 1, "needs": {"fiber": 4}},
-	{"id": "campfire",  "result": "campfire",    "qty": 1, "needs": {"stone": 4, "stick": 3, "wood": 2}},
+	{"id": "campfire",  "result": "campfire",    "qty": 1, "needs": {"stone": 4, "stick": 3, "wood": 2},
+	 "station": "workbench"},
 	{"id": "wall",      "result": "wall",        "qty": 2, "needs": {"wood": 3}},
 	{"id": "floor",     "result": "floor",       "qty": 2, "needs": {"wood": 2}},
 	{"id": "pillar",    "result": "pillar",      "qty": 2, "needs": {"wood": 2, "fiber": 1}},
-	{"id": "bed",       "result": "bed",         "qty": 1, "needs": {"fiber": 12, "stick": 4}, "station": "campfire"},
+	{"id": "bed",       "result": "bed",         "qty": 1, "needs": {"fiber": 12, "stick": 4}, "station": "workbench"},
 	{"id": "meat_cooked", "result": "meat_cooked", "qty": 1, "needs": {"meat_raw": 1}, "station": "campfire"},
 	{"id": "fish_cooked", "result": "fish_cooked", "qty": 1, "needs": {"fish_raw": 1}, "station": "campfire"},
 	{"id": "stew",      "result": "stew",        "qty": 1,
@@ -63,17 +91,31 @@ const RECIPES := [
 ]
 
 ## O que sai de cada nó do mundo quando é colhido.
+##
+##   "hand"     — dano de cada golpe com as MÃOS (o machado manda no `power`).
+##   "needs"    — ferramenta mínima: sem ela o nó não cede, e a barra diz porquê.
+##                É isto que faz a picareta valer alguma coisa.
+##   "tool"     — ferramenta que acelera (não obriga).
 const HARVEST := {
-	"tree_oak":    {"action": "chop", "tool": "axe", "hp": 6, "yields": {"wood": 3, "stick": 1, "leaf": 3}},
-	"tree_pine":   {"action": "chop", "tool": "axe", "hp": 8, "yields": {"wood": 4, "leaf": 2}},
-	"tree_birch":  {"action": "chop", "tool": "axe", "hp": 5, "yields": {"wood": 2, "stick": 2, "leaf": 3}},
-	"tree_sakura": {"action": "chop", "tool": "axe", "hp": 6, "yields": {"wood": 2, "leaf": 2}},
-	"tree_willow":{"action": "chop", "tool": "axe", "hp": 7, "yields": {"wood": 3, "stick": 2, "leaf": 4}},
-	"rock":        {"action": "mine", "tool": "pickaxe", "hp": 5, "yields": {"stone": 2, "flint": 1}},
+	"tree_oak":    {"action": "chop", "tool": "axe", "hand": 0.34, "hp": 6,
+					"yields": {"wood": 3, "stick": 1, "leaf": 3}},
+	"tree_pine":   {"action": "chop", "tool": "axe", "hand": 0.30, "hp": 8,
+					"yields": {"wood": 4, "leaf": 2}},
+	"tree_birch":  {"action": "chop", "tool": "axe", "hand": 0.34, "hp": 5,
+					"yields": {"wood": 2, "stick": 2, "leaf": 3}},
+	"tree_sakura": {"action": "chop", "tool": "axe", "hand": 0.38, "hp": 6,
+					"yields": {"wood": 2, "leaf": 2}},
+	"tree_willow":{"action": "chop", "tool": "axe", "hand": 0.32, "hp": 7,
+					"yields": {"wood": 3, "stick": 2, "leaf": 4}},
+	"rock":        {"action": "mine", "tool": "pickaxe", "needs": "pickaxe", "hp": 5,
+					"yields": {"stone": 2, "flint": 1}},
 	"bush":        {"action": "pick", "tool": "", "hp": 1, "yields": {"fiber": 1, "leaf": 2}},
 	"tuft":        {"action": "pick", "tool": "", "hp": 1, "yields": {"fiber": 2}},
 	"mushroom":    {"action": "pick", "tool": "", "hp": 1, "yields": {"mushroom": 1}},
-	"flint_node":  {"action": "pick", "tool": "", "hp": 1, "yields": {"flint": 2}},
+	# Pedra solta: apanha-se com as mãos e dá PEDRA. É a porta de entrada da
+	# progressão — sem ela não havia como chegar à primeira picareta.
+	"flint_node":  {"action": "pick", "tool": "", "hp": 1,
+					"yields": {"stone": 2, "flint": 1}},
 }
 
 ## Objectivos do prólogo/primeiras horas. `goal` é verificável pelo Game.
@@ -129,6 +171,19 @@ func recipes_for(near: Array = []) -> Array:
 		var st2 := str(r.get("station", ""))
 		if st2.is_empty() or st2 in near:
 			out.append(r)
+	return out
+
+
+## Receitas que existem mas exigem uma estação que não está ao lado. O menu
+## mostra-as à parte ("precisas de bancada") em vez de as esconder: sem isto o
+## jogador não sabia que havia mais degraus de ferramentas para desbloquear.
+func locked_recipes(near: Array = []) -> Array:
+	var out := []
+	for lista in [RECIPES, Mods.all_recipes()]:
+		for r in lista:
+			var st := str(r.get("station", ""))
+			if st != "" and not (st in near):
+				out.append(r)
 	return out
 
 

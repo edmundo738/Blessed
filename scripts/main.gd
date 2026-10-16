@@ -15,6 +15,7 @@ var survival: Survival
 var inv: Inventory
 var interaction: Interaction
 var night: NightDirector
+var wildlife: Wildlife
 var creature_root: Node3D
 var hud: Hud
 var menus: Menus
@@ -203,6 +204,14 @@ func _build_systems() -> void:
 	night.survival = survival
 	night.root = creature_root
 	add_child(night)
+
+	# caça diurna: os animais partilham o nó das criaturas (é tudo bicho em cena)
+	wildlife = Wildlife.new()
+	wildlife.player = player
+	wildlife.world = world
+	wildlife.inv = inv
+	wildlife.root = creature_root
+	add_child(wildlife)
 
 
 func _build_ambient() -> void:

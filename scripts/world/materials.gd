@@ -25,10 +25,14 @@ var _grass_shadow := Color(0.45, 0.50, 0.82)
 var _grass_ambient := 0.74
 var _wind_strength := 0.22
 
-const SKY_DAY := preload("res://content/fx/kenney/sky/skybox-day.png")
-const SKY_MORNING := preload("res://content/fx/kenney/sky/skybox-morning.png")
-const SKY_NIGHT := preload("res://content/fx/kenney/sky/skybox-night.png")
-const GRASS_ATLAS := preload("res://content/models/runtime/quaternius/Grass.png")
+## Estas texturas eram `preload`, e um `preload` de PNG sem a cache do editor
+## falha na ANÁLISE do script — levava consigo o mundo inteiro (sem editor e na
+## build web o jogo não arrancava). `Assets.texture` lê o PNG cru quando não há
+## produto importado.
+const SKY_DAY_PATH := "res://content/fx/kenney/sky/skybox-day.png"
+const SKY_MORNING_PATH := "res://content/fx/kenney/sky/skybox-morning.png"
+const SKY_NIGHT_PATH := "res://content/fx/kenney/sky/skybox-night.png"
+const GRASS_ATLAS_PATH := "res://content/models/runtime/quaternius/Grass.png"
 
 
 func _init() -> void:
@@ -58,13 +62,13 @@ func _init() -> void:
 	grass = grass_material_for()
 	grass_shell = ShaderMaterial.new()
 	grass_shell.shader = gss
-	grass_shell.set_shader_parameter("grass_texture", GRASS_ATLAS)
+	grass_shell.set_shader_parameter("grass_texture", Assets.texture(GRASS_ATLAS_PATH))
 	grass_shell.set_shader_parameter("wind_noise", wind_noise)
 	grass_shell.set_shader_parameter("wind_strength", 0.34)
 	grass_shell.set_shader_parameter("wind_speed", 1.15)
 	grass_cards = ShaderMaterial.new()
 	grass_cards.shader = gcs
-	grass_cards.set_shader_parameter("grass_texture", GRASS_ATLAS)
+	grass_cards.set_shader_parameter("grass_texture", Assets.texture(GRASS_ATLAS_PATH))
 	grass_cards.set_shader_parameter("wind_noise", wind_noise)
 	grass_cards.set_shader_parameter("wind_strength", 0.24)
 	grass_cards.set_shader_parameter("wind_speed", 1.0)
@@ -83,9 +87,9 @@ func _init() -> void:
 
 	sky = ShaderMaterial.new()
 	sky.shader = ss
-	sky.set_shader_parameter("sky_day", SKY_DAY)
-	sky.set_shader_parameter("sky_morning", SKY_MORNING)
-	sky.set_shader_parameter("sky_night", SKY_NIGHT)
+	sky.set_shader_parameter("sky_day", Assets.texture(SKY_DAY_PATH))
+	sky.set_shader_parameter("sky_morning", Assets.texture(SKY_MORNING_PATH))
+	sky.set_shader_parameter("sky_night", Assets.texture(SKY_NIGHT_PATH))
 
 
 ## Material de relva que conserva a textura do asset importado e anima os vértices.

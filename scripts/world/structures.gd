@@ -15,7 +15,7 @@ var _fire_mesh: ArrayMesh
 var _smoke_mesh: QuadMesh
 var _ember_mesh: SphereMesh
 
-const SMOKE_TEXTURE := preload("res://content/fx/kenney/particles/smoke_02.png")
+const SMOKE_TEXTURE_PATH := "res://content/fx/kenney/particles/smoke_02.png"
 
 
 func _ready() -> void:
@@ -207,7 +207,7 @@ func _make_smoke_material() -> StandardMaterial3D:
 	material.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
 	material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
-	material.albedo_texture = SMOKE_TEXTURE
+	material.albedo_texture = Assets.texture(SMOKE_TEXTURE_PATH)
 	material.albedo_color = Color(0.22, 0.24, 0.30, 0.26)
 	return material
 
@@ -254,13 +254,23 @@ func near(p: Vector3, radius: float) -> Array:
 	return out
 
 
+## Estruturas colocadas que fazem de estação de trabalho. Antes só a fogueira
+## contava — a bancada nova era colocável mas invisível para o craft, e as
+## receitas que a exigem ficavam impossíveis de fazer.
+const STATION_IDS := ["workbench", "campfire"]
+
+
 ## Estações de trabalho disponíveis perto de um ponto.
 func stations_near(p: Vector3, radius: float) -> Array:
 	var out := []
 	for e in near(p, radius):
 		var id := str(e["id"])
-		if id == "campfire" and bool(e.get("lit", false)) and not (id in out):
-			out.append(id)
+		if not (id in STATION_IDS) or id in out:
+			continue
+		# A fogueira só é bancada quando está acesa; a bancada, sempre.
+		if id == "campfire" and not bool(e.get("lit", false)):
+			continue
+		out.append(id)
 	return out
 
 

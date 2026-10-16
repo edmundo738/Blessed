@@ -345,6 +345,21 @@ func _build_craft() -> void:
 		row.add_child(b)
 		var separator := HSeparator.new()
 		_content.add_child(separator)
+	# Degraus que ainda não estão ao alcance: dizer o que falta é melhor do que
+	# esconder a receita (era o que fazia o jogador pensar que o craft acabou).
+	var locked: Array = Db.locked_recipes(stations)
+	if not locked.is_empty():
+		_label("")
+		_label(Loc.t("menu.craft_locked"), 12, Color(0.8, 0.72, 0.5, 0.8))
+		var by_station := {}
+		for r in locked:
+			var st := str(r.get("station", ""))
+			if not by_station.has(st):
+				by_station[st] = []
+			by_station[st].append(Db.item_name(str(r["result"])))
+		for st in by_station:
+			_label("%s: %s" % [Db.item_name(st), ", ".join(by_station[st])], 11,
+				Color(0.72, 0.76, 0.7, 0.72))
 	_label("")
 	_button(Loc.t("settings.back"), func(): open("pause"))
 

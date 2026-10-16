@@ -74,6 +74,17 @@ func _draw() -> void:
 			_stroke(center + Vector2(8, 13) * k, center + Vector2(-7, -11) * k, WOOD, 5.0 * k)
 			_stroke(center + Vector2(-14, -10) * k, center + Vector2(12, -14) * k, METAL, 5.0 * k)
 			_stroke(center + Vector2(-14, -10) * k, center + Vector2(-18, -14) * k, METAL, 3.0 * k)
+		# Ferramentas de madeira: MESMA forma, cabeça em madeira — o ícone diz
+		# logo "isto é o degrau fraco" sem precisar de texto.
+		"wood_axe":
+			_stroke(center + Vector2(7, 13) * k, center + Vector2(-8, -13) * k, Color("8a6136"), 5.0 * k)
+			_poly(center + Vector2(-9, -12) * k, [Vector2(-1, -8), Vector2(11, -7), Vector2(10, 1), Vector2(1, 6), Vector2(-3, 2)], Color("bd8b53"))
+			_stroke(center + Vector2(2, -9) * k, center + Vector2(7, 2) * k, Color("6d4a29"), 1.6 * k)
+		"wood_pickaxe":
+			_stroke(center + Vector2(8, 13) * k, center + Vector2(-7, -11) * k, Color("8a6136"), 5.0 * k)
+			_stroke(center + Vector2(-14, -10) * k, center + Vector2(12, -14) * k, Color("bd8b53"), 5.0 * k)
+			_stroke(center + Vector2(-14, -10) * k, center + Vector2(-18, -14) * k, Color("bd8b53"), 3.0 * k)
+			_stroke(center + Vector2(-9, -12) * k, center + Vector2(-4, -11) * k, Color("6d4a29"), 2.0 * k)
 		"rod":
 			_stroke(center + Vector2(-8, 14) * k, center + Vector2(8, -16) * k, WOOD, 3.0 * k)
 			_stroke(center + Vector2(8, -16) * k, center + Vector2(16, -5) * k, INK, 1.4 * k)
@@ -111,6 +122,15 @@ func _draw() -> void:
 			_poly(center, [Vector2(-6, -14), Vector2(6, -14), Vector2(6, -8), Vector2(11, -4), Vector2(10, 13), Vector2(-10, 13), Vector2(-11, -4), Vector2(-6, -8)], Color("9ed8d0"))
 			draw_rect(Rect2(center + Vector2(-7, 1) * k, Vector2(14, 10) * k), BLUE if item_id == "water" else Color("c5e6d7"))
 			_stroke(center + Vector2(-5, -10) * k, center + Vector2(5, -10) * k, INK, 2.0 * k)
+		"workbench":
+			# tampo + quatro pernas + ferramentas em cima
+			draw_rect(Rect2(center + Vector2(-15, -8) * k, Vector2(30, 7) * k), INK)
+			draw_rect(Rect2(center + Vector2(-14, -7) * k, Vector2(28, 5) * k), WOOD)
+			for dx in [-12.0, 8.0]:
+				draw_rect(Rect2(center + Vector2(dx, -2) * k, Vector2(6, 16) * k), INK)
+				draw_rect(Rect2(center + Vector2(dx + 1, -1) * k, Vector2(4, 14) * k), Color("8a5f38"))
+			_stroke(center + Vector2(-10, -12) * k, center + Vector2(-3, -12) * k, METAL, 2.2 * k)
+			_stroke(center + Vector2(2, -13) * k, center + Vector2(9, -10) * k, METAL, 2.2 * k)
 		"wall", "floor", "pillar", "bed":
 			if item_id == "wall":
 				draw_rect(Rect2(center + Vector2(-13, -11) * k, Vector2(26, 22) * k), WOOD)

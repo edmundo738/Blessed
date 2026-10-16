@@ -14,16 +14,26 @@ extends Node
 var main: Node
 var passed := 0
 var failed := 0
+var skipped := 0
 var lines: Array = []
 
 
 func check(what: String, ok: bool, detail: String = "") -> void:
 	if ok:
 		passed += 1
-		lines.append("  OK   %s%s" % [what, "" if detail.is_empty() else "  (" + detail + ")"])
+		lines.append("  OK    %s%s" % [what, "" if detail.is_empty() else "  (" + detail + ")"])
 	else:
 		failed += 1
 		lines.append("  FALHA %s%s" % [what, "" if detail.is_empty() else "  (" + detail + ")"])
+
+
+## Verificação que NÃO se aplica à build de quem corre: conta à parte (nem
+## passa nem falha) e explica-se porquê. Sem isto, correr o self-test fora do
+## editor (sem cache de importação, ou em `gl_compatibility`) enchia o
+## relatório de falhas que não são do jogo.
+func maybe_skip(what: String, why: String) -> void:
+	skipped += 1
+	lines.append("  SALTA %s  (%s)" % [what, why])
 
 
 func setup(p_main: Node) -> void:
@@ -66,10 +76,16 @@ func _run() -> void:
 	var impact_pool: Array = main.fx.get("_pool") as Array
 	var impact: Node3D = impact_pool[0] as Node3D if not impact_pool.is_empty() else null
 	var impact_mesh: QuadMesh = impact.get("draw_pass_2") as QuadMesh if impact != null else null
-	check("impacto combina lascas 3D com brilho 2D reutilizável", impact != null
-		and (impact is GPUParticles3D or impact is CPUParticles3D)
-		and int(impact.get("draw_passes")) == 2 and impact_mesh != null
-		and (impact_mesh.surface_get_material(0) as StandardMaterial3D).albedo_texture != null)
+	if not bool(main.fx.get("_use_gpu")):
+		# `gl_compatibility` (o renderizador da build web) não tem `draw_passes`:
+		# as partículas caem no caminho CPU, que é verificado logo a seguir.
+		maybe_skip("impacto combina lascas 3D com brilho 2D reutilizável",
+			"renderizador sem passes de partícula (gl_compatibility)")
+	else:
+		check("impacto combina lascas 3D com brilho 2D reutilizável", impact != null
+			and (impact is GPUParticles3D or impact is CPUParticles3D)
+			and int(impact.get("draw_passes")) == 2 and impact_mesh != null
+			and (impact_mesh.surface_get_material(0) as StandardMaterial3D).albedo_texture != null)
 	var fx_use_gpu := bool(main.fx.get("_use_gpu"))
 	main.fx.set("_use_gpu", false)
 	var compatibility_emitter: CPUParticles3D = main.fx.call("_new_emitter") as CPUParticles3D
@@ -145,6 +161,12 @@ func _run() -> void:
 		"seaweed_cluster", "clover_clump", "pickup_berry", "pickup_leaf", "pickup_log", "tool_axe",
 		"tool_pickaxe"]
 	for asset_id in blender_asset_ids:
+		if not BlessedBlenderAssets.has_asset(asset_id):
+			# Sem cache de importação (fora do editor) o jogo usa a geometria
+			# gerada por código — é o caminho suportado, não uma falha.
+			maybe_skip("GLB Blender %s tem mesh e escala válida" % asset_id,
+				"sem produto importado; o jogo usa geometria procedural")
+			continue
 		var asset_mesh: ArrayMesh = BlessedBlenderAssets.mesh_for(asset_id)
 		var asset_vertices: int = _mesh_vertex_count(asset_mesh)
 		var asset_size: Vector3 = asset_mesh.get_aabb().size if asset_mesh != null else Vector3.ZERO
@@ -159,6 +181,11 @@ func _run() -> void:
 
 	for lod_asset_id in ["tree_oak", "tree_birch", "tree_pine", "tree_sakura", "tree_willow",
 		"rock_cluster", "plant_bush", "plant_berry_bush", "plant_mushroom"]:
+		if not BlessedBlenderAssets.has_asset(lod_asset_id) \
+				or not BlessedBlenderAssets.has_asset("%s_lod2" % lod_asset_id):
+			maybe_skip("LOD Blender %s importam e reduzem geometria" % lod_asset_id,
+				"sem produto importado; LOD é feito pelo gerador de malhas")
+			continue
 		var base_mesh: ArrayMesh = BlessedBlenderAssets.mesh_for(lod_asset_id)
 		var lod1_mesh: ArrayMesh = BlessedBlenderAssets.mesh_for("%s_lod1" % lod_asset_id)
 		var lod2_mesh: ArrayMesh = BlessedBlenderAssets.mesh_for("%s_lod2" % lod_asset_id)
@@ -190,9 +217,13 @@ func _run() -> void:
 							wind_shader_trees_in_world += (decor as MultiMeshInstance3D).multimesh.instance_count
 							break
 					break
-	check("chunks usam árvores Blender com vento nas folhas",
-		blender_trees_in_world > 0 and wind_shader_trees_in_world > 0,
-		"%d instâncias; %d com shader de folhas" % [blender_trees_in_world, wind_shader_trees_in_world])
+	if not BlessedBlenderAssets.has_asset("tree_oak"):
+		maybe_skip("chunks usam árvores Blender com vento nas folhas",
+			"sem produto importado; as árvores são geradas por código")
+	else:
+		check("chunks usam árvores Blender com vento nas folhas",
+			blender_trees_in_world > 0 and wind_shader_trees_in_world > 0,
+			"%d instâncias; %d com shader de folhas" % [blender_trees_in_world, wind_shader_trees_in_world])
 
 	# ── 2. biomas variados ────────────────────────────────────────────────
 	var biomes := {}
@@ -686,16 +717,401 @@ func _run() -> void:
 		main.menus._content.get_child_count() > 0)
 	main.menus.close()
 
+	# ══════════════════════════════════════════════════════════════════════
+	#  GAMEPLAY: mira, ferramentas, bancada, usar na mão, pesca
+	# ══════════════════════════════════════════════════════════════════════
+	# Cada bloco mede o RESULTADO que o jogador vê (nó perde vida, item sai da
+	# mão, peixe entra na mochila) e não o facto de o código ter corrido.
+
+	# ── mira: o raio tem de apanhar a FORMA, não um ponto inventado ───────
+	var tree_base := Vector3(0, 10, 0)          # nó fictício: só geometria
+	var fake_tree := {"pos": tree_base, "kind": "tree_oak", "height": 6.0,
+		"collider_radius": 0.42, "radius": 0.42, "hp": 6.0, "alive": true}
+	var eye: Vector3 = tree_base + Vector3(3.2, 1.6, 0)
+	var at_trunk: Vector3 = (tree_base + Vector3(0.0, 1.6, 0.0) - eye).normalized()
+	var at_canopy: Vector3 = (tree_base + Vector3(0.0, 4.4, 0.0) - eye).normalized()
+	var sideways := Vector3(1.0, -0.05, -0.75).normalized()
+	var hit_trunk: float = it.call("_ray_harvest", fake_tree, eye, at_trunk, 4.2)
+	var hit_canopy: float = it.call("_ray_harvest", fake_tree, eye, at_canopy, 4.2)
+	var hit_air: float = it.call("_ray_harvest", fake_tree, eye, sideways, 4.2)
+	check("apontar ao tronco apanha a árvore", hit_trunk < 100.0, "t=%.2f" % hit_trunk)
+	check("apontar à copa também apanha a mesma árvore", hit_canopy < 100.0,
+		"t=%.2f" % hit_canopy)
+	check("apontar para o lado não apanha a árvore", hit_air >= 100.0,
+		"t=%.2f" % hit_air)
+	# a 4,2 m de alcance: um alvo a 6 m não pode contar
+	var far_eye: Vector3 = tree_base + Vector3(6.5, 1.6, 0)
+	var at_far: Vector3 = (tree_base + Vector3(0.0, 1.6, 0.0) - far_eye).normalized()
+	check("fora de alcance não há alvo",
+		float(it.call("_ray_harvest", fake_tree, far_eye, at_far, 4.2)) >= 100.0)
+
+	# ── pedra sem picareta não cede (a punição tem de doer) ───────────────
+	var rock_base := Vector3(0, 10, 0)
+	var fake_rock := {"pos": rock_base, "kind": "rock", "height": 0.8,
+		"radius": 0.8, "hp": 5, "alive": true}
+	var rock_eye: Vector3 = rock_base + Vector3(1.6, 0.9, 0)
+	check("a pedra fica no alvo a olhar de perto",
+		float(it.call("_ray_harvest", fake_rock, rock_eye, Vector3(-1, -0.15, 0).normalized(),
+			4.2)) < 100.0)
+	var said: Array = []
+	var catcher := func(_text: String, _seconds: float) -> void:
+		said.append(_text)
+	Bus.ui_message.connect(catcher)
+	var rock_hp_before := float(fake_rock["hp"])
+	it.focus = {"kind": "harvest", "ref": fake_rock, "pos": rock_base}
+	it._hold_work(0.6, 1.0)
+	check("pedra sem picareta não perde vida nenhuma",
+		float(fake_rock["hp"]) == rock_hp_before, "hp=%.1f" % float(fake_rock["hp"]))
+	check("o HUD diz que falta a picareta", not said.is_empty(), ", ".join(said))
+	Bus.ui_message.disconnect(catcher)
+
+	# ── com picareta, a pedra cede ────────────────────────────────────────
+	var had_rock_tool := false
+	inv.add("pickaxe", 1)
+	for i in inv.SLOTS:
+		if str((inv.slots[i] as Dictionary).get("id", "")) == "pickaxe":
+			inv.equip_slot(i)   # `select` só chega à barra rápida (0..8)
+			had_rock_tool = true
+			break
+	check("picareta equipada na barra", had_rock_tool)
+	it.focus = {"kind": "harvest", "ref": fake_rock, "pos": rock_base}
+	it._hold_work(0.6, 1.0)
+	check("com picareta a pedra perde vida por golpe",
+		float(fake_rock["hp"]) < rock_hp_before, "hp %.1f -> %.1f" % [rock_hp_before,
+			float(fake_rock["hp"])])
+
+	# ── ferramenta muda o número de golpes (rendimento) ───────────────────
+	var hand_spec: Dictionary = Db.HARVEST["tree_oak"]
+	var axe_item: Dictionary = Db.item("wood_axe")
+	var hand_takes := maxi(int(ceil(float(hand_spec["hp"]) / float(hand_spec["hand"]))), 1)
+	var axe_takes := maxi(int(ceil(float(hand_spec["hp"]) / float(axe_item["power"]["chop"]))), 1)
+	check("machado de madeira abate a árvore em bem menos golpes",
+		axe_takes * 2 <= hand_takes, "mãos=%d golpes, machado=%d" % [hand_takes, axe_takes])
+	var bare_rock_spec: Dictionary = Db.HARVEST["rock"]
+	check("a pedra exige picareta (e as mãos não a picam)",
+		str(bare_rock_spec.get("needs", "")) == "pickaxe")
+	check("a pedra solta dá pedra sem ferramenta (porta de entrada)",
+		not Db.HARVEST["flint_node"].has("needs")
+		and int(Db.HARVEST["flint_node"]["yields"].get("stone", 0)) > 0)
+	check("a bancada é a única estação das ferramentas de pedra",
+		str(Db.recipe("wood_axe").get("station", "")) == "workbench"
+		and str(Db.recipe("wood_pickaxe").get("station", "")) == "workbench"
+		and not Db.recipe("workbench").has("station"))
+
+	# ── trabalhar cansa ───────────────────────────────────────────────────
+	var energy_before := float(sv.energy)
+	var fake_tree2 := {"pos": tree_base, "kind": "tree_oak", "height": 6.0,
+		"collider_radius": 0.42, "radius": 0.42, "hp": 40.0, "alive": true}
+	it.focus = {"kind": "harvest", "ref": fake_tree2, "pos": tree_base}
+	it._hold_work(0.6, 1.0)
+	check("cortar gasta energia", float(sv.energy) < energy_before,
+		"%.1f -> %.1f" % [energy_before, float(sv.energy)])
+
+	# ── bancada: receita não sai sem ela, sai com ela ─────────────────────
+	for k in ["wood", "stick", "fiber"]:
+		inv.add(k, 12)
+	var before_bench: int = main.structures.list.size()
+	var no_bench := Game.request("craft", {"recipe": "wood_axe"})
+	check("receita de bancada é recusada longe de uma bancada",
+		not bool(no_bench.get("ok", true))
+		and str(no_bench.get("reason", "")) == "no_station",
+		"reason=%s" % str(no_bench.get("reason", "-")))
+	var bench_pos: Vector3 = main.player.global_position + Vector3(-2.0, 0.0, 0.0)
+	bench_pos.y = main.world.ground_height(bench_pos.x, bench_pos.z)
+	main.structures.place("workbench", bench_pos, 0.0, false)
+	check("bancada colocada é reconhecida como estação",
+		"workbench" in main.structures.stations_near(bench_pos, 4.5)
+		and main.structures.list.size() == before_bench + 1)
+	var made_axe := Game.request("craft", {"recipe": "wood_axe"})
+	check("com bancada perto, o machado de madeira é feito",
+		bool(made_axe.get("ok", false)) and inv.count("wood_axe") >= 1,
+		"reason=%s" % str(made_axe.get("reason", "-")))
+	var bench_slot := -1
+	for i in inv.SLOTS:
+		if str((inv.slots[i] as Dictionary).get("id", "")) == "wood_axe":
+			bench_slot = i
+			break
+	check("o machado novo entra na mochila", bench_slot >= 0)
+
+	# ── usar o que está na mão (rato direito) ─────────────────────────────
+	inv.add("mushroom", 2)
+	var mush_slot := -1
+	for i in inv.SLOTS:
+		if str((inv.slots[i] as Dictionary).get("id", "")) == "mushroom":
+			mush_slot = i
+			break
+	inv.equip_slot(mush_slot)
+	sv.hunger = 40.0
+	var mushrooms_before := inv.count("mushroom")
+	var eaten := Game.request("use_item")
+	check("comer com o rato direito funciona",
+		bool(eaten.get("ok", false)) and inv.count("mushroom") == mushrooms_before - 1
+		and float(sv.hunger) > 40.0, "fome=%.0f" % float(sv.hunger))
+
+	inv.add("rod", 1)
+	var rod_slot := -1
+	for i in inv.SLOTS:
+		if str((inv.slots[i] as Dictionary).get("id", "")) == "rod":
+			rod_slot = i
+			break
+	inv.equip_slot(rod_slot)
+	it.focus = {"kind": "water", "ref": null, "pos": main.player.global_position}
+	var fish_before := inv.count("fish_raw")
+	var _cast := Game.request("use_item")
+	check("lançar a linha à água", int(it.get("_fish_state")) == 1,
+		"estado=%d" % int(it.get("_fish_state")))
+	it.call("_tick_fishing", 12.0)
+	check("o peixe acaba por morder", int(it.get("_fish_state")) == 2)
+	var pull := Game.request("use_item")
+	check("puxar a tempo dá peixe",
+		bool(pull.get("ok", false)) and inv.count("fish_raw") > fish_before,
+		"fish_raw=%d" % inv.count("fish_raw"))
+
+	# ── caça: as receitas de carne têm de ter uma fonte no mundo ──────────
+	# (antes disto, `meat_raw` só existia na tabela de itens: nenhum bicho do
+	#  mundo o largava, logo `meat_cooked` e o guisado eram conteúdo inalcançável)
+	if main.wildlife == null:
+		maybe_skip("há caça no mundo durante o dia", "sem Wildlife no arranque")
+	else:
+		Game.hour = 12.0
+		Game.phase = Game.current_phase()
+		main.wildlife.spawn_t = 0.0
+		for i in 30:
+			main.wildlife.call("_process", 0.2)
+			if not main.wildlife.animals.is_empty():
+				break
+		check("há caça no mundo durante o dia",
+			not main.wildlife.animals.is_empty(),
+			"%d animais" % main.wildlife.animals.size())
+		var prey: Animal = null
+		for a in main.wildlife.animals:
+			if is_instance_valid(a):
+				prey = a as Animal
+				break
+		if prey == null:
+			maybe_skip("golpear caça tira-lhe vida e põe-na a fugir",
+				"não nasceu nenhum animal neste arranque")
+		else:
+			var prey_hp := float(prey.health)
+			it.focus = {"kind": "animal", "ref": prey,
+				"pos": prey.global_position + Vector3(0, 0.45, 0)}
+			it.call("_strike_animal")
+			check("golpear caça tira-lhe vida", float(prey.health) < prey_hp,
+				"%.1f -> %.1f" % [prey_hp, float(prey.health)])
+			check("a caça foge quando é ferida", float(prey.get("_panic_t")) > 0.0)
+			var meat_before := 0
+			for c in main.world.get_children():
+				if c is RigidBody3D and str(c.get("item_id")) == "meat_raw":
+					meat_before += int(c.get("amount"))
+			prey.hurt(99.0)
+			var meat_after := 0
+			for c in main.world.get_children():
+				if c is RigidBody3D and str(c.get("item_id")) == "meat_raw":
+					meat_after += int(c.get("amount"))
+			check("caça abatida larga carne no chão", meat_after > meat_before,
+				"%d -> %d carne" % [meat_before, meat_after])
+			it.focus = {}
+		Game.hour = 1.0
+		Game.phase = Game.current_phase()
+	check("a carne tem cadeia até ao guisado (cru -> assado -> guisado)",
+		str(Db.recipe("meat_cooked").get("station", "")) == "campfire"
+		and Db.recipe("stew").get("needs", {}).has("meat_cooked"))
+
+	# ── menu de craft: o que ainda falta desbloquear tem de estar visível ─
+	var locked_none: Array = Db.locked_recipes([])
+	var locked_bench: Array = Db.locked_recipes(["workbench"])
+	var locked_stations_known := true
+	for r in locked_none:
+		if not (str(r.get("station", "")) in main.structures.STATION_IDS):
+			locked_stations_known = false
+	check("o menu sabe listar as receitas que faltam desbloquear",
+		locked_none.size() > locked_bench.size() and not locked_none.is_empty()
+		and locked_stations_known,
+		"sem estação=%d, com bancada=%d" % [locked_none.size(), locked_bench.size()])
+
+	# ── dados: nenhuma receita pode apontar para o vazio ──────────────────
+	var bad_recipes: Array = []
+	for r in Db.RECIPES:
+		var rid := str(r["id"])
+		if not Db.ITEMS.has(str(r["result"])):
+			bad_recipes.append(rid + ":result")
+		var station := str(r.get("station", ""))
+		if station != "" and not (station in main.structures.STATION_IDS):
+			bad_recipes.append(rid + ":station=" + station)
+		for k in r.get("needs", {}):
+			if not Db.ITEMS.has(str(k)):
+				bad_recipes.append(rid + ":" + str(k))
+	check("todas as receitas falam de itens e estações que existem",
+		bad_recipes.is_empty(), ", ".join(bad_recipes))
+	var bad_tools: Array = []
+	for hkey in Db.HARVEST:
+		var spec: Dictionary = Db.HARVEST[hkey]
+		var h_need := str(spec.get("needs", ""))
+		if h_need != "" and not Db.ITEMS.has(h_need):
+			bad_tools.append(str(hkey) + ":needs=" + h_need)
+		for y in spec.get("yields", {}):
+			if not Db.ITEMS.has(str(y)):
+				bad_tools.append(str(hkey) + ":yield=" + str(y))
+	check("todos os nós de colheita dão itens que existem", bad_tools.is_empty(),
+		", ".join(bad_tools))
+	var stations_ok := true
+	for r in Db.RECIPES:
+		var st := str(r.get("station", ""))
+		if st != "" and not main.world.species.structures.has(st):
+			stations_ok = false
+	check("cada estação de craft tem uma estrutura colocável", stations_ok)
+
+	# ── água: vadear vs nadar (o rio não pode prender o jogador) ──────────
+	var shallow := _water_spot(main.player.global_position, 60.0, 0.5, 1.1)
+	var deep := _water_spot(main.player.global_position, 60.0, 2.0, 999.0)
+	var water_home_pos: Vector3 = main.player.global_position
+	# cotas da água funda (usadas também pelo teste dos itens largados)
+	var deep_surface: float = 0.0
+	var sea_bed: float = 0.0
+	if shallow == Vector3.INF:
+		maybe_skip("rio raso atravessa-se a pé (não fica preso a nadar)",
+			"não há água rasa a menos de 240 m do ponto de partida")
+	else:
+		main.player.global_position = shallow
+		main.player.call("_swim_check")
+		check("rio raso atravessa-se a pé (não fica preso a nadar)",
+			not bool(main.player.swimming) and bool(main.player.wading),
+			"y=%.2f" % shallow.y)
+		main.player.global_position = water_home_pos
+	if deep == Vector3.INF:
+		maybe_skip("água funda põe o jogador a nadar",
+			"não há água funda a menos de 240 m do ponto de partida")
+	else:
+		deep_surface = float(main.world.terrain.water_surface_height(deep.x, deep.z))
+		sea_bed = float(main.world.terrain.height(deep.x, deep.z))
+		main.player.global_position = deep
+		main.player.call("_swim_check")
+		check("água funda põe o jogador a nadar", bool(main.player.swimming),
+			"profundidade=%.2f m" % (deep_surface - sea_bed))
+		# 1) com a cabeça dentro de água, o corpo sobe
+		main.player.global_position = Vector3(deep.x, deep_surface - 2.6, deep.z)
+		main.player.call("_swim_check")
+		main.player.velocity = Vector3.ZERO
+		for i in 6:
+			main.player.call("_move_swim", 0.1, Vector3.ZERO)
+		check("submerso, o corpo sobe sozinho (não se afoga parado)",
+			float(main.player.velocity.y) > 0.0,
+			"velocidade vertical=%.2f" % float(main.player.velocity.y))
+		# 2) com a cabeça fora, fica neutro: nem afunda nem salta
+		main.player.global_position = Vector3(deep.x, deep_surface - 1.62, deep.z)
+		main.player.call("_swim_check")
+		main.player.velocity = Vector3.ZERO
+		for i in 24:
+			main.player.call("_move_swim", 0.1, Vector3.ZERO)
+		check("na tona fica neutro (nem afunda nem dispara)",
+			absf(float(main.player.velocity.y)) < 0.4,
+			"velocidade vertical=%.2f" % float(main.player.velocity.y))
+		main.player.velocity = Vector3.ZERO
+		main.player.global_position = water_home_pos
+		main.player.call("_swim_check")
+		# a criatura nada em vez de se afundar até ao leito
+		Game.hour = 1.0
+		Game.phase = Game.current_phase()
+		var beast := Creature.new()
+		beast.world = main.world
+		beast.target = main.player
+		main.world.add_child(beast)
+		beast.global_position = Vector3(deep.x, sea_bed + 0.4, deep.z)
+		var bottom := beast.global_position.y
+		await _frames(45)
+		var rise := beast.global_position.y - bottom
+		check("a criatura nada até à superfície em vez de se afundar",
+			rise > 0.8 and beast.global_position.y > deep_surface - 2.6
+			and not beast.is_queued_for_deletion(),
+			"subiu %.2f m (fundo %.2f, tona %.2f, agora %.2f)"
+			% [rise, sea_bed, deep_surface, beast.global_position.y])
+		beast.queue_free()
+		await _frames(2)
+
+	# ── loot no chão: modelo próprio, íman e flutuação ───────────────────
+	var drop_script: Script = load("res://scripts/world/dropped_item.gd")
+	var loot_shapes := {}
+	for lid in ["wood", "pickaxe", "fish_cooked", "workbench", "torch", "stone"]:
+		var probe: Node = drop_script.new()
+		probe.set("item_id", lid)
+		var probe_mesh: ArrayMesh = probe.call("_item_mesh")
+		# assinatura = vértices + caixa: só os vértices não chega (duas malhas
+		# diferentes podem ter o mesmo número)
+		var box: Vector3 = probe_mesh.get_aabb().size if probe_mesh != null else Vector3.ZERO
+		loot_shapes[lid] = "%d|%.2f,%.2f,%.2f" % [_mesh_vertex_count(probe_mesh),
+			box.x, box.y, box.z]
+		probe.free()
+	var shapes_distinct: bool = loot_shapes.values().size() == loot_shapes.size()
+	var shapes_filled: bool = true
+	for lid in loot_shapes:
+		if str(loot_shapes[lid]).begins_with("0|"):
+			shapes_filled = false
+	check("cada família de item tem o seu próprio modelo no chão",
+		shapes_distinct and shapes_filled, str(loot_shapes))
+
+	var loot: RigidBody3D = drop_script.new()
+	loot.set("item_id", "stone")
+	loot.set("amount", 2)
+	loot.set("inv", inv)
+	loot.set("player_ref", main.player)
+	main.world.add_child(loot)
+	var loot_start: Vector3 = main.player.global_position + Vector3(2.0, 0.6, 0.0)
+	loot.global_position = loot_start
+	var loot_dist_before: float = loot.global_position.distance_to(main.player.global_position)
+	for i in 50:
+		if not is_instance_valid(loot):
+			break
+		loot.call("_physics_process", 0.05)
+	var magnet_ok: bool = not is_instance_valid(loot) \
+		or loot.global_position.distance_to(main.player.global_position) < loot_dist_before - 0.5
+	check("o item no chão vem ter com o jogador (íman)", magnet_ok,
+		"distância %.2f -> %.2f" % [loot_dist_before,
+			-1.0 if not is_instance_valid(loot) else loot.global_position.distance_to(main.player.global_position)])
+	if is_instance_valid(loot):
+		loot.queue_free()
+	if deep != Vector3.INF:
+		var floater: RigidBody3D = drop_script.new()
+		floater.set("item_id", "wood")
+		floater.set("amount", 1)
+		floater.set("inv", inv)
+		floater.set("player_ref", null)
+		main.world.add_child(floater)
+		floater.call("_settle")
+		var float_y: float = sea_bed + 0.3
+		floater.global_position = Vector3(deep.x, float_y, deep.z)
+		for i in 40:
+			floater.call("_physics_process", 0.05)
+		check("item largado na água sobe à tona (não se perde no fundo)",
+			floater.global_position.y > float_y + 0.5,
+			"%.2f -> %.2f (tona %.2f)" % [float_y, floater.global_position.y, deep_surface])
+		floater.queue_free()
+
+	# ── ícones: item novo não pode cair no desenho genérico ───────────────
+	# (o `_` do ItemIcon é um círculo cinzento com a inicial: é o que o jogador
+	#  via nas ferramentas novas, ao lado de ícones desenhados)
+	var icon_art := str(FileAccess.get_file_as_string("res://scripts/ui/item_icon.gd"))
+	if icon_art.is_empty():
+		maybe_skip("os ícones das ferramentas novas estão desenhados",
+			"scripts compilados (build exportada)")
+	else:
+		var generic_icons: Array = []
+		for id in ["wood_axe", "wood_pickaxe", "workbench", "axe", "pickaxe", "campfire"]:
+			if not ('"%s"' % id in icon_art):
+				generic_icons.append(id)
+		check("os ícones das ferramentas novas estão desenhados",
+			generic_icons.is_empty(), ", ".join(generic_icons))
+
 	# ── relatório ─────────────────────────────────────────────────────────
 	for l in lines:
 		print(l)
 	print("──────────────────────────────────────────────────")
-	print("RESULTADO: %d ok, %d falhas" % [passed, failed])
+	print("RESULTADO: %d ok, %d falhas, %d saltadas" % [passed, failed, skipped])
 	print("SELFTEST_%s" % ["PASS" if failed == 0 else "FAIL"])
 	# escreve também para um ficheiro para o CI/agentes lerem
 	var f := FileAccess.open("user://selftest.txt", FileAccess.WRITE)
 	if f:
-		f.store_string("%d ok, %d falhas\n%s\n" % [passed, failed, "\n".join(lines)])
+		f.store_string("%d ok, %d falhas, %d saltadas\n%s\n"
+			% [passed, failed, skipped, "\n".join(lines)])
 		f.close()
 	get_tree().quit(0 if failed == 0 else 1)
 
@@ -710,6 +1126,25 @@ func _action_has_mouse(action: String) -> bool:
 		if ev is InputEventMouseButton:
 			return (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT
 	return false
+
+
+## Um ponto de água com a profundidade pedida (raio curto: o mundo é grande e
+## procurar longe torna o teste lento).
+func _water_spot(from: Vector3, dist: float, min_depth: float, max_depth: float) -> Vector3:
+	var ter: Terrain = main.world.terrain
+	for step in 12:
+		var radius := dist * 0.35 * pow(1.25, float(step))
+		for i in 90:
+			var a := float(i) / 120.0 * TAU
+			var x: float = from.x + cos(a) * radius
+			var z: float = from.z + sin(a) * radius
+			if not ter.is_water(x, z):
+				continue
+			var surface := ter.water_surface_height(x, z)
+			var depth := surface - ter.height(x, z)
+			if depth >= min_depth and depth <= max_depth:
+				return Vector3(x, surface - min_depth * 0.5, z)
+	return Vector3.INF
 
 
 ## Um ponto seco e plano a `dist` de `from` — para isolar um teste do resto do mundo.
