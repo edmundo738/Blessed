@@ -256,13 +256,13 @@ func _build_rocks() -> void:
 			MeshKit.rock(rng, lerpf(0.55, 1.15, float(i) / 2.0))
 		var s := Species.new()
 		s.id = "rock_%d" % i
-		# NÃO escrever isto como ternário: `s.lods = A if cond else [m, m, m]` deixa
-		# o array literal pelo caminho na conversão para `Array[ArrayMesh]` e o
-		# resultado é um array VAZIO (medido: lods=0). Espécie sem LODs = MultiMesh
-		# com `mesh = null`: as três variedades de rocha desapareciam do mundo e a
-		# instância morta rebentava o motor de quem lhe lesse a malha
-		# (`RuntimeError: null function or function signature mismatch`).
 		if blender_rocks.is_empty():
+			# ATENÇÃO: `s.lods = A if cond else [m, m, m]` NÃO funciona — o array
+			# literal não sobrevive à conversão para Array[ArrayMesh] dentro do
+			# ternário e o resultado saía VAZIO (medido nesta build: tamanho 0).
+			# Espécie sem LODs = MultiMesh com mesh=null: as rochas não apareciam
+			# no mundo e a instância morta rebentava a build web a quem lhe lesse
+			# a malha. Com o array tipado construído à parte fica correto.
 			var fallback: Array[ArrayMesh] = [m, m, m]
 			s.lods = fallback
 		else:

@@ -28,12 +28,45 @@ jobs:
       - name: Regenerar cache de classes
         run: python3 tools/gen_class_cache.py .
 
+      # Num clone limpo `.godot/` não existe (está no .gitignore): sem ele não há
+      # `.ctex`/`.scn` e metade dos recursos não abre — o self-test falhava em
+      # TODAS as corridas por isto, não por código. `--import` faz a passagem do
+      # importador e sai; depois o self-test corre contra recursos a sério.
+      - name: Importar recursos (cache do editor)
+        run: |
+          godot --headless --path . --import
+
       # O self-test joga a sério: gera o mundo, corta, constrói, passa uma noite,
       # fala com um NPC e imprime SELFTEST_PASS ou SELFTEST_FAIL.
       - name: Self-test
         run: |
           godot --headless --path . --quit-after 3000 -- selftest 2>&1 | tee /tmp/selftest.log
           grep -q "SELFTEST_PASS" /tmp/selftest.log
+
+      # Sem isto, "o CI falhou" obrigava a abrir a página do GitHub: o log da
+      # corrida vive em blob storage que agentes/ferramentas não alcançam. A
+      # última parte do log passa a ficar no PR (ou numa issue do ramo).
+      - name: Publicar o log da falha
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          TAIL=$(tail -c 5000 /tmp/selftest.log 2>/dev/null || echo "sem log")
+          BODY=$(printf 'CI `%s` falhou em `%s`.\n\n```\n%s\n```\n' \
+            "${{ github.workflow }}" "${{ github.ref_name }}" "$TAIL")
+          if [ -n "${{ github.event.pull_request.number }}" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/${{ github.event.pull_request.number }}/comments" \
+              -f body="$BODY" --jq '.html_url'
+          else
+            N=$(gh api "repos/$GITHUB_REPOSITORY/pulls?state=open&head=$GITHUB_REPOSITORY:$GITHUB_REF_NAME" \
+              --jq '.[0].number // empty' || true)
+            if [ -n "$N" ]; then
+              gh api "repos/$GITHUB_REPOSITORY/issues/$N/comments" -f body="$BODY" --jq '.html_url'
+            else
+              echo "$BODY" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
 
       - uses: actions/upload-artifact@v4
         if: always()

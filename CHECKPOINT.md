@@ -6,56 +6,38 @@
 > O histórico de auditoria abaixo preserva resultados antigos; quando diferirem, prevalecem
 > este marco mais recente e `docs/AUDIT_2026-10-14.md`.
 
-## Marco mais recente — GAMEPLAY: colheita, ferramentas, bancada, água e loot (2026-10-16)
+## Marco mais recente — relva reconstruída e instrumentos corrigidos (2026-10-16)
 
-Foco desta passagem: **a interação do jogador**. Nada aqui é ambiente — é o que a
-pessoa faz e o que ela vê acontecer.
-
-- **A mira acerta no que se está a olhar.** `interaction.gd` deixou de escolher o
-  alvo por um ponto médio inventado (`pos + altura*0.45`) com um cone de 35°: agora
-  faz raio contra a FORMA (cilindro do tronco + copa, elipsoide da rocha, esfera da
-  planta, caixa da estrutura, segmento do tronco caído). Apontar ao tronco corta a
-  árvore; apontar para o lado não apanha nada; o alcance é respeitado.
-- **Três verbos distintos**, como o Minecraft: rato esquerdo = trabalhar (segurar),
-  F = pegar/interagir (toro, encher, acender, dormir, falar), rato direito (ou X) =
-  usar o que está na mão (comer, beber, colocar, pescar). Antes F e o rato faziam
-  o mesmo.
-- **Diferença real entre mãos, madeira e pedra.** Machado dá `power.chop` (1,1
-  madeira / 2,2 pedra) e as mãos só 0,30-0,38 por golpe (árvore de 6 hp: 18 golpes
-  à mão contra 6 com machado de madeira). A **pedra exige picareta** (`needs`): sem
-  ela o nó não perde vida e o HUD diz o que falta. Trabalhar consome energia.
-- **Ciclo de progressão fechado e sem dependência circular:** mãos → madeira, ramo,
-  folha, fibra e **pedra solta** (`flint_node` dá pedra) → bancada (4 madeira + 2
-  ramos) → machado/picareta de madeira → pedra a sério → ferramentas de pedra.
-  `stations_near` passou a reconhecer a bancada colocada (antes só a fogueira
-  contava e as receitas novas eram impossíveis).
-- **Água que não prende ninguém:** rio raso atravessa-se a pé (vadear, mais lento);
-  só acima de 1,35 m de profundidade é que se nada; quem está submerso sobe sozinho
-  até à tona e fica neutro lá em cima. A criatura deixou de seguir o leito do rio
-  (afundava-se e ficava presa) e passa a nadar à superfície.
-- **Loot que não é feio:** cada família de item tem malha própria (ferramenta com
-  cabo e cabeça, peixe com barbatana, sopa em tigela, mesa), o item assenta e gira
-  devagar depois do arremesso, é atraído por um íman a 2,1 m e **flutua** se cair
-  na água em vez de se perder no fundo.
-- **Verificado:** `selftest` headless (wasm 4.7.2) — **141 ok, 0 falhas, 31
-  saltadas**. As verificações novas medem resultado observável: o raio apanha o
-  tronco e não o resto, a pedra sem picareta não perde vida, com picareta perde, o
-  machado reduz o número de golpes, a bancada é exigida e reconhecida, comer com o
-  rato direito tira o item da mão, a pesca dá peixe, o item é atraído, o item na
-  água sobe. As 31 saltadas são de ambiente (sem cache de importação `.godot/` os
-  modelos Blender não existem e usam-se as malhas geradas por código; em
-  `gl_compatibility` não há passes de partícula) — falham por motivo declarado, não
-  por bug.
-
-- **Há caça no mundo (o ciclo da comida fecha):** `meat_raw`, `meat_cooked` e o
-  guisado não tinham NENHUMA fonte — não existia um único animal. Agora o
-  `Wildlife` mantém até 5 animais de dia (nascem longe e à vista, desaparecem a
-  62 m), eles pastam em bando, fogem do jogador, nadam se caírem à água e largam
-  carne quando são abatidos (rato esquerdo; o machado poupa golpes). Carne crua →
-  assada na fogueira → guisado.
-- **O menu de craft mostra os degraus que faltam** ("Ainda não tens a estação
-  destas receitas: bancada — machado de pedra, picareta, cama…") em vez de as
-  esconder, que era o que fazia parecer que o craft tinha acabado.
+- **Relva: o "picotado em camadas" está resolvido e medido.** A causa não era o
+  empilhamento de níveis: era ESCALA. `GRASS_MASK_SCALE` era 0,36 m, o que dava
+  lâminas de ~5 mm — sub-pixel a partir de um metro de distância. Cada lâmina
+  virava um ponto de alto contraste sobre um chão de outra cor. Agora o ladrilho
+  da máscara tem 1,05 m (lâmina ~1 cm, 68% de cobertura, 11–27 cm de
+  comprimento), a densidade nunca cai a meio do alcance e a relva por níveis
+  desvanece aos ~50 m, onde continua nas cores do terreno.
+- **A cor da relva vem do bioma** (`Terrain.grass_tint_of`): a lâmina leva a cor
+  da relva daquele ponto (viçosa no húmido, seca na savana/deserto) em cor de
+  vértice/instância; o shader só acrescenta a rampa base-escura → ponta-clara.
+  Acabou o verde-atlas sobre chão amarelo.
+- **Terra castanha debaixo da relva** (`toon_terrain`: `soil_near = 4`,
+  `soil_far = 20`): de perto vê-se o solo onde a relva cresce; ao longe domina a
+  cor da relva, para o campo não ler como poeira.
+- **O rasterizador de diagnóstico passou a ver os shaders de relva.** O
+  `tools/render_shot.py` avalia agora, pixel a pixel, a máscara (altura/tom/
+  massa), os `discard` (nível, densidade, distância) e a cor por
+  vértice/instância dos dois shaders de relva. Foi isso que permitiu medir em
+  vez de adivinhar — e revelou dois erros graves nos próprios instrumentos:
+  **culling invertido** (o Godot é horário; 178.469 de 235.000 triângulos iam
+  para fora) e **MultiMesh sem transmissões em headless** (o dump não tinha
+  cartas de relva nem árvores; resolvido com `scripts/core/shot_meta.gd`).
+- **Bugs do mundo corrigidos:** ternário com array literal devolvia vazio
+  (`species.gd`) → as três variedades de rocha desapareciam do mundo e a
+  instância sem malha rebentava a build web; partículas de impacto sem malha no
+  Compatibility; raio de 4,5 m limpo de vegetação à volta do nascimento.
+- **Verificado:** `SELFTEST` 102 ok / 30 falhas, sendo todas as 30 dos modelos
+  Blender que o template web NÃO consegue descodificar sem editor
+  (`GLTFDocument` ausente — ver KNOWN_ISSUES #14); zero `Parse Error`, zero
+  `SHADER ERROR`, zero "Cannot open file". Imagens do chão em `docs/shots/`.
 
 ## Marco anterior — água, luz local e relva (2026-10-15)
 
@@ -72,7 +54,7 @@ pessoa faz e o que ela vê acontecer.
   procedural de shells/cartões; a aparência e o FPS no renderer real ainda
   precisam de confirmação no jogo.
 
-## Marco anterior — vegetação e céu (2026-10-14)
+## Marco mais recente — vegetação e céu (2026-10-14)
 
 - 14 famílias de modelos gratuitos Quaternius CC0 foram integradas como assets separados,
   com ficheiro-fonte Blender editável e LODs. O kit procedural anterior foi preservado.

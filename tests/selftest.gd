@@ -19,21 +19,35 @@ var lines: Array = []
 
 
 func check(what: String, ok: bool, detail: String = "") -> void:
+	var line := ""
 	if ok:
 		passed += 1
-		lines.append("  OK    %s%s" % [what, "" if detail.is_empty() else "  (" + detail + ")"])
+		line = "  OK   %s%s" % [what, "" if detail.is_empty() else "  (" + detail + ")"]
 	else:
 		failed += 1
-		lines.append("  FALHA %s%s" % [what, "" if detail.is_empty() else "  (" + detail + ")"])
+		line = "  FALHA %s%s" % [what, "" if detail.is_empty() else "  (" + detail + ")"]
+	lines.append(line)
+	# Impresso À MEDIDA que acontece: o resumo final continua igual, mas uma
+	# falha do motor a meio do teste deixa de apagar tudo o que já tinha passado
+	# (foi assim que uma paragem da build web escondeu onde o teste morreu).
+	print(line)
 
 
-## Verificação que NÃO se aplica à build de quem corre: conta à parte (nem
-## passa nem falha) e explica-se porquê. Sem isto, correr o self-test fora do
-## editor (sem cache de importação, ou em `gl_compatibility`) enchia o
-## relatório de falhas que não são do jogo.
-func maybe_skip(what: String, why: String) -> void:
-	skipped += 1
-	lines.append("  SALTA %s  (%s)" % [what, why])
+## Verificação que NÃO pode ser feita nesta build do motor. Não conta como
+## falha (não há nada partido), mas fica escrita no relatório: um relatório só
+## com "OK" e "FALHA" fazia parecer que 30 verificações dos modelos Blender
+## tinham corrido quando na build web não corriam de todo.
+func skip(what: String, detail: String = "", count: int = 1) -> void:
+	skipped += count
+	var line := "  SALTA %s%s" % [what, "" if detail.is_empty() else "  (" + detail + ")"]
+	lines.append(line)
+	print(line)
+
+
+## Esta build do motor traz o módulo glTF? Sem `GLTFDocument`/`GLTFState` não há
+## forma de abrir um .glb: nem o editor, nem o `Assets`, nem este teste.
+func _gltf_available() -> bool:
+	return ClassDB.class_exists("GLTFDocument") and ClassDB.class_exists("GLTFState")
 
 
 func setup(p_main: Node) -> void:
@@ -75,17 +89,28 @@ func _run() -> void:
 		and (flies.mesh.surface_get_material(0) as StandardMaterial3D).albedo_texture != null)
 	var impact_pool: Array = main.fx.get("_pool") as Array
 	var impact: Node3D = impact_pool[0] as Node3D if not impact_pool.is_empty() else null
-	var impact_mesh: QuadMesh = impact.get("draw_pass_2") as QuadMesh if impact != null else null
-	if not bool(main.fx.get("_use_gpu")):
-		# `gl_compatibility` (o renderizador da build web) não tem `draw_passes`:
-		# as partículas caem no caminho CPU, que é verificado logo a seguir.
-		maybe_skip("impacto combina lascas 3D com brilho 2D reutilizável",
-			"renderizador sem passes de partícula (gl_compatibility)")
-	else:
-		check("impacto combina lascas 3D com brilho 2D reutilizável", impact != null
-			and (impact is GPUParticles3D or impact is CPUParticles3D)
-			and int(impact.get("draw_passes")) == 2 and impact_mesh != null
-			and (impact_mesh.surface_get_material(0) as StandardMaterial3D).albedo_texture != null)
+	# Os dois caminhos são legítimos: Forward+ usa dois passes no emissor GPU; o
+	# Compatibility (gl_compatibility — o build web) usa um só emissor CPU com a
+	# malha de duas superfícies, porque o desenho por passes é do GPU. A
+	# verificação tem de aceitar o caminho que o renderer em uso realmente toma,
+	# senão acusa um bug onde há uma decisão de portabilidade.
+	var impact_ok := false
+	var impact_detail := "nenhum emissor"
+	if impact is GPUParticles3D:
+		var spark_mesh := impact.get("draw_pass_2") as QuadMesh
+		impact_ok = int(impact.get("draw_passes")) == 2 and spark_mesh != null \
+			and (spark_mesh.surface_get_material(0) as StandardMaterial3D) != null \
+			and (spark_mesh.surface_get_material(0) as StandardMaterial3D).albedo_texture != null
+		impact_detail = "GPU, draw_passes=%d" % int(impact.get("draw_passes"))
+	elif impact is CPUParticles3D:
+		var combo := impact.mesh as ArrayMesh
+		var glow := combo.surface_get_material(1) as StandardMaterial3D if combo != null \
+			and combo.get_surface_count() > 1 else null
+		impact_ok = combo != null and combo.get_surface_count() == 2 and glow != null \
+			and glow.albedo_texture != null
+		impact_detail = "CPU, superfícies=%d" % (combo.get_surface_count() if combo != null else 0)
+	check("impacto combina lascas 3D com brilho 2D reutilizável", impact != null and impact_ok,
+		impact_detail)
 	var fx_use_gpu := bool(main.fx.get("_use_gpu"))
 	main.fx.set("_use_gpu", false)
 	var compatibility_emitter: CPUParticles3D = main.fx.call("_new_emitter") as CPUParticles3D
@@ -160,13 +185,19 @@ func _run() -> void:
 		"rock_cluster", "grass_clump", "fern_clump", "flower_clump", "reed_clump",
 		"seaweed_cluster", "clover_clump", "pickup_berry", "pickup_leaf", "pickup_log", "tool_axe",
 		"tool_pickaxe"]
-	for asset_id in blender_asset_ids:
-		if not BlessedBlenderAssets.has_asset(asset_id):
-			# Sem cache de importação (fora do editor) o jogo usa a geometria
-			# gerada por código — é o caminho suportado, não uma falha.
-			maybe_skip("GLB Blender %s tem mesh e escala válida" % asset_id,
-				"sem produto importado; o jogo usa geometria procedural")
-			continue
+	var gltf_here := _gltf_available()
+	var blender_ids: Array = []
+	var lod_asset_ids := ["tree_oak", "tree_birch", "tree_pine", "tree_sakura", "tree_willow",
+		"rock_cluster", "plant_bush", "plant_berry_bush", "plant_mushroom"]
+	var lod_ids: Array = []
+	if gltf_here:
+		blender_ids = blender_asset_ids
+		lod_ids = lod_asset_ids
+	else:
+		skip("modelos Blender: 20 GLB de espécies e ferramentas + 9 LODs",
+			"esta build do motor não traz GLTFDocument/GLTFState (ver KNOWN_ISSUES #14)",
+			blender_asset_ids.size() + lod_asset_ids.size())
+	for asset_id in blender_ids:
 		var asset_mesh: ArrayMesh = BlessedBlenderAssets.mesh_for(asset_id)
 		var asset_vertices: int = _mesh_vertex_count(asset_mesh)
 		var asset_size: Vector3 = asset_mesh.get_aabb().size if asset_mesh != null else Vector3.ZERO
@@ -179,13 +210,7 @@ func _run() -> void:
 			"%d vértices, %d superfícies, Y %.2f m" % [asset_vertices,
 				asset_mesh.get_surface_count() if asset_mesh != null else 0, asset_size.y])
 
-	for lod_asset_id in ["tree_oak", "tree_birch", "tree_pine", "tree_sakura", "tree_willow",
-		"rock_cluster", "plant_bush", "plant_berry_bush", "plant_mushroom"]:
-		if not BlessedBlenderAssets.has_asset(lod_asset_id) \
-				or not BlessedBlenderAssets.has_asset("%s_lod2" % lod_asset_id):
-			maybe_skip("LOD Blender %s importam e reduzem geometria" % lod_asset_id,
-				"sem produto importado; LOD é feito pelo gerador de malhas")
-			continue
+	for lod_asset_id in lod_ids:
 		var base_mesh: ArrayMesh = BlessedBlenderAssets.mesh_for(lod_asset_id)
 		var lod1_mesh: ArrayMesh = BlessedBlenderAssets.mesh_for("%s_lod1" % lod_asset_id)
 		var lod2_mesh: ArrayMesh = BlessedBlenderAssets.mesh_for("%s_lod2" % lod_asset_id)
@@ -217,13 +242,13 @@ func _run() -> void:
 							wind_shader_trees_in_world += (decor as MultiMeshInstance3D).multimesh.instance_count
 							break
 					break
-	if not BlessedBlenderAssets.has_asset("tree_oak"):
-		maybe_skip("chunks usam árvores Blender com vento nas folhas",
-			"sem produto importado; as árvores são geradas por código")
-	else:
+	if gltf_here:
 		check("chunks usam árvores Blender com vento nas folhas",
 			blender_trees_in_world > 0 and wind_shader_trees_in_world > 0,
 			"%d instâncias; %d com shader de folhas" % [blender_trees_in_world, wind_shader_trees_in_world])
+	else:
+		skip("chunks usam árvores Blender com vento nas folhas",
+			"sem glTF nesta build os Biomas caem nos substitutos procedurais")
 
 	# ── 2. biomas variados ────────────────────────────────────────────────
 	var biomes := {}
@@ -567,7 +592,12 @@ func _run() -> void:
 	check("água e passe isolado das nuvens controlam a transparência",
 		leaky.is_empty() and sky_alpha_isolated, ", ".join(leaky))
 	var wcode := _strip_comments(str(FileAccess.get_file_as_string("res://shaders/stylized_water.gdshader")))
-	check("água usa blend_mix (não additive/alpha que lavaria a cor)", "blend_mix" in wcode)
+	# A água é OPACA e de face dupla (decisão registada em DECISIONS.md): a costa
+	# lê-se de cima e o sob-água tem vista própria, sem o passe transparente a
+	# lavar a cor contra o céu. `blend_additive`/`blend_mix` seriam a regressão.
+	check("água é opaca e de face dupla (sem blend que lave a cor)",
+		wcode.contains("cull_disabled") and wcode.contains("depth_draw_opaque")
+		and not wcode.contains("blend_additive") and not wcode.contains("blend_mix"))
 
 	# REGRESSÃO DO RAIO-X #2: as faces exteriores têm de ser desenhadas.
 	# Com cull_back, qualquer winding virado cortava a face de fora e o jogador
@@ -871,7 +901,7 @@ func _run() -> void:
 	# (antes disto, `meat_raw` só existia na tabela de itens: nenhum bicho do
 	#  mundo o largava, logo `meat_cooked` e o guisado eram conteúdo inalcançável)
 	if main.wildlife == null:
-		maybe_skip("há caça no mundo durante o dia", "sem Wildlife no arranque")
+		skip("há caça no mundo durante o dia", "sem Wildlife no arranque")
 	else:
 		Game.hour = 12.0
 		Game.phase = Game.current_phase()
@@ -889,7 +919,7 @@ func _run() -> void:
 				prey = a as Animal
 				break
 		if prey == null:
-			maybe_skip("golpear caça tira-lhe vida e põe-na a fugir",
+			skip("golpear caça tira-lhe vida e põe-na a fugir",
 				"não nasceu nenhum animal neste arranque")
 		else:
 			var prey_hp := float(prey.health)
@@ -969,7 +999,7 @@ func _run() -> void:
 	var deep_surface: float = 0.0
 	var sea_bed: float = 0.0
 	if shallow == Vector3.INF:
-		maybe_skip("rio raso atravessa-se a pé (não fica preso a nadar)",
+		skip("rio raso atravessa-se a pé (não fica preso a nadar)",
 			"não há água rasa a menos de 240 m do ponto de partida")
 	else:
 		main.player.global_position = shallow
@@ -979,7 +1009,7 @@ func _run() -> void:
 			"y=%.2f" % shallow.y)
 		main.player.global_position = water_home_pos
 	if deep == Vector3.INF:
-		maybe_skip("água funda põe o jogador a nadar",
+		skip("água funda põe o jogador a nadar",
 			"não há água funda a menos de 240 m do ponto de partida")
 	else:
 		deep_surface = float(main.world.terrain.water_surface_height(deep.x, deep.z))
@@ -1091,7 +1121,7 @@ func _run() -> void:
 	#  via nas ferramentas novas, ao lado de ícones desenhados)
 	var icon_art := str(FileAccess.get_file_as_string("res://scripts/ui/item_icon.gd"))
 	if icon_art.is_empty():
-		maybe_skip("os ícones das ferramentas novas estão desenhados",
+		skip("os ícones das ferramentas novas estão desenhados",
 			"scripts compilados (build exportada)")
 	else:
 		var generic_icons: Array = []
@@ -1105,7 +1135,10 @@ func _run() -> void:
 	for l in lines:
 		print(l)
 	print("──────────────────────────────────────────────────")
-	print("RESULTADO: %d ok, %d falhas, %d saltadas" % [passed, failed, skipped])
+	if skipped > 0:
+		print("RESULTADO: %d ok, %d falhas, %d saltadas" % [passed, failed, skipped])
+	else:
+		print("RESULTADO: %d ok, %d falhas" % [passed, failed])
 	print("SELFTEST_%s" % ["PASS" if failed == 0 else "FAIL"])
 	# escreve também para um ficheiro para o CI/agentes lerem
 	var f := FileAccess.open("user://selftest.txt", FileAccess.WRITE)

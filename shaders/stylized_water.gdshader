@@ -1,8 +1,7 @@
 shader_type spatial;
 // Superfície de água opaca e dupla face: costa legível de cima e reflexo
 // azul estilizado quando a câmara fica submersa.
-render_mode cull_disabled, depth_draw_opaque, diffuse_toon,
-	blend_mix;  // mix explícito: additive/alpha lavariam a cor da água
+render_mode cull_disabled, depth_draw_opaque, diffuse_toon;
 
 uniform vec4 deep_color : source_color = vec4(0.08, 0.31, 0.49, 1.0);
 uniform vec4 shallow_color : source_color = vec4(0.35, 0.78, 0.82, 1.0);

@@ -25,84 +25,56 @@ fechado, o teste que o apanha entra no `tests/selftest.gd` para não voltar.
    `body.global_transform` antes de o body entrar na árvore (=identidade).
    Correção: `body.position + off`.
 
-7. **Colheita apontava para o alvo errado** (`interaction.gd::_update_focus`).
-   O alvo era um ponto médio inventado a 45% da altura da árvore, aceite dentro
-   de um cone de 35°: apontar ao tronco não apanhava a árvore e o cone trazia o
-   arbusto mais próximo do centro do ecrã. Também não havia limite de alcance
-   na "ajuda" cónica.
-   Correção: raio contra a forma (cilindro do tronco + esfera da copa, elipsoide
-   da rocha, esfera da planta, caixa da estrutura, segmento do tronco caído) e
-   a ajuda cónica passou a respeitar o alcance.
-   _Teste:_ `apontar ao tronco apanha a árvore`, `apontar para o lado não apanha
-   a árvore`, `fora de alcance não há alvo`.
-8. **F e o rato esquerdo faziam a mesma coisa** → o jogador não sabia como
-   colher, e a tecla que devia "pegar" gastava o nó.
-   Correção: rato esquerdo trabalha (segurar), F pega/interage, rato direito
-   (ou X) usa o item da mão. Comer/beber saíram de dentro do menu.
-   _Teste:_ `comer com o rato direito funciona`, `F retira um toro e cria pickup
-   com física`.
-9. **Bancada colocável mas invisível para o craft** (`structures.gd::stations_near`
-   só conhecia a fogueira acesa) → as receitas novas eram impossíveis de fazer.
-   Correção: lista de estações (`workbench`, `campfire` aceso) e o `_do_craft`
-   volta a verificar a estação no momento de executar.
-   _Teste:_ `bancada colocada é reconhecida como estação`, `receita de bancada é
-   recusada longe de uma bancada`, `com bancada perto, o machado de madeira é feito`.
-10. **Ajuda cónica da mira ignorava o alcance** — dava alvo a 6,5 m com
-    `REACH` de 4,2 m. Correção: `from.distance_to(base) <= max_d`.
-    _Teste:_ `fora de alcance não há alvo`.
-11. **Jogador preso na água rasa** (`player.gd::_swim_check`): qualquer água com
-    mais de 0,35 m punha o modo natação, que tira o apoio do chão → não se saía
-    do rio a andar. E parado dentro de água, o corpo afundava sozinho.
-    Correção: vadear até 1,35 m de profundidade (`WADE_DEPTH`, mais lento em
-    água), flutuação que sobe quem está submerso e fica neutra na tona.
-    _Teste:_ `rio raso atravessa-se a pé`, `submerso, o corpo sobe sozinho`,
-    `na tona fica neutro`.
-12. **Criatura afundava-se na água** (`creature.gd`): seguia `ground_height`
-    (o leito do rio) com gravidade a acumular, ficava presa em baixo.
-    Correção: nada (`is_in_water` + profundidade > 1,2 m), zera a gravidade
-    enquanto nada e fica a `surface - 1,1`.
-    _Teste:_ `a criatura nada até à superfície em vez de se afundar`.
-13. **Loot: um cubo bege igual para tudo, sem íman e a afundar-se na água.**
-    Correção: malha por família de item (ferramenta, peixe, comida, estrutura),
-    íman a 2,1 m, espera de 0,35 s, assenta e gira devagar após 1,1 s, e flutua
-    se cair na água.
-    _Teste:_ `cada família de item tem o seu próprio modelo no chão`, `o item no
-    chão vem ter com o jogador (íman)`, `item largado na água sobe à tona`.
-14. **Self-test marcava como falha o que não se aplica à build** (sem cache de
-    importação `.godot/` não existem os produtos Blender; `gl_compatibility` não
-    tem `draw_passes`). Correção: `maybe_skip()` no `selftest.gd` — 31
-    verificações passam a "saltadas" com o motivo, em vez de falhas falsas.
-    _Teste:_ corre no próprio self-test (`RESULTADO: %d ok, %d falhas, %d saltadas`).
-
-15. **Receitas de carne sem fonte no mundo** — `meat_raw`/`meat_cooked`/guisado
-    existiam na tabela de itens e nenhum ser do mundo largava carne: conteúdo
-    inalcançável.
-    Correção: `scripts/entities/animal.gd` + `scripts/world/wildlife.gd` (caça
-    diurna: pasta, foge, nada, larga carne) e golpes com o rato esquerdo ligados
-    ao alvo novo `animal` na mira.
-    _Teste:_ `há caça no mundo durante o dia`, `golpear caça tira-lhe vida`, `a
-    caça foge quando é ferida`, `caça abatida larga carne no chão`, `a carne tem
-    cadeia até ao guisado`.
-16. **Menu de craft escondia as receitas de estações que não estavam ao lado** —
-    parecia que o craft tinha acabado antes das ferramentas de pedra.
-    Correção: `Db.locked_recipes()` + secção "ainda falta desbloquear" no menu.
-    _Teste:_ `o menu sabe listar as receitas que faltam desbloquear`.
-
 ## ABERTOS (não fatais)
-17. **~101 avisos `!is_inside_tree()` / `get_global_transform` no arranque.**
+7. **~101 avisos `!is_inside_tree()` / `get_global_transform` no arranque.**
    Não abortam nada (devolvem default) mas poluem o Output. Causa provável:
    algum nó a ler/escrever transform global durante a construção, antes de
    entrar na árvore. Próximo a perseguir.
-   _Nota (2026-10-16):_ os `ERROR: Cannot open file … .godot/imported/…` que
-   acompanhavam estes avisos desapareceram — `BlessedBlenderAssets.product_path`
-   passou a perguntar pelo PRODUTO importado antes de carregar. Arranque de 900
-   frames sem uma única linha `ERROR`/`SCRIPT ERROR`.
-18. **Rasterizador por software não reproduz os shaders procedurais da relva** —
-   as capturas de `docs/shots/` não mostram corretamente o recorte e o volume
-   de shells/cartões. A captura pode enumerar as instâncias, mas não comprova
-   o resultado visual desses shaders; é um limite da ferramenta de diagnóstico.
+8. ~~**Rasterizador por software não reproduz os shaders procedurais da relva.**~~
+   **RESOLVIDO.** `tools/render_shot.py` passou a avaliar, pixel a pixel, os
+   dois shaders de relva: amostra a máscara (altura/tom/massa), aplica o
+   `discard` (nível acima do fio, densidade, desvanecimento de distância) e
+   usa a cor por vértice/instância e a rampa base→ponta. O que se vê no PNG é
+   agora o que o shader decide. _Efeito imediato:_ provou que a relva estava a
+   ser desenhada em manchas de alto contraste (picotado) e mediu o resto.
+9. **Rasterizador cullava as faces ao contrário.** O Godot considera frontal a
+   winding HORÁRIA; o rasterizador testava a convenção do OpenGL puro e punha
+   fora as faces da frente do terreno e das árvores (178.469 de 235.000
+   triângulos). Todas as imagens de diagnóstico anteriores a esta correção
+   mostravam as costas dos objetos. _Teste:_ a auditoria (`--audit`) reportava
+   "winding != normal do vertice"; hoje são 4 de 235.000 (casos legítimos dos
+   shaders de face dupla).
+10. **Ternário com array literal devolvia VAZIO** (`species.gd`, `_build_rocks`):
+   `s.lods = A if cond else [m, m, m]` deixa o array literal pelo caminho na
+   conversão para `Array[ArrayMesh]` — o resultado era um array de tamanho 0.
+   Espécie sem LODs = MultiMesh com `mesh = null`: as três variedades de rocha
+   desapareciam do mundo e a instância morta rebentava a build web de quem lhe
+   lesse a malha (`RuntimeError: null function or function signature mismatch`).
+   _Correção:_ construir o array tipado à parte. _Teste:_ `chunks usam árvores
+   Blender com vento nas folhas` e `nós colhíveis espalhados` no self-test.
+11. **MultiMesh sem malha derrubava o self-test** (`chunk.gd`/`selftest.gd`):
+   além da correção acima, o chunk deixou de criar instâncias para espécies sem
+   geometria (com um aviso único por espécie) e o self-test saltou a malha nula.
+12. **Partículas de impacto sem malha no Compatibility** (`fx.gd`): o caminho
+   CPU usava `_cpu_combo_mesh` sem o construir quando `_ready` corria fora de
+   ordem — malha nula num nó de partículas aborta o motor. _Correção:_ construir
+   a malha combinada a pedido, em `_ensure_cpu_combo`.
+13. **Self-test imprimia o resumo só no fim** (`tests/selftest.gd`): uma
+   paragem do motor a meio apagava tudo o que já passara (foi assim que uma
+   falha da build web ficou sem indício de onde). Agora cada verificação sai
+   impressa quando acontece.
+
+14. **Build web sem o editor não descodifica glTF** (`scripts/core/assets.gd`):
+    o template web do motor NÃO traz `GLTFDocument`/`GLTFState`
+    (confirmado: `ClassDB.class_exists` = falso); `Assets` deteta, avisa com o
+    motivo e devolve nulo, caindo nas malhas geradas por código. Com a cache de
+    importação do editor (`.godot/imported/**.scn`) os modelos carregam pelo
+    caminho normal. _Consequência:_ um build web feito por `tools/build_web.py`
+    sem editor mostra árvores/rochas de código em vez dos modelos do artista.
+    _Teste:_ as verificações "GLB Blender ..." do self-test são exatamente este
+    aviso, e falham no sandbox por esse motivo (não é regressão de código).
 
 ## LIMITES DO SANDBOX (não corrigíveis aqui)
-19. **Sem GPU/browser** → não se valida o ecrã real; usa-se `tools/render_shot.py`.
-20. **Sem build Windows** → não há templates de export oficiais no sandbox.
+9. **Sem GPU/browser** → não se valida o ecrã real; usa-se `tools/render_shot.py`.
+10. **Sem build Windows** → não há templates de export oficiais no sandbox.
     `export_presets.cfg` já existe para o dono exportar localmente em 1 clique.
