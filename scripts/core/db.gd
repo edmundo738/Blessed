@@ -5,6 +5,11 @@ extends Node
 ## estruturas) + regras de combinação (receitas) . Tudo o que é "conteúdo"
 ## entra aqui; o código dos sistemas não conhece nomes de itens.
 
+## Receitas em vigor (data/recipes.json). Vazio = usa-se a lista em código.
+var recipes: Array = []
+## Nome de cada estação, como o menu o mostra ("Criação", "Bancada", "Fogueira").
+var station_labels: Dictionary = {}
+
 const ITEMS := {
 	# ── recursos ────────────────────────────────────────────────────────────
 	"wood":         {"kind": "resource", "stack": 40, "icon": "wood"},
@@ -27,23 +32,32 @@ const ITEMS := {
 	"stew":         {"kind": "food", "stack": 5, "icon": "stew",
 					 "food": 70, "drink": 25, "risk": 0.0},
 	# ── ferramentas / utilidades ────────────────────────────────────────────
-	# Duas famílias, três potências: madeira (apanha-se à mão), pedra (minera-se
-	# com picareta de madeira), e as mãos — que cortam devagar mas NÃO picam
-	# pedra. Sem isto não havia diferença nenhuma entre ter ferramenta ou não:
-	# era esse o buraco de progressão que o jogador sentia como "o craft não
-	# funciona".
-	"wood_axe":     {"kind": "tool", "stack": 1, "icon": "wood_axe",
-					 "power": {"chop": 1.1}, "tier": 1, "tool": "axe"},
-	"wood_pickaxe": {"kind": "tool", "stack": 1, "icon": "wood_pickaxe",
-					 "power": {"mine": 1.0}, "tier": 1, "tool": "pickaxe"},
+	# Dois degraus, só dois:
+	#   CRIAÇÃO (na mão)  — `stone_blade`: uma lasca de pedra amarrada a um ramo.
+	#                       Corta e pica devagar, e é o que destranca a pedra.
+	#   BANCADA           — `axe` e `pickaxe` a sério: o dobro da potência.
+	# Havia aqui uma família de madeira a mais (machado e picareta de madeira):
+	# era um passo intermédio que não mudava nada na mão do jogador e só enchia
+	# o menu — foi dito que o craft estava complicado sem ser preciso.
+	"stone_blade":  {"kind": "tool", "stack": 4, "icon": "stone_blade",
+					 "power": {"chop": 0.62, "mine": 0.7}, "tier": 1, "tool": "blade"},
 	"axe":          {"kind": "tool", "stack": 1, "icon": "axe", "power": {"chop": 2.2},
 					 "tier": 2, "tool": "axe"},
 	"pickaxe":      {"kind": "tool", "stack": 1, "icon": "pickaxe", "power": {"mine": 2.4},
 					 "tier": 2, "tool": "pickaxe"},
+	# Isqueiro primitivo: acender uma fogueira não pode ser um botão mágico.
+	"fire_kit":     {"kind": "tool", "stack": 1, "icon": "fire_kit",
+					 "power": {"fire": 1.0}, "tier": 1, "tool": "fire"},
 	"rod":          {"kind": "tool", "stack": 1, "icon": "rod", "power": {"fish": 1.0}},
 	"torch":        {"kind": "tool", "stack": 5, "icon": "torch", "light": 5.0, "fuel": 180.0},
 	"bottle":       {"kind": "tool", "stack": 1, "icon": "bottle", "capacity": 100.0},
-	"water":        {"kind": "tool", "stack": 1, "icon": "water", "drink_amount": 60.0},
+	# Água do rio é ÁGUA CRUA: bebe-se, mata a sede toda, mas arrisca-se. A
+	# fervida é o mesmo frasco depois de passar pela fogueira — é esta a razão
+	# de existir uma fogueira no primeiro dia (e de o ciclo fechar).
+	"water":        {"kind": "tool", "stack": 1, "icon": "water", "drink_amount": 55.0,
+					 "risk": 0.45, "raw": true},
+	"water_clean":  {"kind": "tool", "stack": 1, "icon": "water", "drink_amount": 80.0,
+					 "risk": 0.0, "boiled": true},
 	# ── estruturas (colocáveis) ─────────────────────────────────────────────
 	"campfire":     {"kind": "structure", "stack": 3, "icon": "campfire",
 					 "place": "campfire", "light": 9.0},
@@ -53,42 +67,54 @@ const ITEMS := {
 	"bed":          {"kind": "structure", "stack": 2, "icon": "bed", "place": "bed"},
 	"workbench":    {"kind": "structure", "stack": 4, "icon": "workbench",
 					 "place": "workbench"},
+	# Mobiliário que SERVE para algo (não é decoração): o cofre guarda, a cadeira
+	# deixa descansar sem deitar.
+	"chest":        {"kind": "structure", "stack": 4, "icon": "chest",
+					 "place": "chest", "storage": 24},
+	"chair":        {"kind": "structure", "stack": 4, "icon": "chair",
+					 "place": "chair", "rest": 8.0},
 }
 
-## Receitas: `needs` são consumidos, `result` é criado. `station` vazio = mãos.
-## Cadeia de progressão (e o motivo de cada degrau existir):
-##   mãos -> tronco, ramo, folha, fibra e PEDRAS SOLTAS (`flint_node`)
-##   bancada (wood 4 + stick 2, à mão) -> destranca as ferramentas e a fogueira
-##   picareta de madeira -> pedra -> picareta/machado de pedra -> construir
-## O ciclo partido que existia: o machado e a picareta pediam PEDRA, e a pedra
-## só saía de rochas, que exigiam picareta. Ninguém saía do sítio.
+## Receitas: vivem em `data/recipes.json` (editável sem tocar em código).
+## `needs` são consumidos, `result` é criado e `station` decide ONDE se faz:
+##   ""          → CRIAÇÃO, na mão, com o que se apanha do chão
+##   "workbench" → BANCADA: ferramentas a sério, mobiliário, peças de construção
+##   "campfire"  → FOGUEIRA: cozinhar e ferver água
+## O degrau não é burocracia: é o que separa "apanhei isto agora" de "construí
+## uma oficina". A lista em código fica como reserva, para o jogo não morrer se
+## o JSON for apagado ou ficar inválido.
 const RECIPES := [
 	{"id": "stick",     "result": "stick",       "qty": 2, "needs": {"wood": 1}},
 	{"id": "leaf_fiber", "result": "fiber",       "qty": 1, "needs": {"leaf": 3}},
 	{"id": "torch",     "result": "torch",       "qty": 2, "needs": {"stick": 1, "fiber": 1}},
-	{"id": "workbench", "result": "workbench",   "qty": 1, "needs": {"wood": 4, "stick": 2}},
-	{"id": "wood_axe",  "result": "wood_axe",    "qty": 1, "needs": {"stick": 2, "wood": 1},
-	 "station": "workbench"},
-	{"id": "wood_pickaxe", "result": "wood_pickaxe", "qty": 1, "needs": {"stick": 2, "wood": 2},
-	 "station": "workbench"},
-	{"id": "axe",       "result": "axe",         "qty": 1, "needs": {"stick": 2, "stone": 2, "fiber": 2},
-	 "station": "workbench"},
-	{"id": "pickaxe",   "result": "pickaxe",     "qty": 1, "needs": {"stick": 2, "stone": 3, "fiber": 1},
-	 "station": "workbench"},
-	{"id": "rod",       "result": "rod",         "qty": 1, "needs": {"stick": 3, "fiber": 3},
-	 "station": "workbench"},
-	{"id": "bottle",    "result": "bottle",      "qty": 1, "needs": {"fiber": 4}},
-	{"id": "campfire",  "result": "campfire",    "qty": 1, "needs": {"stone": 4, "stick": 3, "wood": 2},
-	 "station": "workbench"},
-	{"id": "wall",      "result": "wall",        "qty": 2, "needs": {"wood": 3}},
-	{"id": "floor",     "result": "floor",       "qty": 2, "needs": {"wood": 2}},
-	{"id": "pillar",    "result": "pillar",      "qty": 2, "needs": {"wood": 2, "fiber": 1}},
+	{"id": "fire_kit",  "result": "fire_kit",    "qty": 1, "needs": {"flint": 2, "stone": 1, "fiber": 2}},
+	{"id": "stone_blade", "result": "stone_blade", "qty": 1, "needs": {"stone": 2, "stick": 1, "fiber": 2}},
+	{"id": "campfire",  "result": "campfire",    "qty": 1, "needs": {"stone": 4, "stick": 3, "wood": 2}},
+	{"id": "bottle",    "result": "bottle",      "qty": 1, "needs": {"fiber": 4, "wood": 1}, "station": "workbench"},
+	{"id": "wood_axe",  "result": "axe",         "qty": 1, "needs": {"stick": 2, "stone": 2, "fiber": 2}, "station": "workbench"},
+	{"id": "wood_pickaxe", "result": "pickaxe",  "qty": 1, "needs": {"stick": 2, "stone": 3, "fiber": 1}, "station": "workbench"},
+	{"id": "rod",       "result": "rod",         "qty": 1, "needs": {"stick": 3, "fiber": 3}, "station": "workbench"},
+	{"id": "chest",     "result": "chest",       "qty": 1, "needs": {"wood": 6, "fiber": 2}, "station": "workbench"},
+	{"id": "chair",     "result": "chair",       "qty": 1, "needs": {"wood": 3, "fiber": 1}, "station": "workbench"},
 	{"id": "bed",       "result": "bed",         "qty": 1, "needs": {"fiber": 12, "stick": 4}, "station": "workbench"},
+	{"id": "wall",      "result": "wall",        "qty": 1, "needs": {"wood": 3}, "station": "workbench"},
+	{"id": "floor",     "result": "floor",       "qty": 1, "needs": {"wood": 2}, "station": "workbench"},
+	{"id": "pillar",    "result": "pillar",      "qty": 2, "needs": {"wood": 2, "fiber": 1}, "station": "workbench"},
 	{"id": "meat_cooked", "result": "meat_cooked", "qty": 1, "needs": {"meat_raw": 1}, "station": "campfire"},
 	{"id": "fish_cooked", "result": "fish_cooked", "qty": 1, "needs": {"fish_raw": 1}, "station": "campfire"},
 	{"id": "stew",      "result": "stew",        "qty": 1,
 	 "needs": {"meat_cooked": 1, "mushroom": 2, "water": 1}, "station": "campfire"},
 ]
+
+## Etiquetas das estações (o menu mostra estas palavras, não os ids).
+const STATION_LABELS := {"": "menu.craft_handmade", "workbench": "menu.craft_bench",
+	"campfire": "menu.craft_fire"}
+
+
+## As receitas em vigor: as de data/recipes.json quando existirem.
+func all_recipes() -> Array:
+	return recipes if not recipes.is_empty() else RECIPES
+
 
 ## O que sai de cada nó do mundo quando é colhido.
 ##
@@ -153,8 +179,20 @@ func is_placeable(id: String) -> bool:
 	return item(id).has("place")
 
 
+## Como se chama esta estação no ecrã. Vem de data/recipes.json quando lá está;
+## caso contrário usa a etiqueta embutida. Nunca mostra o id cru ao jogador.
+func station_label(id: String) -> String:
+	var key := str(station_labels.get(id, STATION_LABELS.get(id, "")))
+	if key.is_empty():
+		return id
+	var nome := Loc.t(key)
+	if nome == key:
+		name = nome if id.is_empty() else id
+	return nome if nome != key else id
+
+
 func recipe(id: String) -> Dictionary:
-	for r in RECIPES:
+	for r in all_recipes():
 		if str(r["id"]) == id:
 			return r
 	return Mods.recipe(id)
@@ -163,7 +201,7 @@ func recipe(id: String) -> Dictionary:
 ## Receitas visíveis dado o que está por perto (`near` = ids de estações).
 func recipes_for(near: Array = []) -> Array:
 	var out := []
-	for r in RECIPES:
+	for r in all_recipes():
 		var st := str(r.get("station", ""))
 		if st.is_empty() or st in near:
 			out.append(r)
@@ -179,7 +217,7 @@ func recipes_for(near: Array = []) -> Array:
 ## jogador não sabia que havia mais degraus de ferramentas para desbloquear.
 func locked_recipes(near: Array = []) -> Array:
 	var out := []
-	for lista in [RECIPES, Mods.all_recipes()]:
+	for lista in [all_recipes(), Mods.all_recipes()]:
 		for r in lista:
 			var st := str(r.get("station", ""))
 			if st != "" and not (st in near):
@@ -216,11 +254,22 @@ func reload_data() -> void:
 	terrain_cfg = _json_dict("res://data/terrain.json")
 	quality_cfg = _json_dict("res://data/quality.json")
 	species_cfg = _json_dict("res://data/species.json")
+	var rc := _json_dict("res://data/recipes.json")
+	var lista = rc.get("recipes", [])
+	recipes = []
+	if typeof(lista) == TYPE_ARRAY:
+		# só entram entradas com id/result: o JSON é editável à mão e uma linha
+		# a mais não pode rebentar o menu
+		for r in lista:
+			if typeof(r) == TYPE_DICTIONARY and r.has("id") and r.has("result"):
+				recipes.append(r)
+	var labs = rc.get("stations", {})
+	station_labels = labs if typeof(labs) == TYPE_DICTIONARY else {}
 	_rebuild_biome_idx()
 	_apply_mods()
-	print("[Db] data-driven: biomas=%d | terrain=%d chaves | quality=%s | espécies=%d" % [
+	print("[Db] data-driven: biomas=%d | terrain=%d chaves | quality=%s | espécies=%d | receitas=%d" % [
 		biomes.size(), terrain_cfg.size(),
-		"sim" if not quality_cfg.is_empty() else "não", _count_species()])
+		"sim" if not quality_cfg.is_empty() else "não", _count_species(), all_recipes().size()])
 
 
 func _json_dict(path: String) -> Dictionary:

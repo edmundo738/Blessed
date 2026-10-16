@@ -141,8 +141,14 @@ func eat(food: float, drink: float, risk: float) -> void:
 	_emit_stats()
 
 
-func drink(amount: float) -> void:
+## Beber. `risk` é a probabilidade de dar-se mal com o que se bebeu: água crua
+## de rio tem parasitas, água fervida não. É a decisão que dá sentido à fogueira
+## — sem isto, beber do rio era sempre a jogada certa e a fogueira era só enfeite.
+func drink(amount: float, risk: float = 0.0) -> void:
 	thirst = clampf(thirst + amount, 0.0, MAX_STAT)
+	if risk > 0.0 and randf() < risk:
+		damage(5.0, "bad_water")
+		Bus.toast.emit("msg.bad_water", 2.4)
 	Sfx.play("drink", -8.0)
 	reset_warnings()
 	_emit_stats()

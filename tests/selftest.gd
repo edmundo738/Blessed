@@ -812,21 +812,40 @@ func _run() -> void:
 
 	# ── ferramenta muda o número de golpes (rendimento) ───────────────────
 	var hand_spec: Dictionary = Db.HARVEST["tree_oak"]
-	var axe_item: Dictionary = Db.item("wood_axe")
+	var axe_item: Dictionary = Db.item("axe")
+	var blade_item: Dictionary = Db.item("stone_blade")
 	var hand_takes := maxi(int(ceil(float(hand_spec["hp"]) / float(hand_spec["hand"]))), 1)
 	var axe_takes := maxi(int(ceil(float(hand_spec["hp"]) / float(axe_item["power"]["chop"]))), 1)
-	check("machado de madeira abate a árvore em bem menos golpes",
+	var blade_takes := maxi(int(ceil(float(hand_spec["hp"]) / float(blade_item["power"]["chop"]))), 1)
+	check("o machado abate a árvore em bem menos golpes que as mãos",
 		axe_takes * 2 <= hand_takes, "mãos=%d golpes, machado=%d" % [hand_takes, axe_takes])
+	# O degrau do improviso tem de valer ALGUMA coisa (senão é só um item a mais
+	# no menu) e tem de ser claramente pior do que a bancada (senão a bancada
+	# não vale o trabalho de a construir).
+	check("a lasca de pedra (Criação) corta melhor que as mãos, pior que o machado",
+		blade_takes < hand_takes and blade_takes > axe_takes,
+		"mãos=%d, lasca=%d, machado=%d" % [hand_takes, blade_takes, axe_takes])
 	var bare_rock_spec: Dictionary = Db.HARVEST["rock"]
 	check("a pedra exige picareta (e as mãos não a picam)",
 		str(bare_rock_spec.get("needs", "")) == "pickaxe")
 	check("a pedra solta dá pedra sem ferramenta (porta de entrada)",
 		not Db.HARVEST["flint_node"].has("needs")
 		and int(Db.HARVEST["flint_node"]["yields"].get("stone", 0)) > 0)
-	check("a bancada é a única estação das ferramentas de pedra",
+	check("as ferramentas a sério saem da bancada; a bancada sai da Criação",
 		str(Db.recipe("wood_axe").get("station", "")) == "workbench"
 		and str(Db.recipe("wood_pickaxe").get("station", "")) == "workbench"
 		and not Db.recipe("workbench").has("station"))
+	# A lasca de pedra é o degrau que destranca a pedra: é ELE que se improvisa,
+	# e é o que faz o ciclo mãos→pedra→ferramenta fechar sem becos sem saída.
+	check("o improviso (Criação) dá ferramenta com pedra e ramo, sem estação",
+		not Db.recipe("stone_blade").has("station")
+		and int(Db.recipe("stone_blade")["needs"].get("stone", 0)) > 0)
+	check("as receitas vêm de data/recipes.json (edita-se sem tocar em código)",
+		FileAccess.file_exists("res://data/recipes.json")
+		and Db.all_recipes().size() >= 10)
+	check("acender fogueira exige isqueiro primitivo",
+		Db.item("fire_kit").get("power", {}).has("fire")
+		and not Db.recipe("fire_kit").has("station"))
 
 	# ── trabalhar cansa ───────────────────────────────────────────────────
 	var energy_before := float(sv.energy)
@@ -853,12 +872,12 @@ func _run() -> void:
 		"workbench" in main.structures.stations_near(bench_pos, 4.5)
 		and main.structures.list.size() == before_bench + 1)
 	var made_axe := Game.request("craft", {"recipe": "wood_axe"})
-	check("com bancada perto, o machado de madeira é feito",
-		bool(made_axe.get("ok", false)) and inv.count("wood_axe") >= 1,
+	check("com bancada perto, o machado é feito",
+		bool(made_axe.get("ok", false)) and inv.count("axe") >= 1,
 		"reason=%s" % str(made_axe.get("reason", "-")))
 	var bench_slot := -1
 	for i in inv.SLOTS:
-		if str((inv.slots[i] as Dictionary).get("id", "")) == "wood_axe":
+		if str((inv.slots[i] as Dictionary).get("id", "")) == "axe":
 			bench_slot = i
 			break
 	check("o machado novo entra na mochila", bench_slot >= 0)
@@ -896,6 +915,129 @@ func _run() -> void:
 	check("puxar a tempo dá peixe",
 		bool(pull.get("ok", false)) and inv.count("fish_raw") > fish_before,
 		"fish_raw=%d" % inv.count("fish_raw"))
+
+	# ── acender fogo exige isqueiro, e a água do rio sabe a barro ─────────
+	var fogueira: Dictionary = main.structures.place("campfire",
+		main.player.global_position + Vector3(3.0, 0.0, 0.0), 0.0, false)
+	it.focus = {"kind": "structure", "ref": fogueira, "pos": fogueira["pos"]}
+	var sem_isqueiro: Dictionary = it._do_interact({})
+	check("fogueira sem isqueiro não acende",
+		not bool(fogueira.get("lit", false))
+		and str(sem_isqueiro.get("reason", "")) == "no_fire_kit",
+		"reason=%s" % str(sem_isqueiro.get("reason", "-")))
+	inv.add("fire_kit", 1)
+	it._do_interact({})
+	check("com isqueiro primitivo a fogueira acende", bool(fogueira.get("lit", false)))
+	check("a fogueira acesa é estação de cozinha",
+		"campfire" in main.structures.stations_near(fogueira["pos"], 4.5))
+	# A chama tem de ser feita de CAMADAS: uma camada só é um cone laranja, que
+	# era exactamente o que fazia o fogo parecer mal feito.
+	var vfx := (fogueira["node"] as Node).get_node_or_null("CampfireVfx")
+	var tamanhos: Array = []
+	if vfx != null:
+		for filho in vfx.get_children():
+			if filho is MeshInstance3D and (filho as MeshInstance3D).mesh != null:
+				tamanhos.append(snappedf((filho as MeshInstance3D).mesh.get_aabb().size.y, 0.01))
+	check("a chama tem camadas (uma camada só é um cone)",
+		tamanhos.size() >= 2 and tamanhos[0] != tamanhos[1],
+		"alturas=%s" % str(tamanhos))
+	var chama_shader: Shader = load("res://shaders/campfire_flame.gdshader")
+	var uniforms := []
+	if chama_shader != null:
+		for u in chama_shader.get_shader_uniform_list(true):
+			uniforms.append(str(u["name"]))
+	check("o shader da chama permite camadas (slim/width) e não é um cone fixo",
+		"slim" in uniforms and "width" in uniforms, ", ".join(uniforms))
+	check("acender a fogueira dá luz com tremer (não é uma lâmpada fixa)",
+		fogueira.get("light") != null and (fogueira["light"] as OmniLight3D).omni_range > 0.0)
+
+	# Água: do rio vem CRUA (com risco), da fogueira sai fervida (sem risco).
+	inv.add("water", 1)
+	var agua_crua: Dictionary = Db.item("water")
+	var agua_fervida: Dictionary = Db.item("water_clean")
+	check("água do rio tem risco e a fervida não",
+		float(agua_crua.get("risk", 0.0)) > 0.0 and float(agua_fervida.get("risk", 0.0)) == 0.0
+		and float(agua_fervida.get("drink_amount", 0.0)) > float(agua_crua.get("drink_amount", 0.0)))
+	var ferver: Dictionary = Game.request("craft", {"recipe": "boil_water"})
+	check("ferver água é uma receita da fogueira",
+		bool(ferver.get("ok", false)) and inv.count("water_clean") >= 1,
+		"reason=%s" % str(ferver.get("reason", "-")))
+
+	# ── mobiliário que serve para algo ────────────────────────────────────
+	var cofre: Dictionary = main.structures.place("chest",
+		main.player.global_position + Vector3(-3.5, 0.0, 0.0), 0.0, false)
+	inv.add("wood", 5)
+	var slot_madeira := -1
+	for i in inv.SLOTS:
+		if str((inv.slots[i] as Dictionary).get("id", "")) == "wood":
+			slot_madeira = i
+			break
+	inv.equip_slot(slot_madeira)
+	var antes_mao := inv.count("wood")
+	it.focus = {"kind": "structure", "ref": cofre, "pos": cofre["pos"]}
+	it._do_interact({})
+	check("o cofre guarda o que tens na mão",
+		inv.count("wood") == 0 and int(cofre["items"].get("wood", 0)) == antes_mao,
+		"mochila=%d cofre=%d" % [inv.count("wood"), int(cofre["items"].get("wood", 0))])
+	var slot_vazio := -1
+	for i in inv.SLOTS:
+		if str((inv.slots[i] as Dictionary).get("id", "")) == "":
+			slot_vazio = i
+			break
+	if slot_vazio >= 0:
+		inv.equip_slot(slot_vazio)
+	it._do_interact({})
+	check("com a mão vazia o cofre devolve o que lá está",
+		inv.count("wood") == antes_mao and (cofre["items"] as Dictionary).is_empty(),
+		"mochila=%d" % inv.count("wood"))
+	var cadeira: Dictionary = main.structures.place("chair",
+		main.player.global_position + Vector3(0.0, 0.0, 3.0), 0.0, false)
+	sv.energy = 40.0
+	it.focus = {"kind": "structure", "ref": cadeira, "pos": cadeira["pos"]}
+	it._do_interact({})
+	check("a cadeira descansa (serve para algo, não é enfeite)",
+		float(sv.energy) > 40.0, "energia %.1f" % float(sv.energy))
+
+	# ── árvore abatida: tem de CAIR e ficar deitada ───────────────────────
+	# (o sintoma descrito: "só encosta um pouquinho e fica parada", com uma cor
+	#  plana, sem luz — o nó levava `sync_to_physics` a reescrever-lhe a rotação
+	#  e o tronco levava a copa e o material das folhas)
+	var oak: SpeciesKit.Species = world.species.trees["oak"]
+	var oak_trunk_verts := 0
+	var oak_full_verts := 0
+	if not oak.trunk_lods.is_empty():
+		oak_trunk_verts = _mesh_vertex_count(oak.trunk_lods[0])
+	if not oak.lods.is_empty():
+		oak_full_verts = _mesh_vertex_count(oak.lods[0])
+	check("o tronco do abate não traz a copa atrás",
+		oak_trunk_verts > 0 and oak_trunk_verts < oak_full_verts,
+		"tronco=%d vertices, árvore=%d" % [oak_trunk_verts, oak_full_verts])
+	var fall_scene: PackedScene = load("res://scenes/world/felled_tree.tscn")
+	var fall_probe := fall_scene.instantiate() as FelledTree
+	check("a árvore caída é dona da própria rotação (sem sync_to_physics)",
+		fall_probe != null and not fall_probe.sync_to_physics)
+	var felled_now: FelledTree = null
+	for n in get_tree().get_nodes_in_group("fellable_logs"):
+		felled_now = n as FelledTree
+		break
+	if felled_now == null:
+		skip("árvore abatida fica deitada no chão", "não há abate nesta corrida")
+	else:
+		# a queda é conduzida por tempo explícito (1,05 s): esperar pelo ESTADO,
+		# não por N frames (em headless os frames são muito curtos)
+		for i in 400:
+			if bool(felled_now.get("settled")):
+				break
+			await get_tree().process_frame
+		check("árvore abatida fica deitada no chão",
+			bool(felled_now.get("settled")) and absf(felled_now.rotation.z) > 1.2,
+			"rotação=%.2f rad, settled=%s" % [felled_now.rotation.z,
+				str(felled_now.get("settled"))])
+		check("o tronco caído assenta à altura do seu raio",
+			felled_now.global_position.y > float(terrain_height_at(felled_now.global_position)),
+			"y=%.2f" % felled_now.global_position.y)
+	if fall_probe != null:
+		fall_probe.free()
 
 	# ── caça: as receitas de carne têm de ter uma fonte no mundo ──────────
 	# (antes disto, `meat_raw` só existia na tabela de itens: nenhum bicho do
@@ -1125,7 +1267,8 @@ func _run() -> void:
 			"scripts compilados (build exportada)")
 	else:
 		var generic_icons: Array = []
-		for id in ["wood_axe", "wood_pickaxe", "workbench", "axe", "pickaxe", "campfire"]:
+		for id in ["stone_blade", "fire_kit", "workbench", "axe", "pickaxe", "campfire",
+				"chest", "chair"]:
 			if not ('"%s"' % id in icon_art):
 				generic_icons.append(id)
 		check("os ícones das ferramentas novas estão desenhados",
@@ -1159,6 +1302,11 @@ func _action_has_mouse(action: String) -> bool:
 		if ev is InputEventMouseButton:
 			return (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT
 	return false
+
+
+## Altura do terreno num ponto (para verificar onde as coisas assentam).
+func terrain_height_at(p: Vector3) -> float:
+	return float(main.world.terrain.height(p.x, p.z))
 
 
 ## Um ponto de água com a profundidade pedida (raio curto: o mundo é grande e

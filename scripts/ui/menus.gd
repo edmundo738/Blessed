@@ -307,44 +307,18 @@ func _use_item(id: String, slot_index: int) -> void:
 func _build_craft() -> void:
 	_title.text = Loc.t("tab.crafting")
 	var stations: Array = interaction.nearby_stations() if interaction != null else []
-	if stations.is_empty():
-		_label(Loc.t("menu.craft_handmade"), 12, Color(0.78, 0.82, 0.75, 0.78))
-	for r in Db.recipes_for(stations):
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 8)
-		_content.add_child(row)
-		var icon := ItemIcon.new()
-		icon.custom_minimum_size = Vector2(34, 40)
-		icon.size = Vector2(34, 40)
-		icon.set_item(str(r["result"]))
-		row.add_child(icon)
-		var details := VBoxContainer.new()
-		details.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(details)
-		var title := Label.new()
-		title.text = "%s  × %d" % [Db.item_name(str(r["result"])), int(r.get("qty", 1))]
-		title.add_theme_font_size_override("font_size", 13)
-		details.add_child(title)
-		var needs_txt := []
-		for k in r["needs"]:
-			var have := inv.count(str(k))
-			var need := int(r["needs"][k])
-			needs_txt.append("%s %d/%d" % [Db.item_name(str(k)), mini(have, need), need])
-		var ingredients := Label.new()
-		ingredients.text = "  ·  ".join(needs_txt)
-		ingredients.add_theme_font_size_override("font_size", 10)
-		ingredients.add_theme_color_override("font_color", Color(0.76, 0.79, 0.74, 0.84))
-		details.add_child(ingredients)
-		var ok := inv.can_craft(r)
-		var b := Button.new()
-		b.text = Loc.t("ui.craft")
-		b.custom_minimum_size = Vector2(92, 38)
-		b.focus_mode = Control.FOCUS_NONE
-		b.disabled = not ok
-		b.pressed.connect(_craft.bind(str(r["id"])))
-		row.add_child(b)
-		var separator := HSeparator.new()
-		_content.add_child(separator)
+	# Agrupado por degrau, porque o degrau é a informação que interessa:
+	# o que se improvisa agora, o que precisa de bancada, o que precisa de fogo.
+	for st in ["", "workbench", "campfire"]:
+		var lista := []
+		for r in Db.recipes_for(stations):
+			if str(r.get("station", "")) == st:
+				lista.append(r)
+		if lista.is_empty():
+			continue
+		_label(Db.station_label(st), 12, Color(0.82, 0.86, 0.78, 0.85))
+		for r in lista:
+			_craft_row(r)
 	# Degraus que ainda não estão ao alcance: dizer o que falta é melhor do que
 	# esconder a receita (era o que fazia o jogador pensar que o craft acabou).
 	var locked: Array = Db.locked_recipes(stations)
@@ -358,10 +332,48 @@ func _build_craft() -> void:
 				by_station[st] = []
 			by_station[st].append(Db.item_name(str(r["result"])))
 		for st in by_station:
-			_label("%s: %s" % [Db.item_name(st), ", ".join(by_station[st])], 11,
+			_label("%s: %s" % [Db.station_label(st), ", ".join(by_station[st])], 11,
 				Color(0.72, 0.76, 0.7, 0.72))
 	_label("")
 	_button(Loc.t("settings.back"), func(): open("pause"))
+
+
+## Uma linha de receita: ícone, nome, ingredientes com o que falta, botão.
+func _craft_row(r: Dictionary) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	_content.add_child(row)
+	var icon := ItemIcon.new()
+	icon.custom_minimum_size = Vector2(34, 40)
+	icon.size = Vector2(34, 40)
+	icon.set_item(str(r["result"]))
+	row.add_child(icon)
+	var details := VBoxContainer.new()
+	details.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(details)
+	var title := Label.new()
+	title.text = "%s  × %d" % [Db.item_name(str(r["result"])), int(r.get("qty", 1))]
+	title.add_theme_font_size_override("font_size", 13)
+	details.add_child(title)
+	var needs_txt := []
+	for k in r["needs"]:
+		var have := inv.count(str(k))
+		var need := int(r["needs"][k])
+		needs_txt.append("%s %d/%d" % [Db.item_name(str(k)), mini(have, need), need])
+	var ingredients := Label.new()
+	ingredients.text = "  ·  ".join(needs_txt)
+	ingredients.add_theme_font_size_override("font_size", 10)
+	ingredients.add_theme_color_override("font_color", Color(0.76, 0.79, 0.74, 0.84))
+	details.add_child(ingredients)
+	var b := Button.new()
+	b.text = Loc.t("ui.craft")
+	b.custom_minimum_size = Vector2(92, 38)
+	b.focus_mode = Control.FOCUS_NONE
+	b.disabled = not inv.can_craft(r)
+	b.pressed.connect(_craft.bind(str(r["id"])))
+	row.add_child(b)
+	var separator := HSeparator.new()
+	_content.add_child(separator)
 
 
 func _craft(id: String) -> void:

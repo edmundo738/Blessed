@@ -6,7 +6,57 @@
 > O histórico de auditoria abaixo preserva resultados antigos; quando diferirem, prevalecem
 > este marco mais recente e `docs/AUDIT_2026-10-14.md`.
 
-## Marco mais recente — relva reconstruída e instrumentos corrigidos (2026-10-16)
+## Marco mais recente — ciclo do primeiro dia fechado (2026-10-16, continuação)
+
+**Verificação: 161 ok, 0 falhas, 30 saltadas (SELFTEST_PASS)**, depois do merge
+do `main` e com o `.pck` reconstruído. O que mudou, por ordem do que o jogador
+sente:
+
+- **A ÁRVORE CAI (bug encontrado e corrigido).** Dois erros somados: (1) o nó da
+  árvore abatida tinha `sync_to_physics = true`, e o servidor de física reescrevia
+  o transform — a rotação escrita pela queda era perdida a meio, e era isto o
+  "só encosta um pouquinho e fica parada"; (2) o tronco levava o material das
+  FOLHAS (translúcido, com vento, sem resposta à luz) e a copa inteira no LOD0 —
+  era esta a "cor esquisita, mais plana, como se a luz já não a afetasse".
+  Agora: queda em `_physics_process` (1,05 s, ~88°, com aceleração, o eixo
+  assenta à altura do raio do tronco), material `structure`, tronco sem copa
+  (`Species.trunk_lods`), impacto com som/partículas/dano a quem estiver no lado
+  da queda, e o tronco deitado é o alvo da interação.
+  _Prova:_ `docs/shots/2026-10-16-arvore-abatida.png` (medido: `settled=true`,
+  `rot_z=1.53 rad`).
+- **A FOGUEIRA deixou de ser um monte de calhaus brancos com dois pauzinhos.**
+  Anel de 9 pedras de granito, leito de cinza, quatro achas radiais e três
+  tições; **três camadas de chama** (exterior/média/núcleo, cada uma com a sua
+  velocidade, eixo e energia — antes era um cone laranja igual a si mesmo);
+  **luz que treme** (duas frequências + cor que respira), que era o que faltava
+  para o fogo não parecer uma lâmpada laranja.
+  _Prova:_ `docs/shots/2026-10-16-fogueira-jogador.png` (câmara do jogador).
+- **O CRAFT passou a ter dois degraus, e são degraus de verdade.** Na mão
+  (**"Criação"** no inventário) faz-se o improviso: ramos, fibra, tocha,
+  **isqueiro primitivo** (sílex + pedra + fibra) e **lasca de pedra** — a lasca
+  corta e pica devagar e é o que destranca a pedra. Na **bancada** fazem-se as
+  ferramentas a sério (machado e picareta), o mobiliário e as peças de
+  construção. A família de madeira a mais (machado/picareta de madeira) foi
+  removida: era um passo intermédio que não mudava nada na mão do jogador.
+- **Acender fogo exige isqueiro.** Sem ele, a fogueira não acende e o jogo diz
+  porquê. Sem isto, "acender" era um botão mágico.
+- **A água tem decisão.** Água do rio é **crua** (mata a sede toda, mas há
+  risco); na fogueira ferve-se e sai **água fervida** (sem risco, mais sede por
+  frasco). O ciclo mãos → fogueira → água segura fecha-se no primeiro dia.
+- **As construções servem para algo.** **Cofre** guarda por tipo (F põe o que
+  tens na mão, F com a mão vazia devolve o que lá está) — a mochila tem 24 slots
+  e enchia-se sem sítio onde deixar coisas; **cadeira** descansa sem deitar
+  (energia + cabeça). Nada de mobiliário decorativo.
+- **As receitas saíram para `data/recipes.json`** (editável sem tocar em código,
+  como os biomas): estação, ingredientes, resultado e o nome de cada degrau. A
+  lista em código fica como reserva, para o jogo não morrer se o JSON falhar.
+- **Ferramentas de diagnóstico**: `tools/render_shot.py` passou a desenhar a
+  CHAMA (aditiva, com três camadas) e o `tests/shot.gd` ganhou `--fell` (abate e
+  espera pela queda) e `--fire --player` (olha para a fogueira pela câmara do
+  jogador). O `shot` marca `Game.started = true` — sem isso o prólogo agarrava o
+  jogador e nenhuma fotografia era do sítio pedido.
+
+## Marco anterior — relva reconstruída e instrumentos corrigidos (2026-10-16)
 
 - **Relva: o "picotado em camadas" está resolvido e medido.** A causa não era o
   empilhamento de níveis: era ESCALA. `GRASS_MASK_SCALE` era 0,36 m, o que dava

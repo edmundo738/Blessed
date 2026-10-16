@@ -9,9 +9,9 @@ var list: Array = []          # {id, pos, rot, lit, node, light}
 var species: SpeciesKit
 var mats: Materials
 var _fire_material: ShaderMaterial
+var _fire_core_material: ShaderMaterial
 var _smoke_material: StandardMaterial3D
 var _ember_material: StandardMaterial3D
-var _fire_mesh: ArrayMesh
 var _smoke_mesh: QuadMesh
 var _ember_mesh: SphereMesh
 
@@ -23,16 +23,34 @@ func _ready() -> void:
 	Game.register_saver(self)
 
 
+## Fogo vivo: a luz de uma fogueira não é uma lâmpada. Sem este tremer, a
+## fogueira ficava com luz fixa e o efeito era o de uma lâmpada laranja no chão
+## — uma das razões de o fogo parecer mal feito.
+func _process(_delta: float) -> void:
+	if list.is_empty():
+		return
+	var t := float(Time.get_ticks_msec()) * 0.001
+	for e in list:
+		var l: OmniLight3D = e.get("light")
+		if l == null or not is_instance_valid(l):
+			continue
+		# Duas frequências diferentes (uma lenta, uma rápida) para o tremido não
+		# ser um pisca-pisca regular.
+		var f := 0.86 + 0.10 * sin(t * 7.7) + 0.06 * sin(t * 17.3 + 1.7)
+		var base := float(species.structures[str(e["id"])].light) * 0.055 if species != null else 1.0
+		l.light_energy = maxf(0.35, base * f * 1.35)
+		l.light_color = Color(1.0, 0.70 + 0.06 * sin(t * 9.1), 0.44 + 0.05 * sin(t * 13.3))
+		l.position.y = float(species.structures[str(e["id"])].size.y) * 0.7 + 0.30 \
+			+ 0.02 * sin(t * 11.0)
+
+
 func setup(p_species: SpeciesKit, p_mats: Materials) -> void:
 	species = p_species
 	mats = p_mats
-	_fire_material = ShaderMaterial.new()
-	_fire_material.shader = load("res://shaders/campfire_flame.gdshader")
-	_fire_material.set_shader_parameter("flame_speed", 1.0)
-	_fire_material.set_shader_parameter("flame_energy", 2.4)
+	_fire_material = _make_flame_material(1.0, 1.35, 0.62, 1.0)
+	_fire_core_material = _make_flame_material(1.35, 1.55, 0.30, 2.1)
 	_smoke_material = _make_smoke_material()
 	_ember_material = _make_ember_material()
-	_fire_mesh = _make_flame_mesh()
 	_smoke_mesh = _make_smoke_mesh()
 	_ember_mesh = _make_ember_mesh()
 
@@ -127,14 +145,20 @@ func _add_fire_vfx(entry: Dictionary, st: SpeciesKit.Structure) -> void:
 	root.position = Vector3(0, st.size.y * 0.42, 0)
 	(entry["node"] as Node3D).add_child(root)
 
-	var flame := MeshInstance3D.new()
-	flame.name = "LayeredFlame"
-	flame.mesh = _fire_mesh
-	flame.material_override = _fire_material
-	flame.position.y = 0.38
-	flame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	flame.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-	root.add_child(flame)
+	# Exterior → núcleo. Cada camada é mais estreita, mais clara e mais rápida.
+	var camadas := [
+		{"nome": "FlameOuter", "altura": 1.00, "largura": 0.58, "mat": _fire_material, "y": 0.22},
+		{"nome": "FlameCore", "altura": 0.70, "largura": 0.30, "mat": _fire_core_material, "y": 0.26},
+	]
+	for c in camadas:
+		var flame := MeshInstance3D.new()
+		flame.name = str(c["nome"])
+		flame.mesh = _make_flame_mesh(float(c["altura"]), float(c["largura"]))
+		flame.material_override = c["mat"]
+		flame.position.y = float(c["y"])
+		flame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		flame.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+		root.add_child(flame)
 
 	var quality := clampi(int(Game.settings.get("quality", 1)), 0, 2)
 	if quality > 0:
@@ -182,20 +206,38 @@ func _add_fire_vfx(entry: Dictionary, st: SpeciesKit.Structure) -> void:
 		root.add_child(embers)
 
 
-func _make_flame_mesh() -> ArrayMesh:
+## Uma camada de chama: `altura` e `largura` em metros, `power` é a energia do
+## shader. A chama é feita de VÁRIAS camadas concêntricas (exterior vermelha,
+## média laranja, núcleo amarelo) — é isso que faz uma chama parecer fogo e não
+## um cone laranja: as camadas mexem-se com fases diferentes.
+func _make_flame_material(speed: float, power: float, slim: float, largura: float) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = load("res://shaders/campfire_flame.gdshader")
+	m.set_shader_parameter("flame_speed", speed)
+	m.set_shader_parameter("flame_energy", power)
+	m.set_shader_parameter("slim", slim)
+	m.set_shader_parameter("width", largura)
+	return m
+
+
+## Malha da chama: 8 planos radiais com UV.y 0 (base) → 1 (ponta). O perfil
+## estreita com a altura, mas não até zero — o shader corta a silhueta.
+func _make_flame_mesh(altura: float, largura: float) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for plane in 6:
-		var angle := TAU * float(plane) / 6.0
-		var side := Vector3(cos(angle), 0.0, sin(angle)) * 0.23
-		var p0 := -side + Vector3(0.0, 0.0, 0.0)
-		var p1 := side + Vector3(0.0, 0.0, 0.0)
-		var p2 := side * 0.035 + Vector3(0.0, 0.92, 0.0)
-		var p3 := -side * 0.035 + Vector3(0.0, 0.92, 0.0)
+	var planos := 8
+	for plane in planos:
+		var angle := TAU * float(plane) / float(planos)
+		var side := Vector3(cos(angle), 0.0, sin(angle)) * largura * 0.5
+		var p0 := -side
+		var p1 := side
+		var p2 := side * 0.10 + Vector3(0.0, altura, 0.0)
+		var p3 := -side * 0.10 + Vector3(0.0, altura, 0.0)
 		for vertex in [[p0, Vector2(0, 0)], [p1, Vector2(1, 0)], [p2, Vector2(1, 1)],
 				[p0, Vector2(0, 0)], [p2, Vector2(1, 1)], [p3, Vector2(0, 1)]]:
 			st.set_uv(vertex[1])
 			st.add_vertex(vertex[0])
+	st.generate_normals()
 	return st.commit()
 
 

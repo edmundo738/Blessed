@@ -177,6 +177,10 @@ func _pick_spawn() -> Vector3:
 func _build_player() -> void:
 	player = _sys("res://scenes/player.tscn", func(): return Player.new()) as Player
 	world.add_child(player)
+	# Grupos: há sistemas que precisam do jogador/supervivência sem terem uma
+	# referência direta (ex.: a árvore que cai e magoa quem está debaixo dela).
+	if not player.is_in_group("player"):
+		player.add_to_group("player")
 	var spawn := _pick_spawn()
 	# Os chunks do mundo só nascem depois disto (em `world._update_chunks`), por
 	# isso a vegetação já sabe que ali não se planta nada.
@@ -185,6 +189,8 @@ func _build_player() -> void:
 
 	survival = Survival.new()
 	player.add_child(survival)
+	if not survival.is_in_group("survival"):
+		survival.add_to_group("survival")
 
 
 func _build_systems() -> void:

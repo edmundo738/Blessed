@@ -228,6 +228,21 @@ func _item_mesh() -> ArrayMesh:
 					Vector3(0, 0.2, 0)),
 			])
 		# ── ferramentas: cabo + cabeça, viradas como as seguram as mãos ─────
+		"stone_blade":
+			# Ramo com a lasca amarrada: lê-se como ferramenta improvisada.
+			return _merge([
+				MeshKit.tapered(rng, 0.4, 0.035, 0.03, 6, 2, 0.0, false, Color("a97542")),
+				MeshKit.box(Vector3(0.11, 0.17, 0.045), Color("9aa1a0")),
+			])
+		"fire_kit":
+			# Duas pedras e um feixe de fibra.
+			return _merge([
+				MeshKit.box(Vector3(0.14, 0.08, 0.10), Color("8f8b84")),
+				_placed(MeshKit.box(Vector3(0.12, 0.07, 0.09), Color("6f6a63")),
+					Vector3(0.07, 0.07, 0.0)),
+				_placed(MeshKit.box(Vector3(0.05, 0.05, 0.24), Color("c9a45e")),
+					Vector3(-0.05, 0.02, 0.0)),
+			])
 		"wood_axe", "axe":
 			var head := Color("bd8b53") if item_id == "wood_axe" else Color("c8d5d2")
 			return _merge([

@@ -414,6 +414,10 @@ func prompt_key() -> String:
 				return "prompt.light"
 			if str(e["id"]) == "bed":
 				return "prompt.rest"
+			if str(e["id"]) == "chair":
+				return "prompt.sit"
+			if str(e["id"]) == "chest":
+				return "prompt.open_chest"
 			return "prompt.remove"
 		"npc":
 			return "prompt.talk"
@@ -456,13 +460,32 @@ func _do_interact(_a: Dictionary) -> Dictionary:
 		"structure":
 			var e: Dictionary = focus["ref"]
 			if str(e["id"]) == "campfire" and not bool(e.get("lit", false)):
+				# Acender fogo não é um botão mágico: é preciso um isqueiro
+				# primitivo (sílex + pedra + fibra, feito na Criação).
+				if not _has_fire_starter():
+					if _tool_hint_t <= 0.0:
+						_tool_hint_t = 3.0
+						Bus.ui_message.emit(Loc.t("msg.need_fire_kit"), 2.5)
+					return {"failed": true, "reason": "no_fire_kit"}
 				structures.light(e)
 				Sfx.play("craft", -10.0, 1.3)
 			elif str(e["id"]) == "bed":
 				_rest_in_bed()
+			elif str(e["id"]) == "chair":
+				_rest_in_chair()
+			elif str(e["id"]) == "chest":
+				_use_chest(e)
 			else:
 				Game.request("remove_structure", {"entry": e})
 	return {"handled": true, "ok": true}
+
+
+## Tem isqueiro na mão (ou no saco)? Acender fogueiras é a única coisa que ele
+## faz — não se gasta, é uma ferramenta.
+func _has_fire_starter() -> bool:
+	if Db.item(inv.hotbar_id()).get("power", {}).has("fire"):
+		return true
+	return inv.count("fire_kit") > 0
 
 
 ## Descansar na cama: repõe stats e avança até de manhã.
@@ -473,6 +496,49 @@ func _rest_in_bed() -> void:
 	survival.rest(to_morning, 1.0)
 	Sfx.play("ui_click", -10.0, 0.8)
 	Bus.say("prompt.rest", 2.5)
+
+
+## Cofre: guarda o que tens na mão e devolve o que lá está.
+##
+## É o par do inventário de 24 slots: a mochila enche-se depressa, e sem um
+## sítio onde deixar as coisas o jogador acaba a largar madeira no chão a
+## meio da floresta — que é o mesmo que deitá-la fora. Por isso o cofre guarda
+## por TIPO (um monte por item), e o F alterna entre pôr e tirar.
+func _use_chest(e: Dictionary) -> void:
+	if not e.has("items"):
+		e["items"] = {}
+	var guardado: Dictionary = e["items"]
+	var mao := inv.hotbar_id()
+	if not mao.is_empty():
+		var q: int = inv.count(mao)
+		if q <= 0:
+			return
+		inv.remove(mao, q)
+		guardado[mao] = int(guardado.get(mao, 0)) + q
+		Bus.ui_message.emit("%s x%d" % [Db.item_name(mao), int(guardado[mao])], 1.6)
+		Sfx.play("ui_click", -10.0, 0.85)
+		return
+	# Mão vazia: devolve o último tipo que lá entrou (não é lotaria).
+	for id in guardado.keys():
+		var n: int = int(guardado[id])
+		if n <= 0:
+			guardado.erase(id)
+			continue
+		inv.add(str(id), n)
+		guardado.erase(id)
+		Bus.ui_message.emit("%s x%d" % [Db.item_name(str(id)), n], 1.6)
+		Sfx.play("ui_click", -10.0, 1.05)
+		return
+	Bus.ui_message.emit(Loc.t("msg.chest_empty"), 1.6)
+
+
+## Sentar numa cadeira: descansa sem deitar (não passa o tempo, recupera
+## energia e cabeça). É para isso que serve o mobiliário.
+func _rest_in_chair() -> void:
+	survival.energy = minf(100.0, survival.energy + 14.0)
+	survival.sanity = minf(100.0, survival.sanity + 8.0)
+	Bus.ui_message.emit(Loc.t("msg.sit_down"), 2.0)
+	Sfx.play("ui_click", -12.0, 0.9)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -704,9 +770,10 @@ func _fire_once() -> void:
 				Sfx.play("splash", -10.0, 1.2)
 				Bus.say("msg.water_filled", 2.0)
 			else:
-				survival.drink(22.0)
+				# Direto da fonte: mata a sede, mas é água crua.
+				survival.drink(22.0, 0.35)
 				Sfx.play("drink", -9.0)
-				Bus.say("msg.drink", 2.0)
+				Bus.say("msg.drink_raw", 2.4)
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -821,10 +888,10 @@ func _do_use_item(_a: Dictionary) -> Dictionary:
 			build_rot = snappedf(player.yaw + PI, PI * 0.25)
 		return _do_place({})
 	# 2) comida e água: um gesto, no sítio onde se está
-	if id == "water":
-		if inv.remove("water", 1):
+	if id == "water" or id == "water_clean":
+		if inv.remove(id, 1):
 			inv.add("bottle", 1)
-			survival.drink(float(def.get("drink_amount", 50.0)))
+			survival.drink(float(def.get("drink_amount", 50.0)), float(def.get("risk", 0.0)))
 			Bus.ui_message.emit(Loc.t("msg.drink_flask"), 2.0)
 			return {"used": id}
 		return {"failed": true, "reason": "no_water"}

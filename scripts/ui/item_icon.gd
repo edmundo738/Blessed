@@ -9,6 +9,7 @@ const INK := Color("202a2b")
 const WOOD := Color("a97542")
 const LEAF := Color("76ad55")
 const METAL := Color("c8d5d2")
+const STONE := Color("9aa1a0")
 const RED := Color("d94e4d")
 const BLUE := Color("60b6d2")
 const GOLD := Color("f3c966")
@@ -74,17 +75,29 @@ func _draw() -> void:
 			_stroke(center + Vector2(8, 13) * k, center + Vector2(-7, -11) * k, WOOD, 5.0 * k)
 			_stroke(center + Vector2(-14, -10) * k, center + Vector2(12, -14) * k, METAL, 5.0 * k)
 			_stroke(center + Vector2(-14, -10) * k, center + Vector2(-18, -14) * k, METAL, 3.0 * k)
-		# Ferramentas de madeira: MESMA forma, cabeça em madeira — o ícone diz
-		# logo "isto é o degrau fraco" sem precisar de texto.
-		"wood_axe":
-			_stroke(center + Vector2(7, 13) * k, center + Vector2(-8, -13) * k, Color("8a6136"), 5.0 * k)
-			_poly(center + Vector2(-9, -12) * k, [Vector2(-1, -8), Vector2(11, -7), Vector2(10, 1), Vector2(1, 6), Vector2(-3, 2)], Color("bd8b53"))
-			_stroke(center + Vector2(2, -9) * k, center + Vector2(7, 2) * k, Color("6d4a29"), 1.6 * k)
-		"wood_pickaxe":
-			_stroke(center + Vector2(8, 13) * k, center + Vector2(-7, -11) * k, Color("8a6136"), 5.0 * k)
-			_stroke(center + Vector2(-14, -10) * k, center + Vector2(12, -14) * k, Color("bd8b53"), 5.0 * k)
-			_stroke(center + Vector2(-14, -10) * k, center + Vector2(-18, -14) * k, Color("bd8b53"), 3.0 * k)
-			_stroke(center + Vector2(-9, -12) * k, center + Vector2(-4, -11) * k, Color("6d4a29"), 2.0 * k)
+		# Lasca de pedra: um ramo com uma lasca amarrada. Três traços e a fibra
+		# atada dizem "improvisado" sem uma linha de texto.
+		"stone_blade":
+			_stroke(center + Vector2(9, 14) * k, center + Vector2(-7, -9) * k, WOOD, 4.5 * k)
+			_poly(center + Vector2(-8, -10) * k, [Vector2(-6, -3), Vector2(4, -8), Vector2(10, -2), Vector2(2, 7), Vector2(-5, 5)], STONE)
+			_stroke(center + Vector2(-2, -6) * k, center + Vector2(4, 2) * k, Color("6f5a3a"), 1.6 * k)
+		# Isqueiro primitivo: pedra de sílex + pedra de bater + feixe de fibra.
+		"fire_kit":
+			_stroke(center + Vector2(-9, 6) * k, center + Vector2(2, 12) * k, Color("8f8b84"), 4.6 * k)
+			_stroke(center + Vector2(-2, -4) * k, center + Vector2(11, 3) * k, Color("6f6a63"), 4.6 * k)
+			_stroke(center + Vector2(-6, 10) * k, center + Vector2(9, -8) * k, Color("c9a45e"), 2.0 * k)
+			_poly(center + Vector2(11, -10) * k, [Vector2(-3, 2), Vector2(0, -5), Vector2(4, -7), Vector2(6, -2), Vector2(3, 4)], Color("f0a23c"))
+		# Cofre e cadeira: mobiliário que serve para guardar e para descansar.
+		"chest":
+			_poly(center + Vector2(-14, -3) * k, [Vector2(0, 0), Vector2(28, 0), Vector2(26, 15), Vector2(2, 15)], Color("9c7043"))
+			_stroke(center + Vector2(-12, -1) * k, center + Vector2(13, -1) * k, Color("6d4a29"), 3.0 * k)
+			_stroke(center + Vector2(-1, 0) * k, center + Vector2(-1, 10) * k, GOLD, 3.4 * k)
+		"chair":
+			_stroke(center + Vector2(-7, 4) * k, center + Vector2(-7, 14) * k, Color("8a6136"), 3.4 * k)
+			_stroke(center + Vector2(-8, 5) * k, center + Vector2(-8, -12) * k, Color("6d4a29"), 3.0 * k)
+			_stroke(center + Vector2(-9, 5) * k, center + Vector2(9, 5) * k, Color("a87a48"), 3.6 * k)
+			_stroke(center + Vector2(7, 6) * k, center + Vector2(7, 15) * k, Color("6d4a29"), 3.0 * k)
+			_stroke(center + Vector2(2, 15) * k, center + Vector2(9, 15) * k, Color("6d4a29"), 3.0 * k)
 		"rod":
 			_stroke(center + Vector2(-8, 14) * k, center + Vector2(8, -16) * k, WOOD, 3.0 * k)
 			_stroke(center + Vector2(8, -16) * k, center + Vector2(16, -5) * k, INK, 1.4 * k)

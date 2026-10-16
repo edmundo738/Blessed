@@ -3,6 +3,36 @@
 Cada bug tem: número, causa, correção, teste que o apanha. Quando um bug é
 fechado, o teste que o apanha entra no `tests/selftest.gd` para não voltar.
 
+## CORRIGIDOS (continuação de 2026-10-16)
+
+17. **Árvore abatida "só encostava" e ficava com cor plana** (`felled_tree.tscn`,
+    `world.gd`). Duas causas: `sync_to_physics = true` no `AnimatableBody3D` (o
+    servidor de física reescrevia o transform e comia a rotação a meio da queda:
+    medido, `rot_z=0.00` com `settled=true` — o jogo achava que já tinha caído);
+    e o tronco levava `mats.foliage` (translúcido, com vento, sem resposta à luz)
+    mais a copa no LOD0. Correção: `sync_to_physics = false`, material
+    `structure`, `Species.trunk_lods` (tronco sem copa) e queda em
+    `_physics_process` com tempo explícito.
+    _Teste:_ "a árvore caída é dona da própria rotação", "o tronco do abate não
+    traz a copa atrás", "árvore abatida fica deitada no chão".
+18. **Chama da fogueira era um cone laranja igual a si mesmo**; sem vida, a
+    fogueira parecia uma lâmpada. Correção: três camadas (exterior/média/núcleo)
+    com `speed`/`energy`/`slim`/`width` próprios, silhueta com ruído contínuo, e
+    **luz que treme** (`Structures._process`, duas frequências).
+    _Teste:_ "a chama tem núcleo próprio (uma camada só é um cone)".
+19. **Cofre: `inv.remove` podia falhar e o item era duplicado para o cofre.**
+    Correção: só se guarda o que saiu da mochila (`_use_chest`), e o cofre guarda
+    por tipo. _Teste:_ "o cofre guarda o que tens na mão", "com a mão vazia o
+    cofre devolve o que lá está".
+20. **`shot.gd` não punha o jogo a andar**: com `Game.started == false` o
+    `main._process` corre a câmara do PRÓLOGO, que reescreve a posição do jogador
+    a cada frame — qualquer teleporte era desfeito (medido: `SHOT_TP0 98.9, 9.0,
+    12.9` → `SHOT_TP1 123.4, 17.9, 19.6`). Correção: `Game.started = true` no
+    topo do `shot._run()`.
+21. **`render_shot.py` rebentava com água no enquadramento** (`shade_water`): um
+    `einsum` com subscritos errados na linha do brilho especular. Correção:
+    meia-vector de Blinn-Phong.
+
 ## CORRIGIDOS (neste ciclo)
 1. **API Godot-3 `instance_set_transform` / `instance_set_custom_data`**
    (`chunk.gd`). Não existem no Godot 4 → abortava a população de relva/árvores
