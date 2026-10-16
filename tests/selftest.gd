@@ -18,12 +18,18 @@ var lines: Array = []
 
 
 func check(what: String, ok: bool, detail: String = "") -> void:
+	var line := ""
 	if ok:
 		passed += 1
-		lines.append("  OK   %s%s" % [what, "" if detail.is_empty() else "  (" + detail + ")"])
+		line = "  OK   %s%s" % [what, "" if detail.is_empty() else "  (" + detail + ")"]
 	else:
 		failed += 1
-		lines.append("  FALHA %s%s" % [what, "" if detail.is_empty() else "  (" + detail + ")"])
+		line = "  FALHA %s%s" % [what, "" if detail.is_empty() else "  (" + detail + ")"]
+	lines.append(line)
+	# Impresso À MEDIDA que acontece: o resumo final continua igual, mas uma
+	# falha do motor a meio do teste deixa de apagar tudo o que já tinha passado
+	# (foi assim que uma paragem da build web escondeu onde o teste morreu).
+	print(line)
 
 
 func setup(p_main: Node) -> void:
@@ -65,11 +71,28 @@ func _run() -> void:
 		and (flies.mesh.surface_get_material(0) as StandardMaterial3D).albedo_texture != null)
 	var impact_pool: Array = main.fx.get("_pool") as Array
 	var impact: Node3D = impact_pool[0] as Node3D if not impact_pool.is_empty() else null
-	var impact_mesh: QuadMesh = impact.get("draw_pass_2") as QuadMesh if impact != null else null
-	check("impacto combina lascas 3D com brilho 2D reutilizável", impact != null
-		and (impact is GPUParticles3D or impact is CPUParticles3D)
-		and int(impact.get("draw_passes")) == 2 and impact_mesh != null
-		and (impact_mesh.surface_get_material(0) as StandardMaterial3D).albedo_texture != null)
+	# Os dois caminhos são legítimos: Forward+ usa dois passes no emissor GPU; o
+	# Compatibility (gl_compatibility — o build web) usa um só emissor CPU com a
+	# malha de duas superfícies, porque o desenho por passes é do GPU. A
+	# verificação tem de aceitar o caminho que o renderer em uso realmente toma,
+	# senão acusa um bug onde há uma decisão de portabilidade.
+	var impact_ok := false
+	var impact_detail := "nenhum emissor"
+	if impact is GPUParticles3D:
+		var spark_mesh := impact.get("draw_pass_2") as QuadMesh
+		impact_ok = int(impact.get("draw_passes")) == 2 and spark_mesh != null \
+			and (spark_mesh.surface_get_material(0) as StandardMaterial3D) != null \
+			and (spark_mesh.surface_get_material(0) as StandardMaterial3D).albedo_texture != null
+		impact_detail = "GPU, draw_passes=%d" % int(impact.get("draw_passes"))
+	elif impact is CPUParticles3D:
+		var combo := impact.mesh as ArrayMesh
+		var glow := combo.surface_get_material(1) as StandardMaterial3D if combo != null \
+			and combo.get_surface_count() > 1 else null
+		impact_ok = combo != null and combo.get_surface_count() == 2 and glow != null \
+			and glow.albedo_texture != null
+		impact_detail = "CPU, superfícies=%d" % (combo.get_surface_count() if combo != null else 0)
+	check("impacto combina lascas 3D com brilho 2D reutilizável", impact != null and impact_ok,
+		impact_detail)
 	var fx_use_gpu := bool(main.fx.get("_use_gpu"))
 	main.fx.set("_use_gpu", false)
 	var compatibility_emitter: CPUParticles3D = main.fx.call("_new_emitter") as CPUParticles3D
@@ -536,7 +559,12 @@ func _run() -> void:
 	check("água e passe isolado das nuvens controlam a transparência",
 		leaky.is_empty() and sky_alpha_isolated, ", ".join(leaky))
 	var wcode := _strip_comments(str(FileAccess.get_file_as_string("res://shaders/stylized_water.gdshader")))
-	check("água usa blend_mix (não additive/alpha que lavaria a cor)", "blend_mix" in wcode)
+	# A água é OPACA e de face dupla (decisão registada em DECISIONS.md): a costa
+	# lê-se de cima e o sob-água tem vista própria, sem o passe transparente a
+	# lavar a cor contra o céu. `blend_additive`/`blend_mix` seriam a regressão.
+	check("água é opaca e de face dupla (sem blend que lave a cor)",
+		wcode.contains("cull_disabled") and wcode.contains("depth_draw_opaque")
+		and not wcode.contains("blend_additive") and not wcode.contains("blend_mix"))
 
 	# REGRESSÃO DO RAIO-X #2: as faces exteriores têm de ser desenhadas.
 	# Com cull_back, qualquer winding virado cortava a face de fora e o jogador

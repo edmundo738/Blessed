@@ -30,10 +30,49 @@ fechado, o teste que o apanha entra no `tests/selftest.gd` para não voltar.
    Não abortam nada (devolvem default) mas poluem o Output. Causa provável:
    algum nó a ler/escrever transform global durante a construção, antes de
    entrar na árvore. Próximo a perseguir.
-8. **Rasterizador por software não reproduz os shaders procedurais da relva** —
-   as capturas de `docs/shots/` não mostram corretamente o recorte e o volume
-   de shells/cartões. A captura pode enumerar as instâncias, mas não comprova
-   o resultado visual desses shaders; é um limite da ferramenta de diagnóstico.
+8. ~~**Rasterizador por software não reproduz os shaders procedurais da relva.**~~
+   **RESOLVIDO.** `tools/render_shot.py` passou a avaliar, pixel a pixel, os
+   dois shaders de relva: amostra a máscara (altura/tom/massa), aplica o
+   `discard` (nível acima do fio, densidade, desvanecimento de distância) e
+   usa a cor por vértice/instância e a rampa base→ponta. O que se vê no PNG é
+   agora o que o shader decide. _Efeito imediato:_ provou que a relva estava a
+   ser desenhada em manchas de alto contraste (picotado) e mediu o resto.
+9. **Rasterizador cullava as faces ao contrário.** O Godot considera frontal a
+   winding HORÁRIA; o rasterizador testava a convenção do OpenGL puro e punha
+   fora as faces da frente do terreno e das árvores (178.469 de 235.000
+   triângulos). Todas as imagens de diagnóstico anteriores a esta correção
+   mostravam as costas dos objetos. _Teste:_ a auditoria (`--audit`) reportava
+   "winding != normal do vertice"; hoje são 4 de 235.000 (casos legítimos dos
+   shaders de face dupla).
+10. **Ternário com array literal devolvia VAZIO** (`species.gd`, `_build_rocks`):
+   `s.lods = A if cond else [m, m, m]` deixa o array literal pelo caminho na
+   conversão para `Array[ArrayMesh]` — o resultado era um array de tamanho 0.
+   Espécie sem LODs = MultiMesh com `mesh = null`: as três variedades de rocha
+   desapareciam do mundo e a instância morta rebentava a build web de quem lhe
+   lesse a malha (`RuntimeError: null function or function signature mismatch`).
+   _Correção:_ construir o array tipado à parte. _Teste:_ `chunks usam árvores
+   Blender com vento nas folhas` e `nós colhíveis espalhados` no self-test.
+11. **MultiMesh sem malha derrubava o self-test** (`chunk.gd`/`selftest.gd`):
+   além da correção acima, o chunk deixou de criar instâncias para espécies sem
+   geometria (com um aviso único por espécie) e o self-test saltou a malha nula.
+12. **Partículas de impacto sem malha no Compatibility** (`fx.gd`): o caminho
+   CPU usava `_cpu_combo_mesh` sem o construir quando `_ready` corria fora de
+   ordem — malha nula num nó de partículas aborta o motor. _Correção:_ construir
+   a malha combinada a pedido, em `_ensure_cpu_combo`.
+13. **Self-test imprimia o resumo só no fim** (`tests/selftest.gd`): uma
+   paragem do motor a meio apagava tudo o que já passara (foi assim que uma
+   falha da build web ficou sem indício de onde). Agora cada verificação sai
+   impressa quando acontece.
+
+14. **Build web sem o editor não descodifica glTF** (`scripts/core/assets.gd`):
+    o template web do motor NÃO traz `GLTFDocument`/`GLTFState`
+    (confirmado: `ClassDB.class_exists` = falso); `Assets` deteta, avisa com o
+    motivo e devolve nulo, caindo nas malhas geradas por código. Com a cache de
+    importação do editor (`.godot/imported/**.scn`) os modelos carregam pelo
+    caminho normal. _Consequência:_ um build web feito por `tools/build_web.py`
+    sem editor mostra árvores/rochas de código em vez dos modelos do artista.
+    _Teste:_ as verificações "GLB Blender ..." do self-test são exatamente este
+    aviso, e falham no sandbox por esse motivo (não é regressão de código).
 
 ## LIMITES DO SANDBOX (não corrigíveis aqui)
 9. **Sem GPU/browser** → não se valida o ecrã real; usa-se `tools/render_shot.py`.

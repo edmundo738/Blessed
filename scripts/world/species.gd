@@ -256,7 +256,17 @@ func _build_rocks() -> void:
 			MeshKit.rock(rng, lerpf(0.55, 1.15, float(i) / 2.0))
 		var s := Species.new()
 		s.id = "rock_%d" % i
-		s.lods = blender_rocks if not blender_rocks.is_empty() else [m, m, m]
+		if blender_rocks.is_empty():
+			# ATENÇÃO: `s.lods = A if cond else [m, m, m]` NÃO funciona — o array
+			# literal não sobrevive à conversão para Array[ArrayMesh] dentro do
+			# ternário e o resultado saía VAZIO (medido nesta build: tamanho 0).
+			# Espécie sem LODs = MultiMesh com mesh=null: as rochas não apareciam
+			# no mundo e a instância morta rebentava a build web a quem lhe lesse
+			# a malha. Com o array tipado construído à parte fica correto.
+			var fallback: Array[ArrayMesh] = [m, m, m]
+			s.lods = fallback
+		else:
+			s.lods = blender_rocks
 		s.tint = Color(0.85, 0.85, 0.92)
 		s.scale_range = Vector2(0.8, 1.5)
 		s.biomes = PackedInt32Array([Terrain.B_ROCK, Terrain.B_MEADOW, Terrain.B_SAND, Terrain.B_MARSH])

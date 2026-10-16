@@ -27,6 +27,10 @@ var _last_held_item := "__unset__"
 
 func _ready() -> void:
 	randomize()
+	# A sonda `shot` lê a geometria das instâncias: o espelho tem de estar ligado
+	# ANTES de o mundo existir (ver scripts/core/shot_meta.gd).
+	var probe_args := OS.get_cmdline_args() + OS.get_cmdline_user_args()
+	ShotMeta.mirror = probe_args.has("shot")
 	_build_world()
 	_build_player()
 	_build_systems()
@@ -172,7 +176,11 @@ func _pick_spawn() -> Vector3:
 func _build_player() -> void:
 	player = _sys("res://scenes/player.tscn", func(): return Player.new()) as Player
 	world.add_child(player)
-	player.global_position = _pick_spawn() + Vector3(0, 1.0, 0)
+	var spawn := _pick_spawn()
+	# Os chunks do mundo só nascem depois disto (em `world._update_chunks`), por
+	# isso a vegetação já sabe que ali não se planta nada.
+	world.set_spawn_clear(spawn)
+	player.global_position = spawn + Vector3(0, 1.0, 0)
 
 	survival = Survival.new()
 	player.add_child(survival)

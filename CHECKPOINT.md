@@ -6,7 +6,40 @@
 > O histórico de auditoria abaixo preserva resultados antigos; quando diferirem, prevalecem
 > este marco mais recente e `docs/AUDIT_2026-10-14.md`.
 
-## Marco mais recente — água, luz local e relva (2026-10-15)
+## Marco mais recente — relva reconstruída e instrumentos corrigidos (2026-10-16)
+
+- **Relva: o "picotado em camadas" está resolvido e medido.** A causa não era o
+  empilhamento de níveis: era ESCALA. `GRASS_MASK_SCALE` era 0,36 m, o que dava
+  lâminas de ~5 mm — sub-pixel a partir de um metro de distância. Cada lâmina
+  virava um ponto de alto contraste sobre um chão de outra cor. Agora o ladrilho
+  da máscara tem 1,05 m (lâmina ~1 cm, 68% de cobertura, 11–27 cm de
+  comprimento), a densidade nunca cai a meio do alcance e a relva por níveis
+  desvanece aos ~50 m, onde continua nas cores do terreno.
+- **A cor da relva vem do bioma** (`Terrain.grass_tint_of`): a lâmina leva a cor
+  da relva daquele ponto (viçosa no húmido, seca na savana/deserto) em cor de
+  vértice/instância; o shader só acrescenta a rampa base-escura → ponta-clara.
+  Acabou o verde-atlas sobre chão amarelo.
+- **Terra castanha debaixo da relva** (`toon_terrain`: `soil_near = 4`,
+  `soil_far = 20`): de perto vê-se o solo onde a relva cresce; ao longe domina a
+  cor da relva, para o campo não ler como poeira.
+- **O rasterizador de diagnóstico passou a ver os shaders de relva.** O
+  `tools/render_shot.py` avalia agora, pixel a pixel, a máscara (altura/tom/
+  massa), os `discard` (nível, densidade, distância) e a cor por
+  vértice/instância dos dois shaders de relva. Foi isso que permitiu medir em
+  vez de adivinhar — e revelou dois erros graves nos próprios instrumentos:
+  **culling invertido** (o Godot é horário; 178.469 de 235.000 triângulos iam
+  para fora) e **MultiMesh sem transmissões em headless** (o dump não tinha
+  cartas de relva nem árvores; resolvido com `scripts/core/shot_meta.gd`).
+- **Bugs do mundo corrigidos:** ternário com array literal devolvia vazio
+  (`species.gd`) → as três variedades de rocha desapareciam do mundo e a
+  instância sem malha rebentava a build web; partículas de impacto sem malha no
+  Compatibility; raio de 4,5 m limpo de vegetação à volta do nascimento.
+- **Verificado:** `SELFTEST` 102 ok / 30 falhas, sendo todas as 30 dos modelos
+  Blender que o template web NÃO consegue descodificar sem editor
+  (`GLTFDocument` ausente — ver KNOWN_ISSUES #14); zero `Parse Error`, zero
+  `SHADER ERROR`, zero "Cannot open file". Imagens do chão em `docs/shots/`.
+
+## Marco anterior — água, luz local e relva (2026-10-15)
 
 - Água usa shader opaco de dupla face, ondas/espuma estilizadas e paleta diferente
   debaixo da superfície; o tipo mar/rio agora é passado ao shader corretamente.

@@ -187,6 +187,29 @@ func set_underwater(value: bool) -> void:
 # ══════════════════════════════════════════════════════════════════════════
 #  CHUNKS
 # ══════════════════════════════════════════════════════════════════════════
+## Onde o jogador nasce (definido por main.gd ANTES de os chunks existirem) e o
+## raio que fica limpo de vegetação à volta dele.
+##
+## PORQUE: nascer dentro de um tronco é nascer preso — a colisão da árvore fecha
+## o jogador na própria malha, e a primeira coisa que se vê é o interior de um
+## caqui. Antes a escolha do ponto só evitava água, inclinação e fogueiras, e o
+## mato era espalhado sem saber de nada.
+const SPAWN_CLEAR_RADIUS := 4.5
+var spawn_clear := Vector3(0.0, -16384.0, 0.0)
+
+
+func set_spawn_clear(p: Vector3) -> void:
+	spawn_clear = p
+
+
+func is_clear_of_spawn(x: float, z: float) -> bool:
+	if spawn_clear.y < -16000.0:
+		return true
+	var dx := x - spawn_clear.x
+	var dz := z - spawn_clear.z
+	return dx * dx + dz * dz > SPAWN_CLEAR_RADIUS * SPAWN_CLEAR_RADIUS
+
+
 func set_target(p: Vector3) -> void:
 	_target = p
 

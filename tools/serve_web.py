@@ -8,6 +8,13 @@ import http.server, socketserver, os, sys
 
 DIR = sys.argv[1] if len(sys.argv) > 1 else "export/web2"
 PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 8060
+# Os cabecalhos de isolamento (COOP/COEP) so sao precisos quando o build usa
+# THREADS (SharedArrayBuffer). O build do BLESSED e single-thread
+# (`thread_support=false` em export_presets.cfg), e envia-los sem necessidade
+# tem um custo real: `Cross-Origin-Resource-Policy: same-origin` impede a pagina
+# de ser embutida noutro site (por exemplo numa pre-visualizacao em iframe) e o
+# COEP obriga TODOS os recursos a trazerem CORP. Por omissao, nada disso.
+ISOLATE = "--isolate" in sys.argv or os.environ.get("BLESSED_ISOLATE") == "1"
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     extensions_map = {
@@ -18,10 +25,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         ".json": "application/json",
     }
     def end_headers(self):
-        # cross-origin isolation (necessario se o build usar threads/SharedArrayBuffer)
-        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
-        self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
-        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        if ISOLATE:
+            # cross-origin isolation (so com build de threads/SharedArrayBuffer)
+            self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+            self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
 

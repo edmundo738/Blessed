@@ -15,7 +15,7 @@ var _fire_mesh: ArrayMesh
 var _smoke_mesh: QuadMesh
 var _ember_mesh: SphereMesh
 
-const SMOKE_TEXTURE := preload("res://content/fx/kenney/particles/smoke_02.png")
+const SMOKE_PATH := "res://content/fx/kenney/particles/smoke_02.png"
 
 
 func _ready() -> void:
@@ -207,7 +207,7 @@ func _make_smoke_material() -> StandardMaterial3D:
 	material.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
 	material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
-	material.albedo_texture = SMOKE_TEXTURE
+	material.albedo_texture = Assets.texture(SMOKE_PATH)
 	material.albedo_color = Color(0.22, 0.24, 0.30, 0.26)
 	return material
 

@@ -464,6 +464,21 @@ func ground_color_s(x: float, z: float, h: float, sl: float, buf: PackedFloat32A
 	return c
 
 
+## Cor da RELVA que cresce num ponto, a partir da cor do bioma.
+##
+## É a mesma família que a classe "relva" do toon_terrain.gdshader (viçosa num
+## sítio húmido, seca no deserto/savana), por isso as lâminas e o chão por baixo
+## delas são a MESMA cor. Sem isto as lâminas eram verde-Quaternius em cima de
+## chão amarelo de savana: cada lâmina sub-pixel virava um ponto de ruído de alto
+## contraste — o "picotado" reportado.
+static func grass_tint_of(base: Color, dryness: float) -> Color:
+	var dry := clampf(dryness, 0.0, 1.0)
+	var lush := Color(base.r * 0.92, base.g * 1.12, base.b * 0.84)
+	var arid := Color(minf(base.r * 1.16 + 0.03, 1.0),
+		minf(base.g * 1.03 + 0.02, 1.0), minf(base.b * 0.60, 1.0))
+	return arid.lerp(lush, 1.0 - dry)
+
+
 ## Bioma dominante (para decidir árvores/relva/áudio).
 func dominant(x: float, z: float, h: float) -> int:
 	return dominant_s(x, z, h, slope(x, z))

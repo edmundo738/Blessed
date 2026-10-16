@@ -18,15 +18,23 @@ extends Node
 ##       [--view x,y,z] [--yaw graus] [--pitch graus] [--radius m] [--out f.bin]
 ##
 ## Formato binário (little-endian), ver tools/render_shot.py:
-##   "BSH1" u32 versao
+##   "BSH1" u32 versao (2)
 ##   3xf32 cam_pos | 9xf32 cam_basis (colunas x,y,z) | f32 fov | f32 aspect
 ##   f32 near | f32 far | 3xf32 sun_dir | 3xf32 sun_color | 3xf32 sky_top
 ##   3xf32 sky_bot | f32 exposure
 ##   u32 n_meshes
-##   por malha: u32 len + nome | u32 len + material | u8 cull (0=back,1=off)
+##   por malha: nome 32B | material 32B | u32 cull (0=back,1=off)
+##              u32 n_params
+##                por parâmetro: nome 32B | u8 tipo (0=f,1=v2,2=v3,3=v4,4=bool,5=textura)
+##                               4xf32 valor | texto do caminho (64B, só tipo 5)
 ##              12xf32 transform (basis.x, basis.y, basis.z, origin)
-##              u32 n_verts | n_verts x 9xf32 (pos, normal, cor)
+##              u32 n_verts | n_verts x 13xf32 (pos, normal, cor, uv, uv2)
 ##              u32 n_idx | n_idx x u32
+##
+## A versão 2 existe por causa da relva: sem o NÍVEL de cada vértice (UV2.x) e
+## sem os parâmetros reais do material, o rasterizador só podia adivinhar. Agora
+## ele lê os valores que o jogo usa — deixou de haver tabela copiada à mão em
+## tools/render_shot.py a divergir do GDScript.
 
 const CHUNK: int = 4000  # caracteres por linha de base64
 
@@ -96,7 +104,7 @@ func _run() -> void:
 
 	var buf := StreamPeerBuffer.new()
 	buf.put_data("BSH1".to_utf8_buffer())
-	buf.put_32(1)
+	buf.put_32(2)
 	buf.put_float(eye.x); buf.put_float(eye.y); buf.put_float(eye.z)
 	# basis da câmara: colunas = right, up, -fwd (Godot olha por -Z)
 	buf.put_float(right.x); buf.put_float(right.y); buf.put_float(right.z)
@@ -213,6 +221,60 @@ func _dist_point_aabb(p: Vector3, bb: AABB) -> float:
 	return Vector3(dx, dy, dz).length()
 
 
+## Escreve os parâmetros do material que o rasterizador precisa de conhecer.
+## São lidos do próprio ShaderMaterial (a lista de uniforms vem do shader), por
+## isso não há uma segunda tabela de valores a manter em dois sítios.
+func _write_material_params(buf: StreamPeerBuffer, mat: Material) -> void:
+	var entries: Array = []
+	var shader_material := mat as ShaderMaterial
+	if shader_material != null and shader_material.shader != null:
+		for uniform in shader_material.shader.get_shader_uniform_list(true):
+			var name := str(uniform["name"])
+			var value: Variant = shader_material.get_shader_parameter(name)
+			if value == null:
+				continue
+			var type := int(uniform["type"])
+			var kind := -1
+			var packed := [0.0, 0.0, 0.0, 0.0]
+			var text := ""
+			match type:
+				TYPE_FLOAT, TYPE_INT:
+					kind = 0
+					packed[0] = float(value)
+				TYPE_BOOL:
+					kind = 4
+					packed[0] = 1.0 if bool(value) else 0.0
+				TYPE_VECTOR2:
+					kind = 1
+					var v2: Vector2 = value
+					packed[0] = v2.x; packed[1] = v2.y
+				TYPE_VECTOR3:
+					kind = 2
+					var v3: Vector3 = value
+					packed[0] = v3.x; packed[1] = v3.y; packed[2] = v3.z
+				TYPE_COLOR:
+					kind = 3
+					var col: Color = value
+					packed[0] = col.r; packed[1] = col.g; packed[2] = col.b; packed[3] = col.a
+				TYPE_OBJECT:
+					if value is Texture2D:
+						kind = 5
+						text = Materials.texture_paths.get(
+							(value as Texture2D).get_instance_id(), "")
+			if kind < 0:
+				continue
+			entries.append({"name": name, "kind": kind, "v": packed, "path": text})
+	buf.put_32(entries.size())
+	for entry in entries:
+		_put_fixed(buf, str(entry["name"]), 32)
+		buf.put_u8(int(entry["kind"]))
+		var packed: Array = entry["v"]
+		for i in 4:
+			buf.put_float(float(packed[i]))
+		if int(entry["kind"]) == 5:
+			_put_fixed(buf, str(entry["path"]), 64)
+
+
 ## Expande um MultiMesh (relva/arvores) e junta as instancias proximas numa
 ## unica malha, com a tinta da instancia como cor de vertice. Limitado para o
 ## dump nao crescer sem limite.
@@ -220,11 +282,25 @@ func _write_multimesh(buf: StreamPeerBuffer, mi: MultiMeshInstance3D) -> bool:
 	var mm: MultiMesh = mi.multimesh
 	if mm == null or mm.mesh == null or mm.instance_count == 0:
 		return false
+	# O servidor "dummy" do headless não guarda os buffers do MultiMesh: as
+	# transmissões lêem-se da cópia que os construtores deixam nos metadados
+	# (scripts/core/shot_meta.gd). Sem isto não havia cartas de relva no dump.
+	var espelho := ShotMeta.has(mi)
+	var inst_count := ShotMeta.count(mi) if espelho else mm.instance_count
 	var arr: Array = mm.mesh.surface_get_arrays(0)
 	var lv: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
 	var ln := PackedVector3Array()
 	if arr[Mesh.ARRAY_NORMAL] is PackedVector3Array:
 		ln = arr[Mesh.ARRAY_NORMAL]
+	var uvs := PackedVector2Array()
+	if arr[Mesh.ARRAY_TEX_UV] is PackedVector2Array:
+		uvs = arr[Mesh.ARRAY_TEX_UV]
+	var uv2s := PackedVector2Array()
+	if arr[Mesh.ARRAY_TEX_UV2] is PackedVector2Array:
+		uv2s = arr[Mesh.ARRAY_TEX_UV2]
+	var vcols := PackedColorArray()
+	if arr[Mesh.ARRAY_COLOR] is PackedColorArray:
+		vcols = arr[Mesh.ARRAY_COLOR]
 	var lidx := PackedInt32Array()
 	if arr[Mesh.ARRAY_INDEX] is PackedInt32Array:
 		lidx = arr[Mesh.ARRAY_INDEX]
@@ -235,20 +311,44 @@ func _write_multimesh(buf: StreamPeerBuffer, mi: MultiMeshInstance3D) -> bool:
 	var norms := PackedVector3Array()
 	var cols := PackedColorArray()
 	var idx := PackedInt32Array()
+	var _inst_uv2 := PackedVector2Array()
+	# Orçamento de vértices por MultiMesh. As instâncias são ordenadas pela
+	# distância ao olho e corta-se pelo MAIS LONGE: numa malha de relva com 2500
+	# tufos, ficar com os primeiros por ordem de grelha dava uma cunha de cartas
+	# (metade da imagem vazia) — que foi exactamente o que se viu no dump v2.
 	var maxv := 24000
 	var used := 0
-	for i in mm.instance_count:
-		if used + lv.size() > maxv:
+	var near: Array = []
+	for i in inst_count:
+		var it := gt * (ShotMeta.transform_at(mi, i) if espelho else mm.get_instance_transform(i))
+		var d := it.origin.distance_to(_eye)
+		if d <= _radius + 8.0:
+			near.append({"i": i, "d": d})
+	near.sort_custom(func(x, y): return float(x["d"]) < float(y["d"]))
+	var keep: Array = []
+	var budget := 0
+	for entry in near:
+		if budget + lv.size() > maxv:
 			break
-		var it := gt * mm.get_instance_transform(i)
-		if it.origin.distance_to(_eye) > _radius + 8.0:
-			continue
-		var tint := mm.get_instance_custom_data(i)
+		budget += lv.size()
+		keep.append(int(entry["i"]))
+	if keep.is_empty():
+		return false
+	for i in keep:
+		var it := gt * (ShotMeta.transform_at(mi, i) if espelho else mm.get_instance_transform(i))
+		var tint := ShotMeta.custom_at(mi, i) if espelho else mm.get_instance_custom_data(i)
+		var inst_col := ShotMeta.color_at(mi, i) if espelho \
+			else (mm.get_instance_color(i) if mm.use_colors else Color.WHITE)
 		var base := used
 		for v in lv.size():
+			var vc := (vcols[v] if vcols.size() == lv.size() else Color.WHITE) * inst_col
 			verts.append(it * lv[v])
 			norms.append((it.basis * (ln[v] if ln.size() == lv.size() else Vector3.UP)).normalized())
-			cols.append(Color(tint.r, tint.g, tint.b, 1.0) if tint != Color(0,0,0,0) else Color.WHITE)
+			# COLOR é a cor de vértice (como no motor); o custom por instância
+			# (seca/variação) vai no UV2, que estes cartões não usam — o
+			# rasterizador precisa dos dois para avaliar o mesmo que o shader.
+			cols.append(Color(vc.r, vc.g, vc.b, 1.0))
+			_inst_uv2.append(Vector2(tint.g, tint.r))
 		if lidx.size() > 0:
 			for q in lidx.size():
 				idx.append(base + int(lidx[q]))
@@ -256,12 +356,16 @@ func _write_multimesh(buf: StreamPeerBuffer, mi: MultiMeshInstance3D) -> bool:
 			for q in lv.size():
 				idx.append(base + q)
 		used += lv.size()
-	if used == 0:
-		return false
+
 	var mat_name := "toon_foliage.gdshader"
+	if mi.material_override is ShaderMaterial:
+		var override_shader: Shader = (mi.material_override as ShaderMaterial).shader
+		if override_shader != null:
+			mat_name = override_shader.resource_path.get_file()
 	_put_fixed(buf, mi.name, 32)
 	_put_fixed(buf, mat_name, 32)
 	buf.put_32(0)
+	_write_material_params(buf, mi.material_override)
 	var b := gt.basis
 	buf.put_float(b.x.x); buf.put_float(b.x.y); buf.put_float(b.x.z)
 	buf.put_float(b.y.x); buf.put_float(b.y.y); buf.put_float(b.y.z)
@@ -272,6 +376,10 @@ func _write_multimesh(buf: StreamPeerBuffer, mi: MultiMeshInstance3D) -> bool:
 		buf.put_float(verts[v].x); buf.put_float(verts[v].y); buf.put_float(verts[v].z)
 		buf.put_float(norms[v].x); buf.put_float(norms[v].y); buf.put_float(norms[v].z)
 		buf.put_float(cols[v].r); buf.put_float(cols[v].g); buf.put_float(cols[v].b)
+		buf.put_float(uvs[v].x if uvs.size() == verts.size() else 0.0)
+		buf.put_float(uvs[v].y if uvs.size() == verts.size() else 0.0)
+		buf.put_float(_inst_uv2[v].x if _inst_uv2.size() == verts.size() else 0.0)
+		buf.put_float(_inst_uv2[v].y if _inst_uv2.size() == verts.size() else 0.0)
 	buf.put_32(idx.size())
 	for q in idx.size():
 		buf.put_32(int(idx[q]))
@@ -302,6 +410,7 @@ func _write_mesh(buf: StreamPeerBuffer, mi: MeshInstance3D) -> bool:
 	_put_fixed(buf, mi.name, 32)
 	_put_fixed(buf, mat_name, 32)
 	buf.put_32(cull)
+	_write_material_params(buf, mat)
 	buf.put_float(b.x.x); buf.put_float(b.x.y); buf.put_float(b.x.z)
 	buf.put_float(b.y.x); buf.put_float(b.y.y); buf.put_float(b.y.z)
 	buf.put_float(b.z.x); buf.put_float(b.z.y); buf.put_float(b.z.z)
@@ -319,6 +428,12 @@ func _write_mesh(buf: StreamPeerBuffer, mi: MeshInstance3D) -> bool:
 	var idx := PackedInt32Array()
 	if arr[Mesh.ARRAY_INDEX] is PackedInt32Array:
 		idx = arr[Mesh.ARRAY_INDEX]
+	var uvs := PackedVector2Array()
+	if arr[Mesh.ARRAY_TEX_UV] is PackedVector2Array:
+		uvs = arr[Mesh.ARRAY_TEX_UV]
+	var uv2s := PackedVector2Array()
+	if arr[Mesh.ARRAY_TEX_UV2] is PackedVector2Array:
+		uv2s = arr[Mesh.ARRAY_TEX_UV2]
 	if verts.size() == 0:
 		return false
 	var has_cols: bool = cols.size() == verts.size()
@@ -336,6 +451,10 @@ func _write_mesh(buf: StreamPeerBuffer, mi: MeshInstance3D) -> bool:
 		if has_cols:
 			col = cols[i]
 		buf.put_float(col.r); buf.put_float(col.g); buf.put_float(col.b)
+		buf.put_float(uvs[i].x if uvs.size() == verts.size() else 0.0)
+		buf.put_float(uvs[i].y if uvs.size() == verts.size() else 0.0)
+		buf.put_float(uv2s[i].x if uv2s.size() == verts.size() else 0.0)
+		buf.put_float(uv2s[i].y if uv2s.size() == verts.size() else 0.0)
 
 	buf.put_32(idx.size())
 	if idx.size() > 0:
