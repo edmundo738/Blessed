@@ -73,7 +73,15 @@ Regra: se um recurso não tem **fonte no mundo**, **estações que o usam** e
 |---|---|---|---|
 | **Criação** | no inventário, em qualquer sítio | o improviso: o que se faz **agora**, com o que está no chão | nada que precise de bancada |
 | **Bancada** | objeto no mundo; F abre a bancada | ferramentas que duram, mobiliário, peças de construção | cozinhar |
-| **Fogueira** | objeto no mundo; F acende, F abre | luz, calor, cozinhar, **ferver água**, afastar criaturas | trabalhar pedra |
+| **Fogueira** | objeto no mundo; F acende, F alimenta, F abre | luz, calor, cozinhar, **ferver água**, afastar criaturas | trabalhar pedra |
+
+**O fogo gasta-se** (`data/fire.json`): uma carga são **5 h de jogo** e cada
+**madeira** vale **+1,4 h** (F com a fogueira acesa). Aos 60 minutos de jogo
+restantes a HUD avisa ("a fogueira está a morrer"); a zero, a luz e as chamas
+saem e o `near_fire` desaparece — o sono no chão piora e as criaturas voltam.
+Dormir também **queima o combustível** (`structures.burn_hours(horas)`), por
+isso uma noite longa com uma fogueira mal alimentada acaba em cinzas. Sem isto
+o fogo era uma lâmpada laranja permanente e não havia razão para juntar lenha.
 | **Cama / Cadeira** | objeto no mundo | descanso — a passagem do tempo (cama) e a energia (cadeira) | — |
 | **Cofre** | objeto no mundo | guardar (a mochila tem 24 slots) | — |
 

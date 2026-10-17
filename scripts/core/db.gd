@@ -218,6 +218,15 @@ func max_stack(id: String) -> int:
 ##
 ## Sem data/sleep.json há uma reserva sensata — mas o JSON manda, para se poder
 ## afinar o sono sem recompilar nada.
+## Um número de data/fire.json, com reserva. O fogo não pode depender de o
+## ficheiro estar lá para o jogo arrancar.
+func fire_num(key: String, fallback: float) -> float:
+	var sec: Dictionary = fire_cfg.get("campfire", {})
+	if not sec.has(key):
+		return fallback
+	return float(sec[key])
+
+
 func sleep_quality(place: String) -> float:
 	var places = sleep_cfg.get("places", {})
 	if typeof(places) == TYPE_DICTIONARY and (places as Dictionary).has(place):
@@ -319,6 +328,7 @@ var species_cfg: Dictionary = {}
 ## custo em fome/sede. O desenho do projeto é chão (mau) → cadeira (cochilo) →
 ## cama (boa); aqui ficam os números, para se afinarem sem tocar em código.
 var sleep_cfg: Dictionary = {}
+var fire_cfg: Dictionary = {}
 var _biome_idx: Dictionary = {}
 
 
@@ -336,6 +346,7 @@ func reload_data() -> void:
 	terrain_cfg = _json_dict("res://data/terrain.json")
 	quality_cfg = _json_dict("res://data/quality.json")
 	sleep_cfg = _json_dict("res://data/sleep.json")
+	fire_cfg = _json_dict("res://data/fire.json")
 	species_cfg = _json_dict("res://data/species.json")
 	var rc := _json_dict("res://data/recipes.json")
 	var lista = rc.get("recipes", [])
@@ -350,6 +361,8 @@ func reload_data() -> void:
 	station_labels = labs if typeof(labs) == TYPE_DICTIONARY else {}
 	_rebuild_biome_idx()
 	_apply_mods()
+	print("[Db] fogo: %.1f h por carga, +%.1f h por madeira" % [
+		fire_num("hours_per_load", 5.0), fire_num("wood_hours", 1.4)])
 	print("[Db] data-driven: biomas=%d | terrain=%d chaves | quality=%s | espécies=%d | receitas=%d" % [
 		biomes.size(), terrain_cfg.size(),
 		"sim" if not quality_cfg.is_empty() else "não", _count_species(), all_recipes().size()])

@@ -428,8 +428,8 @@ func prompt_key() -> String:
 			return "prompt." + str(spec.get("action", "pick"))
 		"structure":
 			var e: Dictionary = focus["ref"]
-			if str(e["id"]) == "campfire" and not bool(e.get("lit", false)):
-				return "prompt.light"
+			if str(e["id"]) == "campfire":
+				return "prompt.feed" if bool(e.get("lit", false)) else "prompt.light"
 			if str(e["id"]) == "bed":
 				return "prompt.rest"
 			if str(e["id"]) == "chair":
@@ -481,6 +481,10 @@ func _do_interact(_a: Dictionary) -> Dictionary:
 			_take_felled_log()
 		"structure":
 			var e: Dictionary = focus["ref"]
+			if str(e["id"]) == "campfire" and bool(e.get("lit", false)):
+				# Fogo aceso: mete-se madeira. Sem isto a fogueira era uma
+				# lâmpada permanente e não havia razão para juntar lenha.
+				return _feed_fire(e)
 			if str(e["id"]) == "campfire" and not bool(e.get("lit", false)):
 				# Acender fogo não é um botão mágico: é preciso um isqueiro
 				# primitivo (sílex + pedra + fibra, feito na Criação).
@@ -590,6 +594,10 @@ func _start_sleep(entry: Dictionary, place: String, short: bool = false) -> void
 	# O TEMPO passa aqui — e cobra-se (fome, sede) em `survival`.
 	var res := survival.nap(quality, context) if short \
 		else survival.sleep_until_morning(quality, context)
+	# O fogo também queima enquanto se dorme. Sem esta linha, o fogo seria o
+	# único sistema do jogo a quem a noite não passa.
+	if structures != null:
+		structures.burn_hours(float(res.get("hours", 0.0)))
 	await get_tree().create_timer(0.3 if short else 0.45).timeout
 	await _sleep_fade(0.0, 0.5 if short else 0.75)
 	await _sleep_pose(false, short)
@@ -672,6 +680,21 @@ func _use_chest(e: Dictionary) -> void:
 		Sfx.play("ui_click", -10.0, 1.05)
 		return
 	Bus.ui_message.emit(Loc.t("msg.chest_empty"), 1.6)
+
+
+## Alimentar uma fogueira acesa: uma unidade de madeira por vez. Devolve o
+## combustível que ficou (em horas) para o teste e para o HUD.
+func _feed_fire(e: Dictionary) -> Dictionary:
+	if inv == null or inv.count("wood") < 1:
+		if _tool_hint_t <= 0.0:
+			_tool_hint_t = 3.0
+			Bus.ui_message.emit(Loc.t("msg.need_wood"), 2.5)
+		return {"failed": true, "reason": "no_wood"}
+	inv.remove("wood", 1)
+	var left := structures.feed(e)
+	Bus.ui_message.emit(Loc.t("msg.fire_fed", {"h": "%.1f" % left}), 2.5)
+	Sfx.play("craft", -14.0, 0.8)
+	return {"ok": true, "fuel": left}
 
 
 ## Sentar numa cadeira: um cochilo, não uma noite. Passa uma hora e meia, não

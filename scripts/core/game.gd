@@ -187,6 +187,13 @@ func _build_input_map() -> void:
 # ══════════════════════════════════════════════════════════════════════════
 #  TEMPO / FASES DO DIA
 # ══════════════════════════════════════════════════════════════════════════
+## Quanto tempo de JOGO passa num segundo real. O fogo e o sono têm de usar a
+## mesma régua do relógio — senão um dia dura 10 minutos na HUD e outra coisa
+## no mundo.
+func hours_per_second() -> float:
+	return 24.0 / DAY_SECONDS
+
+
 func _process(delta: float) -> void:
 	if paused or not started:
 		return

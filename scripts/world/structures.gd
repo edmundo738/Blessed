@@ -26,11 +26,26 @@ func _ready() -> void:
 ## Fogo vivo: a luz de uma fogueira não é uma lâmpada. Sem este tremer, a
 ## fogueira ficava com luz fixa e o efeito era o de uma lâmpada laranja no chão
 ## — uma das razões de o fogo parecer mal feito.
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if list.is_empty():
 		return
 	var t := float(Time.get_ticks_msec()) * 0.001
+	# Combustível: um fogo aceso gasta-se em horas de jogo, não em segundos.
+	var spent := delta * Game.hours_per_second()
 	for e in list:
+		# (o laço abaixo salta entradas sem luz; o combustível é tratado antes
+		#  para uma fogueira sem luz — qualidade baixa — não ficar eterna)
+		if str(e["id"]) == "campfire" and bool(e.get("lit", false)):
+			var fuel := float(e.get("fuel", 0.0)) - spent
+			e["fuel"] = fuel
+			if fuel <= 0.0:
+				_burn_out(e)
+				continue
+			var warn := Db.fire_num("warn_hours", 1.0)
+			if fuel <= warn and not bool(e.get("warned", false)):
+				e["warned"] = true
+				var at: Vector3 = e.get("pos", Vector3.ZERO)
+				_whisper(at, Loc.t("msg.fire_low"), 3.0)
 		var l: OmniLight3D = e.get("light")
 		if l == null or not is_instance_valid(l):
 			continue
@@ -57,6 +72,10 @@ func setup(p_species: SpeciesKit, p_mats: Materials) -> void:
 
 func place(id: String, pos: Vector3, rot_y: float, lit: bool = false) -> Dictionary:
 	var entry := {"id": id, "pos": pos, "rot": rot_y, "lit": lit, "node": null, "light": null}
+	if id == "campfire" and lit:
+		# Pousada já acesa (save/carregamento): tem de trazer combustível,
+		# senão apagava-se no primeiro frame.
+		entry["fuel"] = Db.fire_num("hours_per_load", 5.0)
 	_spawn(entry)
 	list.append(entry)
 	Bus.structure_placed.emit(id, pos)
@@ -76,9 +95,68 @@ func remove(entry: Dictionary) -> void:
 
 func light(entry: Dictionary) -> void:
 	entry["lit"] = true
+	entry["fuel"] = Db.fire_num("hours_per_load", 5.0)
+	entry["warned"] = false
 	if is_instance_valid(entry.get("node")):
 		_attach_light(entry)
 	Game.bump("light_campfire")
+
+
+## Meter madeira no fogo. Devolve as horas que a fogueira passou a ter; 0 se
+## não estava acesa.
+func feed(entry: Dictionary) -> float:
+	if not bool(entry.get("lit", false)):
+		return 0.0
+	var gain := Db.fire_num("wood_hours", 1.4)
+	entry["fuel"] = float(entry.get("fuel", 0.0)) + gain
+	entry["warned"] = false
+	return float(entry["fuel"])
+
+
+## Consumir horas de jogo de uma vez (dormir, viajar, esperar). Uma fogueira
+## sem combustível suficiente apaga-se a meio da noite — é esse risco que faz
+## valer a pena juntar madeira antes de dormir.
+func burn_hours(hours: float) -> void:
+	for e in list:
+		if str(e["id"]) != "campfire" or not bool(e.get("lit", false)):
+			continue
+		var fuel := float(e.get("fuel", 0.0)) - maxf(0.0, hours)
+		e["fuel"] = fuel
+		if fuel <= 0.0:
+			_burn_out(e, false)
+
+
+## Apagar a fogueira: tira a luz, as chamas e o som. `tell` só avisa se o
+## jogador estiver perto (uma fogueira a morrer do outro lado do mapa não é
+## assunto dele).
+func _burn_out(entry: Dictionary, tell: bool = true) -> void:
+	if not bool(entry.get("lit", false)):
+		return
+	entry["lit"] = false
+	entry["fuel"] = 0.0
+	entry["warned"] = false
+	var l: Node = entry.get("light")
+	if is_instance_valid(l):
+		l.queue_free()
+	entry["light"] = null
+	var node: Node = entry.get("node")
+	if is_instance_valid(node):
+		var vfx := node.get_node_or_null("CampfireVfx")
+		if vfx != null:
+			vfx.queue_free()
+	if lit_positions().is_empty():
+		Sfx.stop_loop("fire")
+	if tell:
+		var at: Vector3 = entry.get("pos", Vector3.ZERO)
+		_whisper(at, Loc.t("msg.fire_out"), 3.0)
+
+
+## Aviso de mundo: só chega ao jogador se ele estiver ao pé.
+func _whisper(pos: Vector3, text: String, secs: float) -> void:
+	var p := get_tree().get_first_node_in_group("player") as Node3D
+	if p == null or p.global_position.distance_to(pos) > Db.fire_num("near_radius", 14.0):
+		return
+	Bus.ui_message.emit(text, secs)
 
 
 func _spawn(entry: Dictionary) -> void:
@@ -328,7 +406,8 @@ func save_data() -> Dictionary:
 	var out := []
 	for e in list:
 		out.append({"id": str(e["id"]), "pos": [e["pos"].x, e["pos"].y, e["pos"].z],
-			"rot": float(e["rot"]), "lit": bool(e.get("lit", false))})
+			"rot": float(e["rot"]), "lit": bool(e.get("lit", false)),
+			"fuel": float(e.get("fuel", 0.0))})
 	return {"items": out}
 
 
@@ -338,4 +417,9 @@ func load_data(d: Dictionary) -> void:
 	var arr: Array = d.get("items", [])
 	for it in arr:
 		var p: Array = it["pos"]
-		place(str(it["id"]), Vector3(p[0], p[1], p[2]), float(it["rot"]), bool(it.get("lit", false)))
+		var made := place(str(it["id"]), Vector3(p[0], p[1], p[2]), float(it["rot"]),
+			bool(it.get("lit", false)))
+		# O combustível de uma fogueira acesa tem de sobreviver ao save: se não,
+		# carregar o jogo apagava-a ou dava-lhe uma carga nova de graça.
+		if made.has("fuel") and it.has("fuel"):
+			made["fuel"] = float(it["fuel"])

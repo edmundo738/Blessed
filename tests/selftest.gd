@@ -1000,6 +1000,38 @@ func _run() -> void:
 	check("com isqueiro primitivo a fogueira acende", bool(fogueira.get("lit", false)))
 	check("a fogueira acesa é estação de cozinha",
 		"campfire" in main.structures.stations_near(fogueira["pos"], 4.5))
+	# Um fogo sem combustível é uma lâmpada. Tem de gastar-se e de se alimentar.
+	check("acesa, a fogueira tem combustível medido em horas de jogo",
+		float(fogueira.get("fuel", 0.0)) > 0.5,
+		"fuel=%.2f h" % float(fogueira.get("fuel", 0.0)))
+	var wood_before := inv.count("wood")
+	var fuel_before := float(fogueira.get("fuel", 0.0))
+	it.focus = {"kind": "structure", "ref": fogueira, "pos": fogueira["pos"]}
+	var fed: Dictionary = it._do_interact({})
+	check("alimentar o fogo gasta madeira e dá horas",
+		bool(fed.get("ok", false)) and inv.count("wood") == wood_before - 1
+		and float(fogueira.get("fuel", 0.0)) > fuel_before,
+		"madeira %d→%d fuel %.1f→%.1f" % [wood_before, inv.count("wood"),
+			fuel_before, float(fogueira.get("fuel", 0.0))])
+	# e sem madeira diz porquê, em vez de não fazer nada
+	var wood_now := inv.count("wood")
+	inv.remove("wood", wood_now)
+	var sem_lenha: Dictionary = it._do_interact({})
+	check("sem madeira a fogueira não é alimentada (e diz porquê)",
+		str(sem_lenha.get("reason", "")) == "no_wood", "reason=%s" % str(sem_lenha.get("reason", "-")))
+	inv.add("wood", wood_now)
+	# uma segunda fogueira serve para provar o fim do combustível sem apagar
+	# a que os testes seguintes usam como estação
+	var morre: Dictionary = main.structures.place("campfire",
+		main.player.global_position + Vector3(-3.0, 0.0, 0.0), 0.0, true)
+	var vfx_antes := (morre["node"] as Node).get_node_or_null("CampfireVfx") != null
+	main.structures.burn_hours(float(morre.get("fuel", 0.0)) + 0.1)
+	check("sem combustível a fogueira apaga-se (luz e chamas saem)",
+		vfx_antes and not bool(morre.get("lit", true)) and morre.get("light") == null,
+		"lit=%s" % str(morre.get("lit", true)))
+	check("a fogueira que se apagou sai do calor do mundo",
+		not main.structures.lit_positions().has(morre["pos"]))
+	main.structures.remove(morre)
 	# A chama tem de ser feita de CAMADAS: uma camada só é um cone laranja, que
 	# era exactamente o que fazia o fogo parecer mal feito.
 	var vfx := (fogueira["node"] as Node).get_node_or_null("CampfireVfx")
@@ -1463,7 +1495,8 @@ func _run() -> void:
 	# como "msg.sleep_bed" em cru no ecrã.
 	var missing_locale: Array = []
 	for key in ["msg.sleeping", "msg.sleep_bed", "msg.sleep_ground", "msg.cant_sleep",
-			"prompt.sleep", "msg.nap_done", "msg.dehydrated", "msg.sea_water", "item.water_salt"]:
+			"prompt.sleep", "msg.nap_done", "prompt.feed", "msg.fire_fed",
+			"msg.fire_low", "msg.fire_out", "msg.need_wood", "msg.dehydrated", "msg.sea_water", "item.water_salt"]:
 		if Loc.t(key) == key:
 			missing_locale.append(key)
 	check("os textos do sono e da água existem no idioma ativo",
