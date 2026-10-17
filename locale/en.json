@@ -150,6 +150,7 @@
   "msg.water_salt_filled": "You filled the bottle with sea water. You can't drink this (not even boiled).",
   "msg.sea_water": "Sea water: the thirst eases for a moment — then it charges you back.",
   "msg.dehydrated": "Dehydration: the salt pulls the water out of you. Drink fresh water.",
+  "msg.nap_done": "You dozed for %s h. Enough to stand — the night is still outside.",
   "msg.sleeping": "You lie down. The world carries on outside.",
   "msg.sleep_bed": "You slept until morning. You wake up whole.",
   "msg.sleep_ground": "You slept on the ground. Your back remembers.",

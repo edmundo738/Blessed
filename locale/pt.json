@@ -150,6 +150,7 @@
   "msg.water_salt_filled": "Encheste a garrafa no mar. Isto não se bebe (nem fervido).",
   "msg.sea_water": "Água do mar: a sede passa por um instante — e volta a cobrar-se.",
   "msg.dehydrated": "Desidratação: o sal puxa-te a água do corpo. Bebe água doce.",
+  "msg.nap_done": "Cochilaste %s h. Já te aguentas de pé — mas a noite continua lá fora.",
   "msg.sleeping": "Deitaste-te. O mundo continua lá fora.",
   "msg.sleep_bed": "Dormiste até de manhã. Acordas inteiro.",
   "msg.sleep_ground": "Dormiste no chão. As costas lembram-se.",

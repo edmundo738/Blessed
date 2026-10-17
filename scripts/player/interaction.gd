@@ -555,7 +555,7 @@ func _do_sleep(_a: Dictionary) -> Dictionary:
 
 
 ## Arranca a sequência. `entry` vazio = chão; com entrada = deitar no leito.
-func _start_sleep(entry: Dictionary, place: String) -> void:
+func _start_sleep(entry: Dictionary, place: String, short: bool = false) -> void:
 	if sleeping or survival == null or not survival.alive:
 		return
 	# Com uma criatura a rondar, o corpo não deixa: o medo é a única coisa que
@@ -585,30 +585,34 @@ func _start_sleep(entry: Dictionary, place: String) -> void:
 		context += Db.sleep_num("context", "sheltered", 0.20)
 	Bus.ui_message.emit(Loc.t("msg.sleeping"), 2.0)
 	Sfx.play("ui_click", -14.0, 0.7)
-	await _sleep_pose(true)
-	await _sleep_fade(1.0, 0.55)
-	# O TEMPO passa aqui — e cobra-se (fome, sede) em `sleep_until_morning`.
-	var res := survival.sleep_until_morning(quality, context)
-	await get_tree().create_timer(0.45).timeout
-	await _sleep_fade(0.0, 0.75)
-	await _sleep_pose(false)
+	await _sleep_pose(true, short)
+	await _sleep_fade(1.0, 0.35 if short else 0.55)
+	# O TEMPO passa aqui — e cobra-se (fome, sede) em `survival`.
+	var res := survival.nap(quality, context) if short \
+		else survival.sleep_until_morning(quality, context)
+	await get_tree().create_timer(0.3 if short else 0.45).timeout
+	await _sleep_fade(0.0, 0.5 if short else 0.75)
+	await _sleep_pose(false, short)
 	player.enabled = true
 	sleeping = false
-	Bus.say("msg.sleep_bed" if place == "bed" else "msg.sleep_ground", 3.0)
+	if short:
+		Bus.ui_message.emit(Loc.t("msg.nap_done", {"h": "%.1f" % float(res.get("hours", 0.0))}), 3.0)
+	else:
+		Bus.say("msg.sleep_bed" if place == "bed" else "msg.sleep_ground", 3.0)
 	Sfx.play("ui_click", -12.0, 1.0)
 	slept.emit(float(res.get("quality", quality)), place)
 
 
 ## Deita/levanta: a câmara desce até ao chão e volta à altura dos olhos.
-func _sleep_pose(down: bool) -> void:
+func _sleep_pose(down: bool, short: bool = false) -> void:
 	if player == null or player.cam_pivot == null:
 		return
 	if _eye_y < 0.0:
 		_eye_y = player.cam_pivot.position.y
-	var target := 0.42 if down else _eye_y
+	var target := (0.62 if short else 0.42) if down else _eye_y
 	var t := create_tween()
 	t.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	t.tween_property(player.cam_pivot, "position:y", target, 0.75)
+	t.tween_property(player.cam_pivot, "position:y", target, 0.4 if short else 0.75)
 	await t.finished
 
 
@@ -670,13 +674,11 @@ func _use_chest(e: Dictionary) -> void:
 	Bus.ui_message.emit(Loc.t("msg.chest_empty"), 1.6)
 
 
-## Sentar numa cadeira: descansa sem deitar (não passa o tempo, recupera
-## energia e cabeça). É para isso que serve o mobiliário.
+## Sentar numa cadeira: um cochilo, não uma noite. Passa uma hora e meia, não
+## acorda de manhã e paga fome e sede como qualquer sono. A cadeira serve para
+## aguentar a noite sem cama — não para a saltar.
 func _rest_in_chair() -> void:
-	survival.energy = minf(100.0, survival.energy + 14.0)
-	survival.sanity = minf(100.0, survival.sanity + 8.0)
-	Bus.ui_message.emit(Loc.t("msg.sit_down"), 2.0)
-	Sfx.play("ui_click", -12.0, 0.9)
+	_start_sleep({}, "chair", true)
 
 
 # ══════════════════════════════════════════════════════════════════════════

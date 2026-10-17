@@ -1105,10 +1105,15 @@ func _run() -> void:
 	var cadeira: Dictionary = main.structures.place("chair",
 		main.player.global_position + Vector3(0.0, 0.0, 3.0), 0.0, false)
 	sv.energy = 40.0
+	Game.hour = 2.0
 	it.focus = {"kind": "structure", "ref": cadeira, "pos": cadeira["pos"]}
 	it._do_interact({})
-	check("a cadeira descansa (serve para algo, não é enfeite)",
-		float(sv.energy) > 40.0, "energia %.1f" % float(sv.energy))
+	var prazo_cadeira := Time.get_ticks_msec() + 12000
+	while bool(it.sleeping) and Time.get_ticks_msec() < prazo_cadeira:
+		await get_tree().process_frame
+	check("a cadeira é um cochilo (recupera, mas não passa a noite)",
+		float(sv.energy) > 40.0 and float(Game.hour) < 5.0,
+		"energia %.1f, hora %.1f" % [float(sv.energy), float(Game.hour)])
 
 	# ── sono: chão (mau) / cadeira (cochilo) / cama (boa) ─────────────────
 	# A constituição é explícita: dormir não é "avançar o relógio". Tem de ser
@@ -1458,7 +1463,7 @@ func _run() -> void:
 	# como "msg.sleep_bed" em cru no ecrã.
 	var missing_locale: Array = []
 	for key in ["msg.sleeping", "msg.sleep_bed", "msg.sleep_ground", "msg.cant_sleep",
-			"prompt.sleep", "msg.dehydrated", "msg.sea_water", "item.water_salt"]:
+			"prompt.sleep", "msg.nap_done", "msg.dehydrated", "msg.sea_water", "item.water_salt"]:
 		if Loc.t(key) == key:
 			missing_locale.append(key)
 	check("os textos do sono e da água existem no idioma ativo",
