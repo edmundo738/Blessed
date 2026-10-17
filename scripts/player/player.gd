@@ -48,6 +48,7 @@ var target_lean := 0.0
 
 var bob_t := 0.0
 var bob_amp := 0.0
+var tremor := 0.0
 var step_phase := 0.0
 var coyote := 0.0
 var jump_buffer := 0.0
@@ -61,6 +62,9 @@ var wading := false
 var _surface_y := -100000.0
 var was_grounded := true
 var stamina := 100.0
+## O corpo do jogador (Survival). O Player não lê as barras — lê o estado do
+## corpo para tremer, respirar e arrastar-se. Quem o atribui é o main.
+var survival: Node
 var surface := "grass"
 var enabled := true
 
@@ -428,6 +432,17 @@ func _swim_check() -> void:
 
 
 # ── head bob / passos ─────────────────────────────────────────────────────
+## Quanto o corpo está a falhar (0 = inteiro, 1 = a cair). Fome e sono somam;
+## é a única coisa que o jogador precisa de "ler" para saber que está mal.
+func fatigue_level() -> float:
+	if survival == null:
+		return 0.0
+	var low_energy := clampf((35.0 - float(survival.get("energy"))) / 35.0, 0.0, 1.0)
+	var low_food := clampf((30.0 - float(survival.get("hunger"))) / 30.0, 0.0, 1.0)
+	var low_water := clampf((30.0 - float(survival.get("thirst"))) / 30.0, 0.0, 1.0)
+	return clampf(maxf(low_energy * 1.0, maxf(low_food * 0.6, low_water * 0.7)), 0.0, 1.0)
+
+
 func _head_bob(delta: float) -> void:
 	var spd := Vector3(velocity.x, 0, velocity.z).length()
 	var grounded := is_on_floor() and not swimming
@@ -450,6 +465,19 @@ func _head_bob(delta: float) -> void:
 			sin(bob_t) * amp * 0.35)
 		camera.rotation = Vector3.ZERO
 	lean_node.rotation.z += sin(bob_t) * 0.012 * bob_amp
+
+	# ── o corpo a falhar: tremor de mãos e pernas ────────────────────────
+	# Não é um aviso, é uma sensação: a câmara treme um pouco e a respiração
+	# entra no movimento. Some quando o jogador come/dorme/beber.
+	var fatigue := fatigue_level()
+	tremor = lerpf(tremor, fatigue, 1.0 - exp(-2.5 * delta))
+	if tremor > 0.001:
+		var tt := float(Time.get_ticks_msec()) * 0.001
+		lean_node.rotation.z += sin(tt * 9.3) * 0.0075 * tremor
+		cam_pivot.rotation.x += sin(tt * 7.1 + 1.3) * 0.0035 * tremor
+		cam_pivot.position.y += sin(tt * 2.2) * 0.012 * tremor
+		camera.fov = lerpf(camera.fov, float(Game.settings["fov"]) - 3.0 * tremor,
+			1.0 - exp(-3.0 * delta))
 
 	# passos no ponto certo do ciclo
 	if grounded and bob_amp > 0.12:

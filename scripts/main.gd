@@ -197,6 +197,8 @@ func _build_systems() -> void:
 	inv = Inventory.new()
 	add_child(inv)
 
+	player.survival = survival
+
 	interaction = Interaction.new()
 	interaction.player = player
 	interaction.world = world

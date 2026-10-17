@@ -172,6 +172,25 @@ func _build(name: String) -> AudioStreamWAV:
 		"scream":
 			a = _buf(1.0); _noise_into(a, 0.5); _one_pole(a, 1600.0)
 			_sweep_into(a, 900.0, 240.0, 0.5); _decay(a, 0.85)
+		"stomach":
+			# Gorgolejo grave: um deslize de frequência e duas bolhas curtas.
+			var st := _buf(0.55)
+			_sweep_into(st, 96.0, 48.0, 0.35)
+			for k in 2:
+				var at := int(RATE * (0.08 + 0.16 * k))
+				for i in int(RATE * 0.16):
+					if at + i < st.size():
+						var env := sin(PI * float(i) / (RATE * 0.16))
+						st[at + i] += sin(TAU * (70.0 - 18.0 * k) * float(i) / RATE) * 0.22 * env
+			_noise_into(st, 0.05)
+			_one_pole(st, 0.16)
+			_decay(st, 0.5)
+		"breath":
+			# Uma expiração: ruído suave, ataque curto e cauda longa.
+			var br := _buf(0.7)
+			_noise_into(br, 0.30)
+			_one_pole(br, 0.05)
+			_decay(br, 0.62)
 		"heartbeat":
 			a = _buf(0.9)
 			_sweep_into(a, 90.0, 45.0, 0.7)

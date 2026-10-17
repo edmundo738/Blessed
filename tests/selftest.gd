@@ -1152,8 +1152,10 @@ func _run() -> void:
 		rende_exausto < rende_fresco * 0.85,
 		"%.2f vs %.2f" % [rende_exausto, rende_fresco])
 	sv.energy = 50.0
-	check("o aviso de cansaço diz o que fazer (Z ou cama)",
-		Loc.t("msg.tired") != "msg.tired" and "Z" in Loc.t("msg.tired"))
+	var aviso_cansaco := Loc.t("msg.tired")
+	check("o aviso de cansaço é uma sensação, não uma instrução",
+		aviso_cansaco != "msg.tired" and not ("Z" in aviso_cansaco)
+		and not ("cama" in aviso_cansaco), aviso_cansaco)
 
 	# ── comida: cru vs cozinhado ──────────────────────────────────────────
 	# O risco não pode ser decorativo: tem de vir dos dados e de ser dito.
@@ -1164,6 +1166,99 @@ func _run() -> void:
 			float(Db.item("meat_cooked").get("risk", 0.0))])
 	var antes_comer := float(sv.hunger)
 	var comeu: Dictionary = sv.eat(12.0, 0.0, 0.0)
+	# ── sentir em vez de ler ─────────────────────────────────────────────
+	# A regra do dono: o texto confirma a ação, nunca entrega a solução.
+	# Se uma mensagem disser "cozinha para evitar" ou "carrega Z", isto falha.
+	var proibido := ["evitava", "cozinhar na fogueira", "Z no chão", "nem fervido",
+		"Bebe água doce", "Procura luz", "Junta-lhe madeira"]
+	var proibido_en := ["would have avoided", "cook it", "or sleep in a bed",
+		"not even boiled", "Drink fresh water", "Find light", "Add wood"]
+	var dicas: Array = []
+	for key in Loc.keys():
+		if not (key.begins_with("msg.") or key.begins_with("prompt.")
+				or key.begins_with("hud.")):
+			continue
+		var text := Loc.t(key)
+		for frase_pt in proibido:
+			if frase_pt in text:
+				dicas.append("%s → %s" % [key, frase_pt])
+		for frase_en in proibido_en:
+			if frase_en in text:
+				dicas.append("%s → %s" % [key, frase_en])
+	check("nenhuma mensagem entrega a solução ao jogador", dicas.is_empty(),
+		", ".join(dicas))
+
+	# e o corpo tem de se SENTIR: o véu da HUD recebe fome, sede, cansaço,
+	# frio e enjoo, e o jogador vê o estado em vez de o ler.
+	var hud: Node = main.hud
+	var veil: ColorRect = hud.fear_rect
+	var shader_code := ""
+	if veil != null and veil.material is ShaderMaterial:
+		shader_code = (veil.material as ShaderMaterial).shader.code
+	var veu_uniforms := ["hunger", "thirst", "fatigue", "cold", "sick"]
+	var faltam: Array = []
+	for u in veu_uniforms:
+		if not ("uniform float " + u) in shader_code:
+			faltam.append(u)
+	check("o véu da HUD sente fome, sede, cansaço, frio e enjoo", faltam.is_empty(),
+		", ".join(faltam))
+
+	sv.hunger = 5.0
+	sv.thirst = 5.0
+	sv.energy = 5.0
+	hud._paint_feeling()
+	var mat: ShaderMaterial = veil.material
+	var sente := [float(mat.get_shader_parameter("hunger")),
+		float(mat.get_shader_parameter("thirst")), float(mat.get_shader_parameter("fatigue"))]
+	check("com as barras em baixo o ecrã escurece de verdade",
+		sente[0] > 0.8 and sente[1] > 0.8 and sente[2] > 0.8, str(sente))
+	# e escurece mesmo: a cor do véu não pode ser clara (isso lia-se como
+	# neblina sobre a relva, o contrário de um corpo a falhar).
+	var tinta_escura := shader_code.contains("vec3 tint") and shader_code.contains("fear * 1.2")
+	check("o véu escurece em vez de clarear (nada de neblina)",
+		tinta_escura and shader_code.contains("dark = clamp(dark, 0.0, 0.88)"))
+	sv.hunger = 100.0
+	sv.thirst = 100.0
+	sv.energy = 100.0
+	hud._paint_feeling()
+	check("de barriga cheia o ecrã limpa",
+		float(mat.get_shader_parameter("hunger")) < 0.05
+		and float(mat.get_shader_parameter("fatigue")) < 0.05)
+
+	# o corpo treme antes de o jogo o dizer
+	sv.energy = 100.0
+	sv.hunger = 100.0
+	sv.thirst = 100.0
+	var fresco := float(main.player.fatigue_level())
+	sv.energy = 2.0
+	sv.hunger = 4.0
+	sv.thirst = 4.0
+	var a_cair := float(main.player.fatigue_level())
+	check("o corpo treme quando está a falhar (câmara e mãos)",
+		a_cair > 0.85 and fresco < 0.05, "fresco=%.2f a_cair=%.2f" % [fresco, a_cair])
+	sv.energy = 100.0
+	sv.hunger = 100.0
+	sv.thirst = 100.0
+
+	# os sons do corpo existem (ninguém os lê — ouvem-se)
+	check("há som de estômago e de respiração (avisos que não se leem)",
+		Sfx.stream("stomach") != null and Sfx.stream("breath") != null)
+
+	# comida estragada: enjoo adiado, não dano instantâneo
+	sv.illness = 0.0
+	var hp_antes_de_doente := float(sv.health)
+	var comeu_mal: Dictionary = sv.eat(5.0, 0.0, 1.0)
+	check("comida de risco dá enjoo (a factura vem depois, não no clique)",
+		bool(comeu_mal.get("sick", false)) and float(sv.sickness()) > 0.5
+		and float(sv.health) >= hp_antes_de_doente - 0.01,
+		"illness=%.2f hp=%.1f" % [float(sv.sickness()), float(sv.health)])
+	hud._paint_feeling()
+	var veu_doente := float(mat.get_shader_parameter("sick"))
+	check("o enjoo chega ao ecrã (verde a respirar)", veu_doente > 0.4,
+		"sick=%.2f" % veu_doente)
+	sv.illness = 0.0
+	hud._paint_feeling()
+
 	check("comer devolve o que aconteceu (para o jogo poder dizer)",
 		not bool(comeu.get("sick", true)) and float(sv.hunger) > antes_comer,
 		"hunger %.0f→%.0f" % [antes_comer, float(sv.hunger)])

@@ -6,6 +6,37 @@
 > O histórico de auditoria abaixo preserva resultados antigos; quando diferirem, prevalecem
 > este marco mais recente e `docs/AUDIT_2026-10-14.md`.
 
+## Etapa A concluída — o corpo sente-se em vez de se explicar (branch 49b92551)
+
+**Verificação: 224 ok, 0 falhas, 31 saltadas (SELFTEST_PASS).**
+
+O dono foi claro: *"as coisas podem ser descobertas pelo jogador, apenas vem o
+efeito"*. Esta etapa não acrescenta sistemas — muda a **linguagem** com que o
+jogo responde, e fá-lo em todo o lado de uma vez.
+
+- **O véu da HUD passou a ser o corpo.** `hud.gd::_vignette` tem uniformes para
+  fome, sede, cansaço, frio e enjoo. Todos **escurecem** as bordas (somar cor
+  clara lia-se como neblina sobre a relva — a primeira versão foi rejeitada por
+  isso e substituída). Cada um tem a sua cor escura: âmbar na fome, cinza na
+  sede, azul-gelo no frio, verde no enjoo. O cansaço fecha as pálpebras, com um
+  pulso duplo e lento.
+- **O corpo treme.** `player.fatigue_level()` junta fome+sede+sono; abaixo de
+  ~35 a câmara treme, o FOV aperta e a respiração entra no bob. Não há aviso
+  escrito para isto — sente-se.
+- **O corpo faz barulho.** `Sfx` ganhou `stomach` (gorgolejo a 45 de fome) e
+  `breath` (respiração a 30 de energia). São avisos que não se leem.
+- **Comer estragado passou a ser enjoo, não dano.** `survival.illness` sobe a
+  0,75 e cai em ~20 s, com dano lento (`0,22/s × illness`) e a vista verde a
+  respirar. O jogador vê a causa; ninguém lhe diz "cozinhar evitava isto".
+- **O texto deixou de entregar a solução.** 24 chaves nos dois idiomas foram
+  reescritas: a mensagem confirma o que aconteceu ("Bebeste do rio.", "As
+  pálpebras pesam."), nunca a estratégia. Um teste **falha** se voltar a
+  aparecer "cozinhar na fogueira", "Z no chão", "Junta-lhe madeira", etc.
+- **O fogo vê-se a morrer** antes de apagar: a luz e a chama encolhem com o
+  combustível e a chama fica mais nervosa. Deixa de ser binário.
+- **`tools/render_feel.py`** porta o shader para Python, para o efeito ser
+  provado com imagem em vez de afirmação. PNG: `docs/shots/04_corpo_a_falhar.png`.
+
 ## Marco mais recente — o SONO e o FOGO passam a ser sistemas (2026-10-17, tarde)
 
 **Verificação: 215 ok, 0 falhas, 31 saltadas (SELFTEST_PASS)**, incluindo o

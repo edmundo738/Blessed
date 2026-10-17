@@ -53,7 +53,17 @@ func _process(delta: float) -> void:
 		# ser um pisca-pisca regular.
 		var f := 0.86 + 0.10 * sin(t * 7.7) + 0.06 * sin(t * 17.3 + 1.7)
 		var base := float(species.structures[str(e["id"])].light) * 0.055 if species != null else 1.0
-		l.light_energy = maxf(0.35, base * f * 1.35)
+		# O combustível VÊ-SE: a chama e a luz encolhem, e a chama fica mais
+		# nervosa quando está a morrer. Sem isto, o fogo era binário (aceso/
+		# apagado) e o jogador só sabia que ia acabar por causa de um texto.
+		var full := maxf(0.5, Db.fire_num("hours_per_load", 5.0))
+		var life := clampf(float(e.get("fuel", full)) / full, 0.0, 1.0)
+		var flutter := 1.0 + (1.0 - life) * 0.22 * sin(t * 21.0)
+		l.light_energy = maxf(0.18, base * f * flutter * (0.45 + 0.55 * life))
+		var vfx := (e.get("node") as Node3D).get_node_or_null("CampfireVfx") as Node3D
+		if vfx != null:
+			var want_scale := 0.55 + 0.45 * life
+			vfx.scale = vfx.scale.lerp(Vector3.ONE * want_scale, 1.0 - exp(-2.0 * delta))
 		l.light_color = Color(1.0, 0.70 + 0.06 * sin(t * 9.1), 0.44 + 0.05 * sin(t * 13.3))
 		l.position.y = float(species.structures[str(e["id"])].size.y) * 0.7 + 0.30 \
 			+ 0.02 * sin(t * 11.0)

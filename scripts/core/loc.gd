@@ -64,6 +64,12 @@ func t(key: String, vars: Variant = null) -> String:
 	return _fill(s, vars)
 
 
+## Todas as chaves do idioma ativo. Serve para auditorias (por exemplo, garantir
+## que nenhuma mensagem voltou a dar a solução ao jogador em vez do efeito).
+func keys() -> Array:
+	return (_tables.get(code, {}) as Dictionary).keys()
+
+
 func has_key(key: String) -> bool:
 	return (_tables.get(code, {}) as Dictionary).has(key)
 
