@@ -1143,6 +1143,57 @@ func _run() -> void:
 	var prazo_cadeira := Time.get_ticks_msec() + 12000
 	while bool(it.sleeping) and Time.get_ticks_msec() < prazo_cadeira:
 		await get_tree().process_frame
+	check("a cadeira é um cochilo (recupera, mas não passa a noite)",
+		float(sv.energy) > 40.0 and float(Game.hour) < 5.0,
+		"energia %.1f, hora %.1f" % [float(sv.energy), float(Game.hour)])
+
+	# ── fome e sede ligadas ao fôlego (não são barras de rodapé) ─────────
+	sv.hunger = 100.0
+	sv.thirst = 100.0
+	sv.illness = 0.0
+	main.player.survival = sv
+	var folgo_cheio := float(main.player.stamina_reserve())
+	var recupera_cheio := float(main.player.stamina_recovery())
+	sv.hunger = 5.0
+	sv.thirst = 5.0
+	var folgo_vazio := float(main.player.stamina_reserve())
+	var recupera_vazio := float(main.player.stamina_recovery())
+	check("com fome e sede o corpo tem menos fôlego",
+		folgo_vazio < folgo_cheio * 0.55,
+		"cheio=%.0f vazio=%.0f" % [folgo_cheio, folgo_vazio])
+	check("esfomeado, o fôlego volta muito mais devagar",
+		recupera_vazio < recupera_cheio * 0.5,
+		"cheio=%.1f/s vazio=%.1f/s" % [recupera_cheio, recupera_vazio])
+
+	# bater com fome gasta mais e rende menos
+	sv.hunger = 100.0
+	sv.thirst = 100.0
+	var rende_cheio := float(sv.work_multiplier())
+	sv.hunger = 5.0
+	var rende_fome := float(sv.work_multiplier())
+	check("bater com fome rende menos do que bater alimentado",
+		rende_fome < rende_cheio * 0.82, "%.2f vs %.2f" % [rende_fome, rende_cheio])
+	sv.hunger = 100.0
+
+	# o esforço do dia entra na noite: dormir depois de um dia duro rende mais
+	Game.hour = 22.0
+	sv.energy = 20.0
+	sv.hunger = 80.0
+	sv.thirst = 80.0
+	var noite_parada: Dictionary = sv.sleep_until_morning(0.5, 0.0, 0.0)
+	var ganho_parado := float(noite_parada.get("energy", 0.0))
+	Game.hour = 22.0
+	sv.energy = 20.0
+	sv.hunger = 80.0
+	sv.thirst = 80.0
+	var noite_dura: Dictionary = sv.sleep_until_morning(0.5, 0.0, 100.0)
+	var ganho_duro := float(noite_dura.get("energy", 0.0))
+	check("um dia de esforço faz a noite render mais",
+		ganho_duro > ganho_parado * 1.12,
+		"parado=+%.0f duro=+%.0f" % [ganho_parado, ganho_duro])
+	check("o esforço fica registado no que o sono devolve",
+		float(noite_dura.get("exertion", 0.0)) > 0.9)
+
 	# ── energia: o cansaço tem de doer ───────────────────────────────────
 	sv.energy = 100.0
 	var rende_fresco := float(sv.work_multiplier())
@@ -1262,10 +1313,6 @@ func _run() -> void:
 	check("comer devolve o que aconteceu (para o jogo poder dizer)",
 		not bool(comeu.get("sick", true)) and float(sv.hunger) > antes_comer,
 		"hunger %.0f→%.0f" % [antes_comer, float(sv.hunger)])
-
-	check("a cadeira é um cochilo (recupera, mas não passa a noite)",
-		float(sv.energy) > 40.0 and float(Game.hour) < 5.0,
-		"energia %.1f, hora %.1f" % [float(sv.energy), float(Game.hour)])
 
 	# ── sono: chão (mau) / cadeira (cochilo) / cama (boa) ─────────────────
 	# A constituição é explícita: dormir não é "avançar o relógio". Tem de ser

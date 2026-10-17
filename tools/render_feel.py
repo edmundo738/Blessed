@@ -89,6 +89,7 @@ PRESETS = {
     "exhausted": dict(fatigue=0.95),
     "cold": dict(cold=0.9),
     "sick": dict(sick=0.8, thirst=0.4),
+    "hungry_thirsty": dict(hunger=0.9, thirst=0.92),
     "fear": dict(fear=0.7),
     "broken": dict(hunger=0.9, thirst=0.9, fatigue=0.95, cold=0.55, sick=0.6, fear=0.35),
 }

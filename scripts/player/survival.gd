@@ -231,7 +231,8 @@ func nap(quality: float, context: float = 0.0) -> Dictionary:
 	return _sleep_for(Db.sleep_num("hours", "nap", 1.5), quality, context)
 
 
-func sleep_until_morning(quality: float, context: float = 0.0) -> Dictionary:
+func sleep_until_morning(quality: float, context: float = 0.0,
+		exertion: float = 0.0) -> Dictionary:
 	var wake_at := Db.sleep_num("hours", "wake_at", 6.8)
 	var hours := fmod(wake_at - Game.hour + 24.0, 24.0)
 	if Game.hour > wake_at and Game.hour < 19.0:
@@ -240,11 +241,16 @@ func sleep_until_morning(quality: float, context: float = 0.0) -> Dictionary:
 	else:
 		hours = clampf(hours, Db.sleep_num("hours", "min", 3.0),
 			Db.sleep_num("hours", "max", 9.0))
-	return _sleep_for(hours, quality, context)
+	return _sleep_for(hours, quality, context, exertion)
 
 
-func _sleep_for(hours: float, quality: float, context: float = 0.0) -> Dictionary:
-	var q := clampf(quality + context, 0.05, 1.5)
+## `exertion` (0..100) é o esforço do dia: correr, cortar, carregar. Um dia
+## fisicamente duro rende mais sono — e um dia parado rende menos. É isto que
+## liga o corpo ao mundo em vez de deixar o sono ser um botão de tempo.
+func _sleep_for(hours: float, quality: float, context: float = 0.0,
+		exertion: float = 0.0) -> Dictionary:
+	var esforco := clampf(exertion / 100.0, 0.0, 1.0)
+	var q := clampf(quality + context + esforco * 0.18, 0.05, 1.5)
 	var energy_before := energy
 	var hunger_before := hunger
 	var thirst_before := thirst
@@ -264,7 +270,7 @@ func _sleep_for(hours: float, quality: float, context: float = 0.0) -> Dictionar
 	reset_warnings()
 	_emit_stats()
 	return {
-		"hours": h, "quality": q,
+		"hours": h, "quality": q, "exertion": esforco,
 		"energy": energy - energy_before,
 		"hunger": hunger - hunger_before,
 		"thirst": thirst - thirst_before,
@@ -345,6 +351,10 @@ func work_multiplier() -> float:
 		m *= 1.45
 	if hunger < 25.0:
 		m *= 0.8
+	if thirst < 20.0:
+		m *= 0.88
+	if illness > 0.2:
+		m *= 0.85
 	if health < 40.0:
 		m *= 0.85
 	# Sem isto, a energia era um número decorativo: cortar 20 árvores a pé

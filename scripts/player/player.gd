@@ -49,6 +49,9 @@ var target_lean := 0.0
 var bob_t := 0.0
 var bob_amp := 0.0
 var tremor := 0.0
+## Esforço acumulado (correr, saltar, trepar). O sono lê-o para decidir
+## quanto cansaço houve nesse dia; não é uma barra, é um histórico.
+var exertion := 0.0
 var step_phase := 0.0
 var coyote := 0.0
 var jump_buffer := 0.0
@@ -314,7 +317,7 @@ func _move_land(delta: float, wish: Vector3) -> void:
 		_animate_eye(h)
 
 	# sprint só com fôlego e a andar para a frente
-	var has_stamina := stamina > 2.0
+	var has_stamina := stamina > 2.0 and stamina < stamina_reserve() - 4.0
 	sprinting = Input.is_action_pressed("sprint") and not crouching \
 		and wish.z < -0.2 and has_stamina and is_on_floor() and not wading  # frente é -Z
 	var target_speed := WALK
@@ -338,11 +341,14 @@ func _move_land(delta: float, wish: Vector3) -> void:
 	velocity.x = flat.x
 	velocity.z = flat.z
 
-	# fôlego
+	# fôlego — e o corpo que o paga
 	if sprinting:
 		stamina = maxf(0.0, stamina - 14.0 * delta * stamina_drain_multiplier)
+		# O esforço é medido aqui e não inventado no sono: correr é o que
+		# cansa, e o cansaço é o que faz a noite valer a pena.
+		exertion = clampf(exertion + delta * 0.11 * stamina_drain_multiplier, 0.0, 100.0)
 	else:
-		stamina = minf(100.0, stamina + (9.0 if is_on_floor() else 4.0) * delta)
+		stamina = minf(stamina_reserve(), stamina + stamina_recovery() * delta)
 	Bus.stat_changed.emit("stamina", stamina, 100.0)
 
 	# saltar com buffer + coyote
@@ -400,7 +406,7 @@ func _move_swim(delta: float, wish: Vector3) -> void:
 	var buoy := clampf((_surface_y - eye) * 1.8, -1.2, 2.6) if _surface_y > -99999.0 else 0.0
 	var target_y := up + buoy
 	velocity.y = lerpf(velocity.y, target_y, 1.0 - exp(-5.0 * delta))
-	stamina = minf(100.0, stamina + 3.0 * delta)
+	stamina = minf(stamina_reserve(), stamina + 3.0 * delta)
 	Bus.stat_changed.emit("stamina", stamina, 100.0)
 	camera.fov = lerpf(camera.fov, float(Game.settings["fov"]) + 3.0, 1.0 - exp(-4.0 * delta))
 
@@ -432,6 +438,40 @@ func _swim_check() -> void:
 
 
 # ── head bob / passos ─────────────────────────────────────────────────────
+## Quanto de fôlego o corpo recupera por segundo. Com fome ou sede a barrar,
+## recupera devagar — a fome deixa de ser um número de rodapé e passa a ser a
+## razão pela qual se para, se come e se planiza o próximo troço.
+func stamina_recovery() -> float:
+	var base := 9.0 if is_on_floor() else 4.0
+	if survival == null:
+		return base
+	var m := 1.0
+	var hunger := float(survival.get("hunger"))
+	var thirst := float(survival.get("thirst"))
+	if hunger < 45.0:
+		m *= lerpf(0.45, 1.0, clampf(hunger / 45.0, 0.0, 1.0))
+	if thirst < 40.0:
+		m *= lerpf(0.40, 1.0, clampf(thirst / 40.0, 0.0, 1.0))
+	if float(survival.get("sickness")) > 0.2:
+		m *= 0.75        # enjoo tira o fôlego depressa
+	return base * m
+
+
+## Reserva de fôlego. Esfomeado, o corpo não aguenta o mesmo sprint: a barra
+## enche menos e esvazia-se mais depressa, e o jogador sente-o nas pernas.
+func stamina_reserve() -> float:
+	if survival == null:
+		return 100.0
+	var hunger := float(survival.get("hunger"))
+	var thirst := float(survival.get("thirst"))
+	var m := 1.0
+	if hunger < 40.0:
+		m *= lerpf(0.60, 1.0, clampf(hunger / 40.0, 0.0, 1.0))
+	if thirst < 35.0:
+		m *= lerpf(0.55, 1.0, clampf(thirst / 35.0, 0.0, 1.0))
+	return 100.0 * m
+
+
 ## Quanto o corpo está a falhar (0 = inteiro, 1 = a cair). Fome e sono somam;
 ## é a única coisa que o jogador precisa de "ler" para saber que está mal.
 func fatigue_level() -> float:
