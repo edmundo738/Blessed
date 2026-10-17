@@ -377,7 +377,10 @@ func _spawn_felled_tree(key: String, data: Dictionary) -> void:
 	var scale := Vector3(float(raw_scale[0]), float(raw_scale[1]), float(raw_scale[2]))
 	var base := Transform3D(Basis(Vector3.UP, float(data.get("rotation_y", 0.0)))
 		.scaled(scale), Vector3(0.0, float(data.get("y_offset", 0.0)), 0.0))
-	var local_mat: Material = null if spec.materials_authored else mats.foliage
+	# Material do abate: NADA de `mats.foliage` (translúcido, sem resposta à luz e
+	# com vento) num tronco caído. `mats.structure` é o material sólido e toon —
+	# o tronco passa a receber luz e sombra como qualquer objeto do mundo.
+	var local_mat: Material = null if spec.materials_authored else mats.structure
 	var node := FELLED_TREE_SCENE.instantiate() as Node3D
 	if node == null:
 		return
@@ -385,11 +388,18 @@ func _spawn_felled_tree(key: String, data: Dictionary) -> void:
 	node.position = to_local(pos) + Vector3(float(data.get("fall_offset_x", 0.0)), 0.0, 0.0)
 	node.rotation.z = float(data.get("fall_rotation", 0.0))
 	add_child(node)
-	node.call("configure", spec.lods[0], local_mat, base, float(data.get("height", spec.height)),
+	var felled_mesh: ArrayMesh = spec.lods[0]
+	if not spec.trunk_lods.is_empty():
+		felled_mesh = spec.trunk_lods[0]
+	node.call("configure", felled_mesh, local_mat, base, float(data.get("height", spec.height)),
 		float(data.get("trunk_radius", 0.22)), int(data.get("remaining_logs", 1)),
 		self, key, tree_id, float(data.get("direction", 1.0)))
 	_felled_tree_nodes[key] = node
-	if not bool(data.get("settled", false)):
+	if bool(data.get("settled", false)):
+		# veio de um save: já está deitada, assentar e pronto
+		node.call("apply_settled", float(data.get("fall_rotation", 0.0)),
+			float(data.get("fall_offset_x", 0.0)))
+	else:
 		node.call("begin_fall")
 
 

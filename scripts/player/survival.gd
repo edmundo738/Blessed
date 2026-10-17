@@ -29,6 +29,10 @@ var companion_near := false
 
 var _warn := {}
 
+## Segundos de DESIDRATAÇÃO que faltam pagar (água do mar). Enquanto durar, a
+## sede escorre mais depressa. Nunca é dano instantâneo: é uma dívida.
+var dehydrated_t := 0.0
+
 
 func _ready() -> void:
 	name = "Survival"
@@ -42,7 +46,9 @@ func _process(delta: float) -> void:
 	var d := delta
 	# ── necessidades ────────────────────────────────────────────────────
 	hunger = _drain(hunger, 0.115 * d)
-	thirst = _drain(thirst, 0.175 * d)
+	thirst = _drain(thirst, 0.175 * d * (2.6 if dehydrated_t > 0.0 else 1.0))
+	if dehydrated_t > 0.0:
+		dehydrated_t = maxf(0.0, dehydrated_t - d)
 	var tired := 0.10 if Game.is_night() else 0.055
 	energy = _drain(energy, tired * d)
 
@@ -80,6 +86,8 @@ func _process(delta: float) -> void:
 	# ── bênção: regenera devagar, é o recurso "de história" ─────────────
 	blessing = clampf(blessing + 1.1 * d, 0.0, MAX_STAT)
 
+	if dehydrated_t > 0.0:
+		_warn_once("dehydrated", "msg.dehydrated")
 	# ── consequências ───────────────────────────────────────────────────
 	if hunger <= 0.0:
 		damage(1.1 * d, "starve")
@@ -90,7 +98,10 @@ func _process(delta: float) -> void:
 	if warmth < 25.0:
 		damage(0.9 * d, "cold")
 		_warn_once("cold", "msg.cold")
-	if energy <= 0.0:
+	# Avisar só a 0 é tarde: o jogador já está a arrastar-se sem saber porquê.
+	if energy <= 20.0 and energy > 0.0:
+		_warn_once("tired", "msg.tired")
+	elif energy <= 0.0:
 		_warn_once("energy", "msg.sleepy")
 	if sanity < 30.0 and randf() < 0.0015:
 		Sfx.play_at("growl", _random_near(), -18.0, randf_range(0.7, 1.1))
@@ -128,24 +139,102 @@ func reset_warnings() -> void:
 # ══════════════════════════════════════════════════════════════════════════
 #  AÇÕES
 # ══════════════════════════════════════════════════════════════════════════
-func eat(food: float, drink: float, risk: float) -> void:
+## Comer devolve o que aconteceu: quem chama decide o que dizer ao jogador.
+## Antes, quem comia carne crua e se sentia mal via "Estás com fome" — o
+## oposto do que tinha acabado de acontecer.
+func eat(food: float, drink: float, risk: float) -> Dictionary:
 	hunger = clampf(hunger + food, 0.0, MAX_STAT)
 	thirst = clampf(thirst + drink, 0.0, MAX_STAT)
-	if risk > 0.0 and randf() < risk:
+	var sick := risk > 0.0 and randf() < risk
+	if sick:
 		damage(6.0, "sick")
-		Bus.toast.emit("msg.hungry", 2.0)
 	else:
 		health = clampf(health + 2.0, 0.0, MAX_STAT)
 	Sfx.play("eat", -8.0)
 	reset_warnings()
 	_emit_stats()
+	return {"sick": sick, "food": food, "drink": drink}
 
 
-func drink(amount: float) -> void:
+## Beber. `risk` é a probabilidade de dar-se mal com o que se bebeu: água crua
+## de rio tem parasitas, água fervida não. É a decisão que dá sentido à fogueira
+## — sem isto, beber do rio era sempre a jogada certa e a fogueira era só enfeite.
+func drink(amount: float, risk: float = 0.0) -> void:
 	thirst = clampf(thirst + amount, 0.0, MAX_STAT)
+	# Água limpa lava o sal: beber doce cura a desidratação.
+	if amount > 0.0 and risk <= 0.0:
+		dehydrated_t = 0.0
+	if risk > 0.0 and randf() < risk:
+		damage(5.0, "bad_water")
+		Bus.toast.emit("msg.bad_water", 2.4)
 	Sfx.play("drink", -8.0)
 	reset_warnings()
 	_emit_stats()
+
+
+## Água do mar: o sal puxa a água do corpo. O alívio é imediato (o `drink` já
+## aconteceu); a factura vem nos segundos seguintes, em sede — não em dano.
+func dehydrate(seconds: float = 45.0) -> void:
+	dehydrated_t = maxf(dehydrated_t, seconds)
+	_warn["dehydrated"] = true
+	Bus.toast.emit("msg.dehydrated", 3.2)
+	_emit_stats()
+
+
+## Dormir até de manhã.
+##
+## `quality` é o SÍTIO (chão 0,30 … cama 1,00, de data/sleep.json) e `context`
+## é o que o mundo acrescenta (fogueira acesa, abrigo). Devolve o que mudou,
+## para o HUD/testemunho poderem dizer a verdade.
+##
+## O tempo não é de graça: as horas passam e o corpo paga fome e sede. Sem
+## isto, dormir era um botão para saltar a noite sem consequência — e o
+## jogador nunca precisava de preparar comida antes de se deitar.
+## Cochilo: passa `hours.nap` horas (não a noite toda) e paga o mesmo preço.
+## É isto que separa a cadeira da cama — a cama resolve a noite, a cadeira só
+## te põe de pé outra vez.
+func nap(quality: float, context: float = 0.0) -> Dictionary:
+	return _sleep_for(Db.sleep_num("hours", "nap", 1.5), quality, context)
+
+
+func sleep_until_morning(quality: float, context: float = 0.0) -> Dictionary:
+	var wake_at := Db.sleep_num("hours", "wake_at", 6.8)
+	var hours := fmod(wake_at - Game.hour + 24.0, 24.0)
+	if Game.hour > wake_at and Game.hour < 19.0:
+		# de dia não se salta o dia: é uma sesta curta
+		hours = Db.sleep_num("hours", "nap", 1.5)
+	else:
+		hours = clampf(hours, Db.sleep_num("hours", "min", 3.0),
+			Db.sleep_num("hours", "max", 9.0))
+	return _sleep_for(hours, quality, context)
+
+
+func _sleep_for(hours: float, quality: float, context: float = 0.0) -> Dictionary:
+	var q := clampf(quality + context, 0.05, 1.5)
+	var energy_before := energy
+	var hunger_before := hunger
+	var thirst_before := thirst
+	var h := maxf(0.25, hours)
+	energy = clampf(energy + h * Db.sleep_num("recovery", "energy_per_hour", 9.0) * q,
+		0.0, MAX_STAT)
+	health = clampf(health + h * Db.sleep_num("recovery", "health_per_hour", 0.8) * q,
+		0.0, MAX_STAT)
+	sanity = clampf(sanity + Db.sleep_num("recovery", "sanity", 16.0) * (q - 0.55),
+		0.0, MAX_STAT)
+	hunger = clampf(hunger - h * Db.sleep_num("recovery", "hunger_per_hour", 3.4),
+		0.0, MAX_STAT)
+	thirst = clampf(thirst - h * Db.sleep_num("recovery", "thirst_per_hour", 4.2),
+		0.0, MAX_STAT)
+	dehydrated_t = maxf(0.0, dehydrated_t - h * 600.0)
+	Game.hour = fmod(Game.hour + h, 24.0)
+	reset_warnings()
+	_emit_stats()
+	return {
+		"hours": h, "quality": q,
+		"energy": energy - energy_before,
+		"hunger": hunger - hunger_before,
+		"thirst": thirst - thirst_before,
+	}
 
 
 func rest(hours: float, quality: float) -> void:
@@ -224,6 +313,10 @@ func work_multiplier() -> float:
 		m *= 0.8
 	if health < 40.0:
 		m *= 0.85
+	# Sem isto, a energia era um número decorativo: cortar 20 árvores a pé
+	# firme saía ao mesmo ritmo de quem acabou de acordar.
+	if energy < 10.0:
+		m *= 0.7
 	return m
 
 
@@ -231,6 +324,7 @@ func save_data() -> Dictionary:
 	return {
 		"health": health, "hunger": hunger, "thirst": thirst, "energy": energy,
 		"warmth": warmth, "sanity": sanity, "blessing": blessing, "alive": alive,
+		"dehydrated_t": dehydrated_t,
 	}
 
 
@@ -243,6 +337,7 @@ func load_data(d: Dictionary) -> void:
 	sanity = float(d.get("sanity", 100.0))
 	blessing = float(d.get("blessing", 60.0))
 	alive = bool(d.get("alive", true))
+	dehydrated_t = float(d.get("dehydrated_t", 0.0))
 	reset_warnings()
 	_emit_stats()
 

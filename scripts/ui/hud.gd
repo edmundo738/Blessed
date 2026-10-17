@@ -648,12 +648,16 @@ func _refresh_prompt() -> void:
 	var action := Loc.t(key)
 	var target := ""
 	var kind := str(f.get("kind", ""))
+	var verb := "hud.verb_take"
 	var hold_action := false
+	var missing := ""
 	if kind == "harvest":
 		var node: Dictionary = f["ref"]
 		var resource_id := str(node.get("kind", ""))
 		var spec: Dictionary = Db.HARVEST.get(resource_id, {})
-		var want := str(spec.get("tool", ""))
+		var held := inv.hotbar_id() if inv != null else ""
+		var power: Dictionary = Db.item(held).get("power", {}) if inv != null else {}
+		var has_tool := power.has(str(spec.get("action", "")))
 		if resource_id.begins_with("tree"):
 			target = Loc.t("hud.target_tree")
 		elif resource_id == "rock":
@@ -665,21 +669,43 @@ func _refresh_prompt() -> void:
 			var yield_ids := yields.keys()
 			target = Db.item_name(str(yield_ids[0])) if not yield_ids.is_empty() else action
 		hold_action = resource_id.begins_with("tree") or resource_id == "rock"
-		if hold_action and want != "" and inv != null and inv.hotbar_id() != want:
-			action += "  ·  " + Loc.t("hud.needs_tool", [Db.item_name(want)])
+		if hold_action:
+			# Trabalho contínuo = rato esquerdo. Árvores dão-se com as mãos (mais
+			# devagar); rochas sem picareta não dão nada — e o HUD diz o motivo.
+			verb = "hud.verb_work"
+			if missing.is_empty() and not spec.get("needs", "") == "" and not has_tool:
+				missing = Loc.t("hud.needs_tool", [Db.item_name(str(spec["needs"]))])
+		elif kind == "harvest":
+			verb = "hud.verb_take"
 		var max_hp := maxf(float(node.get("max_hp", node.get("hp", 1))), 1.0)
 		var hp := maxf(float(node.get("hp", max_hp)), 0.0)
 		prompt_bar.value = (1.0 - hp / max_hp) * 100.0
 		prompt_bar.visible = hold_action and hp < max_hp
+	elif kind == "structure":
+		var e: Dictionary = f["ref"]
+		target = Db.item_name(str(e.get("id", "")))
+		hold_action = not (str(e.get("id", "")) in ["campfire", "bed"])
+		if hold_action:
+			# Estruturas colocadas: demolir exige segurar, para não desaparecerem
+			# com um toque acidental no F.
+			verb = "hud.verb_work"
+			action = Loc.t("prompt.remove")
+		prompt_bar.visible = false
 	else:
 		match kind:
-			"structure": target = Db.item_name(str(f["ref"].get("id", "")))
 			"water": target = Loc.t("hud.target_water")
 			"npc": target = Loc.t("hud.target_person")
 			"felled_tree": target = Loc.t("hud.target_log")
+			"animal":
+				target = Loc.t("hud.target_animal")
+				verb = "hud.verb_work"
 		prompt_bar.visible = false
-	var binding := Loc.t("hud.hold_interact") if hold_action else "[F]"
-	prompt_label.text = "%s   %s · %s" % [binding, target, action] if target != "" else "%s   %s" % [binding, action]
+	var binding := "[%s]" % Loc.t(verb)
+	var texto := "%s   %s · %s" % [binding, target, action] if target != "" \
+		else "%s   %s" % [binding, action]
+	if missing != "":
+		texto += "   ·   " + missing
+	prompt_label.text = texto
 
 
 func _on_time(hour: float, day: int) -> void:

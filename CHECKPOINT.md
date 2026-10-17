@@ -6,7 +6,122 @@
 > O histórico de auditoria abaixo preserva resultados antigos; quando diferirem, prevalecem
 > este marco mais recente e `docs/AUDIT_2026-10-14.md`.
 
-## Marco mais recente — relva reconstruída e instrumentos corrigidos (2026-10-16)
+## Marco mais recente — o SONO e o FOGO passam a ser sistemas (2026-10-17, tarde)
+
+**Verificação: 215 ok, 0 falhas, 31 saltadas (SELFTEST_PASS)**, incluindo o
+teste do primeiro dia (25/25 no modo rápido).
+
+- **Dormir deixou de ser um salto no relógio.** `data/sleep.json` guarda
+  qualidades (chão 0,30 / cadeira 0,45 / cama 1,00), horas e custos. A sequência
+  é: deitar → a câmara desce → o ecrã escurece → as horas passam → clareia →
+  levantar. O jogador fica sem controlo durante ela e o teste espera por
+  `interaction.sleeping == false`.
+- **Dormir paga-se:** fome −3,4/h e sede −4,2/h. Sem isso era um botão grátis
+  para saltar a noite. Fogueira acesa (+0,25) e abrigo (+0,20) melhoram a
+  qualidade; uma criatura a rondar (`creature_threat ≥ 0,35`) **impede** de
+  dormir.
+- **A cadeira é um cochilo** (1,5 h, não passa a noite) — antes era +14 de
+  energia instantâneos, exactamente o "Sleep -= X" que o projecto recusa.
+- **O fogo gasta-se** (`data/fire.json`): 5 h por carga, +1,4 h por madeira (F),
+  aviso a 1 h, e dormir queima combustível. Sem lenha, a noite acaba em cinzas
+  e o `near_fire` desaparece.
+- **Feedback corrigido:** comer carne crua e adoecer já não diz "Estás com
+  fome"; diz que caiu mal e que cozinhar evitava. E o cansaço avisa aos 20 de
+  energia com a tecla que resolve (Z), não só a zero.
+- **Trabalhar exausto rende 30% menos** — a energia passou a pesar no loop.
+
+## Marco anterior — o PRIMEIRO DIA joga-se de ponta a ponta (2026-10-17)
+
+**Verificação: 197 ok, 0 falhas, 30 saltadas (SELFTEST_PASS)** — 167 verificações
+anteriores + **25 do teste de GAMEPLAY do primeiro dia** + **5 da água do mar**.
+
+- **Existe agora o teste que a constituição exige** (`tests/selftest.gd::_first_day()`):
+  uma SESSÃO, não um teste de função. Mochila vazia, mãos nuas, e a cadeia
+  inteira pelos sistemas reais:
+  fibra/graveto → pedra solta → árvore abatida à mão → madeira →
+  **lasca** → **picareta primitiva** → **rocha** → **bancada** (feita na
+  Criação, pousada no mundo, F abre o painel DELA e não a apaga) →
+  **picareta de pedra** → **rocha dura** (recusa tier 1, cede a tier 2) →
+  **fogueira** (acender exige isqueiro) → **garrafa** → encher → **ferver** →
+  beber → **carne assada** → **cama** → **noite passada**.
+  Modo rápido: `-- selftest dia1`.
+- **A travessia da pedra está fechada e é a certa:** mãos → pedra solta
+  (`flint_node`) → **lasca** → **picareta primitiva** (Criação, na mão) →
+  rocha → bancada → picareta de pedra. A lasca **não pica pedra** (é faca); é
+  a picareta primitiva que faz a travessia — a função que a família de madeira
+  fazia, agora com o nome certo.
+- **`needs_tier` deixou de ser código morto:** o `_hold_work` já o lia, mas
+  nenhum nó o declarava. `rock_hard` declara `"needs_tier": 2`, e é isso que
+  faz a picareta de pedra valer a bancada.
+- **Rendimento das mãos corrigido por *feel*:** as mãos só desperdiçam quando
+  **arrancam** (`chop`/`mine`, 0,7×); **apanhar** é preciso (1,0×). E o arbusto
+  passou a dar `fiber 2 + leaf 3 + stick 1`: o primeiro minuto tem fibra,
+  folha e um graveto sem obrigar a abater uma árvore à mão só para um pau.
+- **Harness headless recuperado e agora PERSISTENTE** em `tools/`:
+  `tools/run.mjs` (motor web em Node; arranca com `Module.callMain`, **nunca**
+  `emnapiInit`) e `tools/mkpack.py` (`.pck` com `tests/` dentro). O sandbox
+  perdeu o `/tmp` duas vezes nesta sessão e o harness com ele.
+
+- **O MAR TEM REGRA PRÓPRIA (constituição §5):** encher a garrafa no mar dá
+  **água salgada** (`water_salt`, ícone e nome próprios); ferver **não** a
+  transforma em potável; beber dá **Desidratação** — durante 45 s a sede
+  escorre 2,6× mais depressa — e **nunca dano instantâneo**. Beber água doce
+  cura. Provado: `0.455/s vs 0.175/s`, `hp 100 → 100`.
+
+> Nota de método: as 4 causas que este teste apanhou e que os testes de função
+> não apanhavam estão em `docs/GAMEPLAY_ARCHITECTURE.md` §6.2.
+
+## Marco mais recente — ciclo do primeiro dia fechado (2026-10-16, continuação)
+
+**Verificação: 161 ok, 0 falhas, 30 saltadas (SELFTEST_PASS)**, depois do merge
+do `main` e com o `.pck` reconstruído. O que mudou, por ordem do que o jogador
+sente:
+
+- **A ÁRVORE CAI (bug encontrado e corrigido).** Dois erros somados: (1) o nó da
+  árvore abatida tinha `sync_to_physics = true`, e o servidor de física reescrevia
+  o transform — a rotação escrita pela queda era perdida a meio, e era isto o
+  "só encosta um pouquinho e fica parada"; (2) o tronco levava o material das
+  FOLHAS (translúcido, com vento, sem resposta à luz) e a copa inteira no LOD0 —
+  era esta a "cor esquisita, mais plana, como se a luz já não a afetasse".
+  Agora: queda em `_physics_process` (1,05 s, ~88°, com aceleração, o eixo
+  assenta à altura do raio do tronco), material `structure`, tronco sem copa
+  (`Species.trunk_lods`), impacto com som/partículas/dano a quem estiver no lado
+  da queda, e o tronco deitado é o alvo da interação.
+  _Prova:_ `docs/shots/2026-10-16-arvore-abatida.png` (medido: `settled=true`,
+  `rot_z=1.53 rad`).
+- **A FOGUEIRA deixou de ser um monte de calhaus brancos com dois pauzinhos.**
+  Anel de 9 pedras de granito, leito de cinza, quatro achas radiais e três
+  tições; **três camadas de chama** (exterior/média/núcleo, cada uma com a sua
+  velocidade, eixo e energia — antes era um cone laranja igual a si mesmo);
+  **luz que treme** (duas frequências + cor que respira), que era o que faltava
+  para o fogo não parecer uma lâmpada laranja.
+  _Prova:_ `docs/shots/2026-10-16-fogueira-jogador.png` (câmara do jogador).
+- **O CRAFT passou a ter dois degraus, e são degraus de verdade.** Na mão
+  (**"Criação"** no inventário) faz-se o improviso: ramos, fibra, tocha,
+  **isqueiro primitivo** (sílex + pedra + fibra) e **lasca de pedra** — a lasca
+  corta e pica devagar e é o que destranca a pedra. Na **bancada** fazem-se as
+  ferramentas a sério (machado e picareta), o mobiliário e as peças de
+  construção. A família de madeira a mais (machado/picareta de madeira) foi
+  removida: era um passo intermédio que não mudava nada na mão do jogador.
+- **Acender fogo exige isqueiro.** Sem ele, a fogueira não acende e o jogo diz
+  porquê. Sem isto, "acender" era um botão mágico.
+- **A água tem decisão.** Água do rio é **crua** (mata a sede toda, mas há
+  risco); na fogueira ferve-se e sai **água fervida** (sem risco, mais sede por
+  frasco). O ciclo mãos → fogueira → água segura fecha-se no primeiro dia.
+- **As construções servem para algo.** **Cofre** guarda por tipo (F põe o que
+  tens na mão, F com a mão vazia devolve o que lá está) — a mochila tem 24 slots
+  e enchia-se sem sítio onde deixar coisas; **cadeira** descansa sem deitar
+  (energia + cabeça). Nada de mobiliário decorativo.
+- **As receitas saíram para `data/recipes.json`** (editável sem tocar em código,
+  como os biomas): estação, ingredientes, resultado e o nome de cada degrau. A
+  lista em código fica como reserva, para o jogo não morrer se o JSON falhar.
+- **Ferramentas de diagnóstico**: `tools/render_shot.py` passou a desenhar a
+  CHAMA (aditiva, com três camadas) e o `tests/shot.gd` ganhou `--fell` (abate e
+  espera pela queda) e `--fire --player` (olha para a fogueira pela câmara do
+  jogador). O `shot` marca `Game.started = true` — sem isso o prólogo agarrava o
+  jogador e nenhuma fotografia era do sítio pedido.
+
+## Marco anterior — relva reconstruída e instrumentos corrigidos (2026-10-16)
 
 - **Relva: o "picotado em camadas" está resolvido e medido.** A causa não era o
   empilhamento de níveis: era ESCALA. `GRASS_MASK_SCALE` era 0,36 m, o que dava

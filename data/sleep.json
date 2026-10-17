@@ -1,0 +1,26 @@
+{
+  "_comment": "Regras do sono. Editar aqui não precisa de tocar em GDScript. quality: 0 = não se dorme, 1 = noite bem dormida. context soma-se à quality conforme o que está à volta.",
+  "places": {
+    "ground": { "quality": 0.30 },
+    "chair":  { "quality": 0.45 },
+    "bed":    { "quality": 1.00 }
+  },
+  "hours": {
+    "wake_at": 6.8,
+    "min": 3.0,
+    "max": 9.0,
+    "nap": 1.5
+  },
+  "recovery": {
+    "energy_per_hour": 9.0,
+    "health_per_hour": 0.8,
+    "sanity": 16.0,
+    "hunger_per_hour": 3.4,
+    "thirst_per_hour": 4.2
+  },
+  "context": {
+    "near_fire": 0.25,
+    "sheltered": 0.20,
+    "threat_blocks_sleep": 0.35
+  }
+}

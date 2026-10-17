@@ -3,6 +3,36 @@
 Cada bug tem: número, causa, correção, teste que o apanha. Quando um bug é
 fechado, o teste que o apanha entra no `tests/selftest.gd` para não voltar.
 
+## CORRIGIDOS (continuação de 2026-10-16)
+
+17. **Árvore abatida "só encostava" e ficava com cor plana** (`felled_tree.tscn`,
+    `world.gd`). Duas causas: `sync_to_physics = true` no `AnimatableBody3D` (o
+    servidor de física reescrevia o transform e comia a rotação a meio da queda:
+    medido, `rot_z=0.00` com `settled=true` — o jogo achava que já tinha caído);
+    e o tronco levava `mats.foliage` (translúcido, com vento, sem resposta à luz)
+    mais a copa no LOD0. Correção: `sync_to_physics = false`, material
+    `structure`, `Species.trunk_lods` (tronco sem copa) e queda em
+    `_physics_process` com tempo explícito.
+    _Teste:_ "a árvore caída é dona da própria rotação", "o tronco do abate não
+    traz a copa atrás", "árvore abatida fica deitada no chão".
+18. **Chama da fogueira era um cone laranja igual a si mesmo**; sem vida, a
+    fogueira parecia uma lâmpada. Correção: três camadas (exterior/média/núcleo)
+    com `speed`/`energy`/`slim`/`width` próprios, silhueta com ruído contínuo, e
+    **luz que treme** (`Structures._process`, duas frequências).
+    _Teste:_ "a chama tem núcleo próprio (uma camada só é um cone)".
+19. **Cofre: `inv.remove` podia falhar e o item era duplicado para o cofre.**
+    Correção: só se guarda o que saiu da mochila (`_use_chest`), e o cofre guarda
+    por tipo. _Teste:_ "o cofre guarda o que tens na mão", "com a mão vazia o
+    cofre devolve o que lá está".
+20. **`shot.gd` não punha o jogo a andar**: com `Game.started == false` o
+    `main._process` corre a câmara do PRÓLOGO, que reescreve a posição do jogador
+    a cada frame — qualquer teleporte era desfeito (medido: `SHOT_TP0 98.9, 9.0,
+    12.9` → `SHOT_TP1 123.4, 17.9, 19.6`). Correção: `Game.started = true` no
+    topo do `shot._run()`.
+21. **`render_shot.py` rebentava com água no enquadramento** (`shade_water`): um
+    `einsum` com subscritos errados na linha do brilho especular. Correção:
+    meia-vector de Blinn-Phong.
+
 ## CORRIGIDOS (neste ciclo)
 1. **API Godot-3 `instance_set_transform` / `instance_set_custom_data`**
    (`chunk.gd`). Não existem no Godot 4 → abortava a população de relva/árvores
@@ -73,6 +103,44 @@ fechado, o teste que o apanha entra no `tests/selftest.gd` para não voltar.
     sem editor mostra árvores/rochas de código em vez dos modelos do artista.
     _Teste:_ as verificações "GLB Blender ..." do self-test são exatamente este
     aviso, e falham no sandbox por esse motivo (não é regressão de código).
+
+15. **O harness headless em Node** (`tools/run.mjs` + `tools/mkpack.py`):
+    - o binário nativo do Godot **não é instalável** aqui (os *release assets*
+      do GitHub não são alcançáveis), por isso o motor é o **template web**
+      (`@ringozz/godot-web-wasm32@4.7.2-664`) corrido em Node;
+    - **NÃO chamar `emnapiInit`**: ele regista o motor como módulo Node-API e
+      arranca uma **segunda** instância com argumentos vazios (sem
+      `--headless`), que rebenta a pedir WebGL2
+      (`TypeError: ctx.getExtension is not a function`). O motor arranca com
+      **`Module.callMain(args)`** — só assim os argumentos chegam;
+    - `--headless` funciona porque o `DisplayServerHeadless` está compilado no
+      wasm (confirmado nos `.symbols`); não é preciso WebGL nem shims de GL;
+    - o `wasmBinary` tem de ser passado à mão (em `file://` não há `fetch`);
+    - `navigator` é só-de-leitura no Node 22 → `Object.defineProperty`;
+    - `tools/pack_pck.py` **exclui `tests/` de propósito**; para correr testes
+      usar `tools/mkpack.py` (mesma coisa, mas com os testes dentro). Sintoma
+      contrário: `SELFTEST_FAIL: res://tests/selftest.gd em falta`;
+    - o processo **não sai sozinho** quando o motor termina: usar `timeout`.
+
+16. **Alvo de interacção em teste headless** (`tests/selftest.gd`): o
+    `interaction._process` recalcula o `focus` a cada frame (é o que o jogador
+    está a olhar). Sem mira, o teste tem de repor
+    `main.interaction.focus = {…}` **antes de cada** `_hold_work`/`_do_interact`.
+    Foi isto que fez o primeiro dia parecer "a árvore não cai".
+
+17. **Pickups fora do íman** (`scripts/world/dropped_item.gd`): a madeira do
+    toro nasce a ~2 m do jogador (ao longo do tronco), fora do `MAGNET_DISTANCE`
+    (2,1 m) e do `PICKUP_DISTANCE` (0,95 m). Não é bug — é o jogador ter de
+    andar até ao tronco — mas qualquer teste tem de "caminhar" até ao pickup.
+
+18. **Dormir é assíncrono** (`interaction._start_sleep`): usa `Tween`s e
+    `create_timer`, por isso um teste não pode ler `Game.hour` logo a seguir ao
+    `_do_interact` — tem de esperar por `interaction.sleeping == false` (ou pelo
+    sinal `slept`). O primeiro dia já o faz, com tecto de 12 s.
+
+19. **`data/sleep.json` tem de existir no `.pck`**: sem ele o jogo não parte (usa
+    a reserva de `Db.sleep_quality`), mas os números afinados perdem-se. O
+    `tools/pack_pck.py` inclui `data/`; o `mkpack.py` também.
 
 ## LIMITES DO SANDBOX (não corrigíveis aqui)
 9. **Sem GPU/browser** → não se valida o ecrã real; usa-se `tools/render_shot.py`.

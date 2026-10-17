@@ -44,6 +44,13 @@ if not os.path.isdir(DIR):
     sys.exit(1)
 os.chdir(DIR)
 socketserver.TCPServer.allow_reuse_address = True
-with socketserver.TCPServer(("0.0.0.0", PORT), Handler) as httpd:
+# ThreadingHTTPServer: um download de 50 MB do .pck não pode bloquear o pedido
+# do .wasm que o browser faz em paralelo — com o servidor de uma linha só, o
+# arranque parecia pendurado.
+class Server(socketserver.ThreadingTCPServer):
+	allow_reuse_address = True
+	daemon_threads = True
+
+with Server(("0.0.0.0", PORT), Handler) as httpd:
     print(f"BLESSED Web em  http://0.0.0.0:{PORT}  (no telemovel: http://IP_DO_PC:{PORT})")
     httpd.serve_forever()

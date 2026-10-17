@@ -20,6 +20,9 @@ const WALK := 4.0
 const SPRINT := 6.2
 const CROUCH_SPEED := 1.8
 const SWIM := 3.0
+## A partir desta profundidade é preciso nadar (modelo do Minecraft: rio raso
+## atravessa-se a pé).
+const WADE_DEPTH := 1.35
 const ACCEL_GROUND := 18.0
 const ACCEL_AIR := 4.5
 const FRICTION := 15.0
@@ -52,6 +55,10 @@ var mantle_cooldown := 0.0
 var crouching := false
 var sprinting := false
 var swimming := false
+## Água rasa: anda-se dentro dela (só mais devagar). Nadar num rio de 40 cm é o
+## que prendia o jogador: o modo natação tira-lhe o chão e o movimento normal.
+var wading := false
+var _surface_y := -100000.0
 var was_grounded := true
 var stamina := 100.0
 var surface := "grass"
@@ -305,13 +312,16 @@ func _move_land(delta: float, wish: Vector3) -> void:
 	# sprint só com fôlego e a andar para a frente
 	var has_stamina := stamina > 2.0
 	sprinting = Input.is_action_pressed("sprint") and not crouching \
-		and wish.z < -0.2 and has_stamina and is_on_floor()  # frente é -Z
+		and wish.z < -0.2 and has_stamina and is_on_floor() and not wading  # frente é -Z
 	var target_speed := WALK
 	if sprinting:
 		target_speed = SPRINT
 	elif crouching:
 		target_speed = CROUCH_SPEED
 	target_speed *= speed_multiplier
+	if wading:
+		# a água trava: atravessar um rio a correr não é de graça
+		target_speed *= 0.62
 
 	var dir_world := (transform.basis * Vector3(wish.x, 0, wish.z)).normalized() \
 		if wish.length_squared() > 0.0001 else Vector3.ZERO
@@ -379,7 +389,12 @@ func _move_swim(delta: float, wish: Vector3) -> void:
 		up = 2.6
 	elif Input.is_action_pressed("crouch"):
 		up = -2.4
-	var target_y := up - 0.5
+	# Fora de água com a cabeça a descoberto, o corpo sobe sozinho: sem isto
+	# ficar parado fazia o jogador afundar até ao fundo (e "afogar-se" sem
+	# perceber porquê). O Crouch continua a servir para descer.
+	var eye := global_position.y + (CROUCH_EYE if crouching else EYE)
+	var buoy := clampf((_surface_y - eye) * 1.8, -1.2, 2.6) if _surface_y > -99999.0 else 0.0
+	var target_y := up + buoy
 	velocity.y = lerpf(velocity.y, target_y, 1.0 - exp(-5.0 * delta))
 	stamina = minf(100.0, stamina + 3.0 * delta)
 	Bus.stat_changed.emit("stamina", stamina, 100.0)
@@ -389,8 +404,20 @@ func _move_swim(delta: float, wish: Vector3) -> void:
 func _swim_check() -> void:
 	var was := swimming
 	var water_world := get_parent()
-	swimming = water_world != null and water_world.has_method("is_in_water") \
-		and water_world.call("is_in_water", global_position)
+	var in_water := false
+	if water_world != null and water_world.has_method("is_in_water"):
+		in_water = bool(water_world.call("is_in_water", global_position))
+	_surface_y = -100000.0
+	if in_water and water_world.has_method("water_surface_height"):
+		_surface_y = float(water_world.call("water_surface_height",
+			global_position.x, global_position.z))
+	var deep := in_water
+	if in_water and water_world.has_method("ground_height"):
+		var bed := float(water_world.call("ground_height",
+			global_position.x, global_position.z))
+		deep = _surface_y - bed > WADE_DEPTH
+	wading = in_water and not deep
+	swimming = deep
 	if swimming != was and water_world != null and water_world.has_method("set_underwater"):
 		water_world.call("set_underwater", swimming)
 	if swimming and not was:

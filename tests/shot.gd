@@ -73,6 +73,7 @@ func _run() -> void:
 		return
 
 	# o Player é filho do World, não do main — daí `main.player`
+	Game.started = true
 	var player: Node3D = main.get("player")
 	var eye := Vector3(0, 0, 0)
 	if player != null:
@@ -95,6 +96,102 @@ func _run() -> void:
 			yaw = atan2(-d.x, -d.z)
 			pitch = atan2(d.y, Vector2(d.x, d.z).length())
 	var radius := float(_opt("--radius", "70"))
+
+	# --fell: abate a árvore mais próxima e deixa-a cair antes de fotografar.
+	# Sem isto o agente nunca via o estado "árvore caída" — que é justamente o
+	# que o jogador descrevia como "cor esquisita, plana, como se a luz já não
+	# a afetasse": o tronco estava a levar o material das FOLHAS.
+	if _args.has("--fell") and player != null:
+		var world_node: Node = main.get("world")
+		var best: Dictionary = {}
+		var best_d := 1e9
+		for c in (world_node.get("chunks") as Dictionary).values():
+			for n in (c as Chunk).harvest_nodes:
+				if not str(n.get("kind", "")).begins_with("tree"):
+					continue
+				var d: float = (n["pos"] as Vector3).distance_to(player.global_position)
+				if d < best_d and bool(n.get("alive", true)):
+					best_d = d
+					best = n
+		if best.is_empty():
+			print("SHOT_FELL: nenhuma árvore perto")
+		else:
+			var it: Node = main.get("interaction")
+			it.focus = {"kind": "harvest", "ref": best, "pos": best["pos"]}
+			print("SHOT_FELL: %s a %.1f m" % [str(best.get("species", "?")), best_d])
+			for i in 40:
+				it.call("_hold_work", 0.6, 1.0)
+				if not bool(best.get("alive", true)):
+					break
+			# a queda é conduzida por tempo explícito (1,05 s). Em headless os
+			# frames são curtos, por isso espera-se pelo ESTADO, não por N frames.
+			for i in 400:
+				await get_tree().process_frame
+				var prontos := get_tree().get_nodes_in_group("fellable_logs")
+				if not prontos.is_empty() and bool(prontos[0].get("settled")):
+					break
+			var ft_nos := get_tree().get_nodes_in_group("fellable_logs")
+			if not ft_nos.is_empty():
+				print("SHOT_FELL_STATE: settled=%s rot_z=%.2f y=%.2f" % [
+					str(ft_nos[0].get("settled")), (ft_nos[0] as Node3D).rotation.z,
+					(ft_nos[0] as Node3D).global_position.y])
+			# a árvore caída é o alvo desta imagem: olhar para ela
+			var logs := get_tree().get_nodes_in_group("fellable_logs")
+			if not logs.is_empty():
+				var ft := logs[0] as Node3D
+				var alvo := ft.global_position + Vector3(0, 0.6, 0)
+				eye = alvo + Vector3(0, 4.0, 6.0)
+				var d2 := alvo - eye
+				yaw = atan2(-d2.x, -d2.z)
+				pitch = atan2(d2.y, Vector2(d2.x, d2.z).length())
+				print("SHOT_FELL_POS: %.1f, %.1f, %.1f" % [ft.global_position.x,
+					ft.global_position.y, ft.global_position.z])
+
+	# --fire: olhar para a fogueira ACESA mais próxima (a da aldeia serve). É o
+	# objeto central do primeiro dia, por isso tem de haver uma forma barata de
+	# olhar para ele sem andar pelo mundo à mão.
+	if _args.has("--fire"):
+		var st: Node = main.get("structures")
+		var alvo_fogo := Vector3.ZERO
+		var d_fogo := 1e9
+		if st != null:
+			for e in (st.get("list") as Array):
+				if not bool((e as Dictionary).get("lit", false)):
+					continue
+				var p3: Vector3 = (e as Dictionary)["pos"]
+				var eu: Vector3 = (player as Node3D).global_position if player != null else Vector3.ZERO
+				var d3: float = p3.distance_to(eu)
+				if d3 < d_fogo:
+					d_fogo = d3
+					alvo_fogo = p3
+		if d_fogo > 1e8:
+			print("SHOT_FIRE: nenhuma fogueira acesa")
+		else:
+			var alvo := alvo_fogo + Vector3(0, 0.45, 0)
+			if _args.has("--player") and player != null:
+				# Põe o jogador em frente da fogueira e deixa a câmara DELE
+				# enquadrar: é assim que o jogador a vê, com as mãos à frente.
+				var wn: Node = main.get("world")
+				var pp := alvo_fogo + Vector3(1.7, 0.0, 1.9)
+				pp.y = float(wn.ground_height(pp.x, pp.z)) + 0.1
+				# Usar o teleporte do PRÓPRIO jogador: escrever-lhe o
+				# global_position à mão não pegava (ele guarda yaw/pitch em
+				# `target_yaw`/`target_pitch` e o controlador reescreve a
+				# rotação no frame seguinte).
+				player.call("teleport", pp)
+				player.call("look_at_point", alvo_fogo + Vector3(0, 0.45, 0))
+				player.set("pitch", -0.20)
+				player.set("target_pitch", -0.20)
+				player.set("yaw", player.get("target_yaw"))
+				# a câmara do jogador é actualizada no _process dele: dar-lhe um
+				# par de frames para chegar à posição nova antes de fotografar
+				await get_tree().process_frame
+				await get_tree().process_frame
+			eye = alvo + Vector3(1.7, 1.15, 1.9)
+			var d4 := alvo - eye
+			yaw = atan2(-d4.x, -d4.z)
+			pitch = atan2(d4.y, Vector2(d4.x, d4.z).length())
+			print("SHOT_FIRE: %.1f, %.1f, %.1f" % [alvo_fogo.x, alvo_fogo.y, alvo_fogo.z])
 
 	var fwd := Vector3(-sin(yaw) * cos(pitch), sin(pitch), -cos(yaw) * cos(pitch))
 	var right := fwd.cross(Vector3.UP).normalized()

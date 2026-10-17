@@ -49,6 +49,10 @@ MATERIALS = {
         rim_strength=0.40, rim_power=2.5, light_gain=1.10, ambient_gain=0.90,
         slope_dim=0.0, kind="toon"),
     "stylized_water.gdshader": dict(kind="water"),
+    # O fogo é o único material do jogo que NÃO é toon: é aditivo, sem sombra e
+    # sem iluminação. Sem esta entrada o rasterizador pintava a chama como um
+    # cone branco sólido — e era impossível julgar o que o jogador vê.
+    "campfire_flame.gdshader": dict(kind="flame"),
     "anime_sky.gdshader": dict(kind="sky"),
 }
 DEFAULT_MAT = dict(
@@ -352,6 +356,45 @@ def grass_shell_pixels(wpos, normal, tint, shell, cover, dryness, eye, params, L
     return np.clip(col, 0.0, 1.0), visible
 
 
+def flame_pixels(uv, params, t=1.7):
+    """campfire_flame.gdshader, pixel a pixel (ignora a fase do tempo fixo).
+
+    A chama é uma pilha de camadas aditivas: o exterior largo e vermelho, o
+    núcleo estreito e quase branco. Avaliar o mesmo que o shader faz é a única
+    forma de ver se o fogo está bom sem uma GPU — o rasterizador é CPU.
+    """
+    n = uv.shape[0]
+    h = np.clip(uv[:, 1], 0.0, 1.0)
+    speed = float(pval(params, "flame_speed", 1.0))
+    energy = float(pval(params, "flame_energy", 2.4))
+    slim = float(pval(params, "slim", 0.62))
+    width = float(pval(params, "width", 1.0))
+
+    sway = np.sin(t * 6.0 + h * 9.0) * 0.045 * h
+    center = 0.5 + sway
+    half_width = width * (0.5 * slim) * np.power(1.0 - h, 1.35) + 0.012
+    # fbm2 barato: soma de senos com o mesmo espírito do shader
+    px = uv[:, 0] * 2.0
+    py = h * 6.0
+    fbm = (np.sin(px * 3.1 + t * 1.4) * 0.5 + np.sin(py * 2.3 - t * 2.4) * 0.3
+           + np.sin((px + py) * 1.7 + t * 4.1) * 0.2) * 0.5 + 0.5
+    edge = (fbm - 0.5) * 0.10 * (0.35 + h) + np.sin(h * 25.0 + t * 8.0) * 0.025
+    hw = half_width + edge
+    side = np.abs(uv[:, 0] - center)
+    body = 1.0 - np.clip((side - (hw - 0.012)) / 0.024, 0.0, 1.0)
+    base_fade = np.clip((h - 0.015) / 0.135, 0.0, 1.0)
+    tip_fade = 1.0 - np.clip((h - 0.77) / 0.23, 0.0, 1.0)
+    alpha = body * base_fade * tip_fade
+
+    core = 1.0 - np.clip((side - 0.035) / np.maximum(hw * 0.72 - 0.035, 1e-4), 0.0, 1.0)
+    t_col = 1.0 - np.clip((h - 0.12) / 0.60, 0.0, 1.0)
+    outer = np.array([1.0, 0.19, 0.025]) * (1 - t_col)[:, None] + np.array([1.0, 0.60, 0.08]) * t_col[:, None]
+    core_col = np.array([1.0, 0.76, 0.20]) * (1 - core)[:, None] + np.array([1.0, 0.96, 0.62]) * core[:, None]
+    col = outer * (1 - core * 0.92)[:, None] + core_col * (core * 0.92)[:, None]
+    col = col * (energy * (1.0 - h * 0.22))[:, None] * (0.75 + 0.25 * speed)
+    return col, alpha
+
+
 def grass_card_pixels(wpos, normal, uv, vcol, inst, eye, params, L, sun_col, sky_bot):
     """grass_cards.gdshader, pixel a pixel.
 
@@ -444,9 +487,12 @@ def shade_water(pos, nrm, view, L, sun_col, m):
     col = shallow * (1.0 - band)[:, None] + deep * band[:, None]
     col = col * (1.0 - 0.5 * (w > 0.75)[:, None]) + (col * 1.22 + 0.05) * (0.5 * (w > 0.75))[:, None]
     col = col * (1.0 - 0.7 * (w > 0.93)[:, None]) + foam * (0.7 * (w > 0.93))[:, None]
-    glow = np.power(np.clip(np.einsum("ij,ij->i",
-                                      2.0 * nrm * np.einsum("ij,j->i", nrm, -view)[:, None] + view,
-                                      L), 0.0, 1.0), 18.0)
+    # Brilho especular: meia-vector de Blinn-Phong. A versão anterior tinha um
+    # einsum com subscritos errados ("ij,j->i" contra um array (N,3)) e o
+    # renderizador rebentava assim que aparecesse água no enquadramento.
+    h = L[None, :] + view
+    h = h / np.maximum(np.linalg.norm(h, axis=1, keepdims=True), 1e-9)
+    glow = np.power(np.clip(np.einsum("ij,ij->i", nrm, h), 0.0, 1.0), 18.0)
     col += sky_tint * (glow * 0.6)[:, None]
     return np.clip(col, 0.0, 1.0)
 
@@ -487,7 +533,10 @@ def render(hdr, meshes, W=640, H=360):
     n_tri_total = 0
     n_tri_drawn = 0
     n_tri_culled = 0
-    for m_ in meshes:
+    def _is_flame(mm) -> bool:
+        return MATERIALS.get(mm["mat"], DEFAULT_MAT)["kind"] == "flame"
+
+    for m_ in sorted(meshes, key=_is_flame):
         mat_key = os.path.basename(m_["mat"])
         params = m_.get("params", {})
         pixel_kind = ("shells" if mat_key == "grass_shells.gdshader"
@@ -569,6 +618,12 @@ def render(hdr, meshes, W=640, H=360):
                                     instr=trip(m_["uv2"], 1))
             sa = sb = sc = None
             va = vb = vc = None
+        elif mat["kind"] == "flame":
+            flame_col, flame_alpha = flame_pixels(m_["uv"], params)
+            ca_, cb_, cc_ = flame_alpha[I[:, 0]], flame_alpha[I[:, 1]], flame_alpha[I[:, 2]]
+            pix_channels = dict(fuv=trip(m_["uv"]))
+            sa = sb = sc = None
+            va = vb = vc = None
         elif mat["kind"] == "water":
             sa = shade_water(a, na, -fwd, L, sun_col, mat)
             sb = shade_water(b, nb, -fwd, L, sun_col, mat)
@@ -639,6 +694,17 @@ def render(hdr, meshes, W=640, H=360):
                 vals = {}
                 for key, (ca_, cb_, cc_) in pix_channels.items():
                     vals[key] = ca_[ti] * w0h + cb_[ti] * w1h + cc_[ti] * w2h
+                if mat["kind"] == "flame":
+                    fcol, falpha = flame_pixels(vals["fuv"], params)
+                    live = np.nonzero(falpha > 0.004)[0]
+                    if live.size == 0:
+                        continue
+                    n_tri_drawn += 1
+                    yy = y0 + ys_[live]
+                    xx = x0 + xs_[live]
+                    fb[yy, xx] = np.clip(
+                        fb[yy, xx] + fcol[live] * falpha[live][:, None], 0.0, 1.0)
+                    continue
                 if pixel_kind == "shells":
                     cols, visible = grass_shell_pixels(
                         pw, nw, vals["tint"], vals["shell"][:, 0],

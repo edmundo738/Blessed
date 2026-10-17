@@ -9,7 +9,12 @@ height = 6.0
 [node name="FelledTree" type="AnimatableBody3D"]
 collision_layer = 1
 collision_mask = 1
-sync_to_physics = true
+; `sync_to_physics = false` é DELIBERADO: com a sincronização ligada o
+; transform do nó é reescrito a partir do servidor de física e a rotação que a
+; queda escreve era perdida a meio — a árvore "encostava um pouco e ficava
+; parada" enquanto o jogo já a dava como caída. A queda é conduzida aqui, por
+; isso o nó tem de ser dono do próprio transform.
+sync_to_physics = false
 script = ExtResource("1")
 
 [node name="TreeMesh" type="MeshInstance3D" parent="."]
