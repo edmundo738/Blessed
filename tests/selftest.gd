@@ -1033,6 +1033,48 @@ func _run() -> void:
 		bool(ferver.get("ok", false)) and inv.count("water_clean") >= 1,
 		"reason=%s" % str(ferver.get("reason", "-")))
 
+	# ── água do mar: uma REGRA, não dano aleatório ───────────────────────
+	# A constituição (§5) é explícita: o mar dá "Desidratação", nunca dano
+	# instantâneo arbitrário. E ferver NÃO salva a água salgada.
+	var sea := _sea_spot(main.player.global_position)
+	check("há mar ao alcance da costa", sea != Vector3.INF,
+		"ponto=%s" % str(sea))
+	if sea != Vector3.INF:
+		inv.add("bottle", 1)
+		it.focus = {"kind": "water", "ref": null, "pos": sea}
+		it._do_interact({})
+		check("no mar a garrafa enche-se de água SALGADA",
+			inv.count("water_salt") >= 1, "water_salt=%d" % inv.count("water_salt"))
+		check("ferver não transforma água do mar em potável",
+			not Db.recipe("boil_water").get("needs", {}).has("water_salt"),
+			str(Db.recipe("boil_water").get("needs", {})))
+		var mar_slot := -1
+		for i in inv.SLOTS:
+			if str((inv.slots[i] as Dictionary).get("id", "")) == "water_salt":
+				mar_slot = i
+				break
+		if mar_slot >= 0:
+			inv.equip_slot(mar_slot)
+			sv.thirst = 30.0
+			var h_antes := float(sv.health)
+			var bebeu_mar: Dictionary = Game.request("use_item")
+			check("beber água do mar NÃO fere: dá Desidratação",
+				bool(bebeu_mar.get("ok", false)) and float(sv.dehydrated_t) > 0.0
+				and is_equal_approx(float(sv.health), h_antes),
+				"dehydrated=%.0fs hp %.0f->%.0f" % [float(sv.dehydrated_t),
+					h_antes, float(sv.health)])
+			# a sede escorre mais depressa enquanto a dívida durar
+			sv.thirst = 80.0
+			sv._process(1.0)
+			var c_dehydrated := 80.0 - float(sv.thirst)
+			sv.drink(100.0, 0.0)      # água doce lava o sal
+			sv.thirst = 80.0
+			sv._process(1.0)
+			var c_normal := 80.0 - float(sv.thirst)
+			check("a desidratação cobra-se em sede (e a água doce cura)",
+				c_dehydrated > c_normal * 2.0 and float(sv.dehydrated_t) == 0.0,
+				"%.3f/s vs %.3f/s" % [c_dehydrated, c_normal])
+
 	# ── mobiliário que serve para algo ────────────────────────────────────
 	var cofre: Dictionary = main.structures.place("chest",
 		main.player.global_position + Vector3(-3.5, 0.0, 0.0), 0.0, false)
@@ -1338,7 +1380,7 @@ func _run() -> void:
 	else:
 		var generic_icons: Array = []
 		for id in ["stone_blade", "fire_kit", "workbench", "axe", "pickaxe", "campfire",
-				"chest", "chair", "primitive_axe", "primitive_pickaxe"]:
+				"chest", "chair", "primitive_axe", "primitive_pickaxe", "water_salt"]:
 			if not ('"%s"' % id in icon_art):
 				generic_icons.append(id)
 		check("os ícones das ferramentas novas estão desenhados",
@@ -1405,6 +1447,19 @@ func _water_spot(from: Vector3, dist: float, min_depth: float, max_depth: float)
 			var depth := surface - ter.height(x, z)
 			if depth >= min_depth and depth <= max_depth:
 				return Vector3(x, surface - min_depth * 0.5, z)
+	return Vector3.INF
+
+
+## Um ponto de MAR aberto (a costa fica longe: procura-se em anéis largos).
+func _sea_spot(from: Vector3) -> Vector3:
+	var ter: Terrain = main.world.terrain
+	for radius in [60.0, 140.0, 300.0, 600.0]:
+		for i in 64:
+			var a := float(i) / 64.0 * TAU
+			var x: float = from.x + cos(a) * radius
+			var z: float = from.z + sin(a) * radius
+			if ter.is_ocean(x, z):
+				return Vector3(x, ter.water_surface_height(x, z) - 0.2, z)
 	return Vector3.INF
 
 

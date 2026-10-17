@@ -142,9 +142,18 @@ func _draw() -> void:
 			draw_circle(center + Vector2(-2, -3) * k, 4.0 * k, Color("f5d2a7"))
 			if item_id.begins_with("fish"):
 				_poly(center + Vector2(8, 0) * k, [Vector2(0, 0), Vector2(9, -7), Vector2(9, 7)], BLUE)
-		"bottle", "water":
+		"bottle", "water", "water_salt":
 			_poly(center, [Vector2(-6, -14), Vector2(6, -14), Vector2(6, -8), Vector2(11, -4), Vector2(10, 13), Vector2(-10, 13), Vector2(-11, -4), Vector2(-6, -8)], Color("9ed8d0"))
-			draw_rect(Rect2(center + Vector2(-7, 1) * k, Vector2(14, 10) * k), BLUE if item_id == "water" else Color("c5e6d7"))
+			var liquido := Color("c5e6d7")
+			if item_id == "water":
+				liquido = BLUE
+			elif item_id == "water_salt":
+				# mar: verde-acinzentado, com duas riscas de sal
+				liquido = Color("4f8f92")
+			draw_rect(Rect2(center + Vector2(-7, 1) * k, Vector2(14, 10) * k), liquido)
+			if item_id == "water_salt":
+				_stroke(center + Vector2(-4, 5) * k, center + Vector2(3, 5) * k, Color("d9eef0"), 1.2 * k)
+				_stroke(center + Vector2(-2, 8) * k, center + Vector2(4, 8) * k, Color("d9eef0"), 1.2 * k)
 			_stroke(center + Vector2(-5, -10) * k, center + Vector2(5, -10) * k, INK, 2.0 * k)
 		"workbench":
 			# tampo + quatro pernas + ferramentas em cima

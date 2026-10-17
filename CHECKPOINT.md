@@ -8,8 +8,8 @@
 
 ## Marco mais recente — o PRIMEIRO DIA joga-se de ponta a ponta (2026-10-17)
 
-**Verificação: 192 ok, 0 falhas, 30 saltadas (SELFTEST_PASS)** — 167 verificações
-anteriores + **25 do novo teste de GAMEPLAY do primeiro dia**.
+**Verificação: 197 ok, 0 falhas, 30 saltadas (SELFTEST_PASS)** — 167 verificações
+anteriores + **25 do teste de GAMEPLAY do primeiro dia** + **5 da água do mar**.
 
 - **Existe agora o teste que a constituição exige** (`tests/selftest.gd::_first_day()`):
   uma SESSÃO, não um teste de função. Mochila vazia, mãos nuas, e a cadeia
@@ -37,6 +37,12 @@ anteriores + **25 do novo teste de GAMEPLAY do primeiro dia**.
   `tools/run.mjs` (motor web em Node; arranca com `Module.callMain`, **nunca**
   `emnapiInit`) e `tools/mkpack.py` (`.pck` com `tests/` dentro). O sandbox
   perdeu o `/tmp` duas vezes nesta sessão e o harness com ele.
+
+- **O MAR TEM REGRA PRÓPRIA (constituição §5):** encher a garrafa no mar dá
+  **água salgada** (`water_salt`, ícone e nome próprios); ferver **não** a
+  transforma em potável; beber dá **Desidratação** — durante 45 s a sede
+  escorre 2,6× mais depressa — e **nunca dano instantâneo**. Beber água doce
+  cura. Provado: `0.455/s vs 0.175/s`, `hp 100 → 100`.
 
 > Nota de método: as 4 causas que este teste apanhou e que os testes de função
 > não apanhavam estão em `docs/GAMEPLAY_ARCHITECTURE.md` §6.2.

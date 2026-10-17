@@ -499,6 +499,14 @@ func _open_station(id: String) -> void:
 
 ## Tem isqueiro na mão (ou no saco)? Acender fogueiras é a única coisa que ele
 ## faz — não se gasta, é uma ferramenta.
+## Este ponto de água é MAR? (o rio e o mar não são a mesma água)
+func _is_sea(p: Vector3) -> bool:
+	if world == null:
+		return false
+	var ter: Terrain = world.terrain
+	return ter != null and ter.is_ocean(p.x, p.z)
+
+
 func _has_fire_starter() -> bool:
 	if Db.item(inv.hotbar_id()).get("power", {}).has("fire"):
 		return true
@@ -796,11 +804,22 @@ func _fire_once() -> void:
 			if npc.has_method("talk_to"):
 				npc.call("talk_to")
 		"water":
+			var salgada := _is_sea(focus["pos"] as Vector3)
 			if inv.count("bottle") > 0:
 				inv.remove("bottle", 1)
-				inv.add("water", 1)
+				# Água do mar enche a garrafa — mas com sal. O jogador vê a
+				# diferença no ícone e no nome; ferver NÃO a salva (o sal não
+				# evapora numa panela), o que o obriga a procurar água doce.
+				inv.add("water_salt" if salgada else "water", 1)
 				Sfx.play("splash", -10.0, 1.2)
-				Bus.say("msg.water_filled", 2.0)
+				Bus.say("msg.water_salt_filled" if salgada else "msg.water_filled", 2.2)
+			elif salgada:
+				# Beber do mar sem garrafa: alivia a boca e cobra-se em SEDE,
+				# nunca em dano instantâneo.
+				survival.drink(8.0, 0.0)
+				survival.dehydrate(45.0)
+				Sfx.play("drink", -9.0)
+				Bus.say("msg.sea_water", 2.8)
 			else:
 				# Direto da fonte: mata a sede, mas é água crua.
 				survival.drink(22.0, 0.35)
@@ -920,6 +939,15 @@ func _do_use_item(_a: Dictionary) -> Dictionary:
 			build_rot = snappedf(player.yaw + PI, PI * 0.25)
 		return _do_place({})
 	# 2) comida e água: um gesto, no sítio onde se está
+	if id == "water_salt":
+		if inv.remove(id, 1):
+			inv.add("bottle", 1)
+			survival.drink(8.0, 0.0)      # o alívio da boca
+			survival.dehydrate(45.0)      # e a factura, em sede
+			Bus.ui_message.emit(Loc.t("msg.sea_water"), 2.8)
+			Sfx.play("drink", -9.0)
+			return {"used": id, "dehydrated": true}
+		return {"failed": true, "reason": "no_water"}
 	if id == "water" or id == "water_clean":
 		if inv.remove(id, 1):
 			inv.add("bottle", 1)

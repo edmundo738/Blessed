@@ -86,7 +86,20 @@ Regra: se um recurso não tem **fonte no mundo**, **estações que o usam** e
 `sede → (a) beber na fonte: rápido, água CRUA com risco | (b) encher o
 recipiente → levar → ferver na fogueira → água segura e mais sede por frasco`.
 O recipiente nasce **vazio** e é uma ferramenta de transporte, não uma garrafa
-de água. Água do **mar** é salgada: hidrata de imediato e depois cobra.
+de água.
+
+**Mar ≠ rio (implementado).** `terrain.is_ocean()` distingue os dois:
+
+| | rio / lago | mar |
+|---|---|---|
+| encher a garrafa | `water` (crua, risco de parasitas) | `water_salt` (não se bebe) |
+| beber na fonte | sede + risco | +8 de sede **e Desidratação** |
+| ferver | → `water_clean` | **não existe receita** (o sal não evapora) |
+
+A Desidratação (`survival.dehydrate`) não faz dano instantâneo: durante 45 s a
+sede escorre **2,6× mais depressa** (0,455/s em vez de 0,175/s) e um aviso diz
+porquê. Beber água doce cura-a. É uma dívida, não uma punição arbitrária — e é
+o que obriga a procurar água doce em vez de viver na praia.
 
 ### 5.2 Comida
 `fome → colher/caçar/pescar → cru (risco, `risk`) ou cozinhar (na fogueira) →

@@ -29,6 +29,10 @@ var companion_near := false
 
 var _warn := {}
 
+## Segundos de DESIDRATAÇÃO que faltam pagar (água do mar). Enquanto durar, a
+## sede escorre mais depressa. Nunca é dano instantâneo: é uma dívida.
+var dehydrated_t := 0.0
+
 
 func _ready() -> void:
 	name = "Survival"
@@ -42,7 +46,9 @@ func _process(delta: float) -> void:
 	var d := delta
 	# ── necessidades ────────────────────────────────────────────────────
 	hunger = _drain(hunger, 0.115 * d)
-	thirst = _drain(thirst, 0.175 * d)
+	thirst = _drain(thirst, 0.175 * d * (2.6 if dehydrated_t > 0.0 else 1.0))
+	if dehydrated_t > 0.0:
+		dehydrated_t = maxf(0.0, dehydrated_t - d)
 	var tired := 0.10 if Game.is_night() else 0.055
 	energy = _drain(energy, tired * d)
 
@@ -80,6 +86,8 @@ func _process(delta: float) -> void:
 	# ── bênção: regenera devagar, é o recurso "de história" ─────────────
 	blessing = clampf(blessing + 1.1 * d, 0.0, MAX_STAT)
 
+	if dehydrated_t > 0.0:
+		_warn_once("dehydrated", "msg.dehydrated")
 	# ── consequências ───────────────────────────────────────────────────
 	if hunger <= 0.0:
 		damage(1.1 * d, "starve")
@@ -146,11 +154,23 @@ func eat(food: float, drink: float, risk: float) -> void:
 ## — sem isto, beber do rio era sempre a jogada certa e a fogueira era só enfeite.
 func drink(amount: float, risk: float = 0.0) -> void:
 	thirst = clampf(thirst + amount, 0.0, MAX_STAT)
+	# Água limpa lava o sal: beber doce cura a desidratação.
+	if amount > 0.0 and risk <= 0.0:
+		dehydrated_t = 0.0
 	if risk > 0.0 and randf() < risk:
 		damage(5.0, "bad_water")
 		Bus.toast.emit("msg.bad_water", 2.4)
 	Sfx.play("drink", -8.0)
 	reset_warnings()
+	_emit_stats()
+
+
+## Água do mar: o sal puxa a água do corpo. O alívio é imediato (o `drink` já
+## aconteceu); a factura vem nos segundos seguintes, em sede — não em dano.
+func dehydrate(seconds: float = 45.0) -> void:
+	dehydrated_t = maxf(dehydrated_t, seconds)
+	_warn["dehydrated"] = true
+	Bus.toast.emit("msg.dehydrated", 3.2)
 	_emit_stats()
 
 
@@ -237,6 +257,7 @@ func save_data() -> Dictionary:
 	return {
 		"health": health, "hunger": hunger, "thirst": thirst, "energy": energy,
 		"warmth": warmth, "sanity": sanity, "blessing": blessing, "alive": alive,
+		"dehydrated_t": dehydrated_t,
 	}
 
 
@@ -249,6 +270,7 @@ func load_data(d: Dictionary) -> void:
 	sanity = float(d.get("sanity", 100.0))
 	blessing = float(d.get("blessing", 60.0))
 	alive = bool(d.get("alive", true))
+	dehydrated_t = float(d.get("dehydrated_t", 0.0))
 	reset_warnings()
 	_emit_stats()
 

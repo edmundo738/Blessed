@@ -71,6 +71,11 @@ const ITEMS := {
 					 "risk": 0.45, "raw": true},
 	"water_clean":  {"kind": "tool", "stack": 1, "icon": "water", "drink_amount": 80.0,
 					 "risk": 0.0, "boiled": true},
+	# Água do mar. Alivia a boca por um instante e COBRA-O em sede: ferve-la não
+	# a salva (o sal não evapora numa panela) — o mar obriga a procurar água doce.
+	# É por isto que o mar tem uma REGRA e não é só "água azul".
+	"water_salt":   {"kind": "tool", "stack": 1, "icon": "water_salt", "drink_amount": 8.0,
+					 "risk": 0.0, "salty": true},
 	# ── estruturas (colocáveis) ─────────────────────────────────────────────
 	"campfire":     {"kind": "structure", "stack": 3, "icon": "campfire",
 					 "place": "campfire", "light": 9.0},
