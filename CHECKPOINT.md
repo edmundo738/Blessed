@@ -6,6 +6,53 @@
 > O histórico de auditoria abaixo preserva resultados antigos; quando diferirem, prevalecem
 > este marco mais recente e `docs/AUDIT_2026-10-14.md`.
 
+## Etapa C (em curso) — a água nasce do mundo, e o mundo obedece-lhe
+
+**Verificação: 242 ok, 0 falhas, 30 saltadas (SELFTEST_PASS). 75 s.**
+
+Até aqui a água era uma **superfície derivada do chão**: um rio desenhado com
+uma senóide, uma costa pintada, e o mar. A inversão desta etapa é a que faltava:
+
+> o chão é que se adapta à água.
+
+`Terrain.height()` deixou de ser o relevo e passou a ser `relevo − leito
+escavado` (`relief()` é o relevo puro que a hidrologia consulta). Os rios
+passam em vales verdadeiros, com margens, e a rede nasce da chuva que o relevo
+manda para o mar.
+
+- **`Water` (BHFS geográfico)** — bacia de 2,56 km a 20 m (129²) em volta da
+  aldeia, calculada **uma vez por semente** e partilhada por todos os `Terrain`
+  do mesmo mundo (cache estática). D8 com desempate diagonal → acumulação →
+  nascentes → traços → lagos → leito. Números do mundo atual: **7 645
+  segmentos, 738 células de rio, 49 lagos**; arranque ≈ **1,5 s no wasm** (só
+  na primeira construção; nativo é uma fração).
+- **Leito** — raster de 8 m, `depth·1,35·(1−d/reach)^1,7`, máximo dos
+  segmentos (confluências não somam vales).
+- **Nível da água = leito + 0,85·profundidade** (`_retune_levels`). Sem isto, o
+  nível vinha do relevo ideal e 2/3 da rede ficava seca: o raster de 8 m não
+  representa um rio de 3 m. Com a correção, **7 645/7 645 segmentos têm água**.
+- **Mundo → água e água → mundo**: as margens ficam com areia/lama a partir do
+  `carve`; o mangue entra no bioma; `is_ocean` deixa de chamar mar à foz
+  (leito escavado = água doce); a garrafa enche água doce no rio e salgada no
+  mar.
+- **Corrente que se sente**: `Water.sample()` devolve `flow`+`speed`; o jogador
+  nada/vadeia com um empurrão até 58 % da velocidade (nunca prende: 1,39 m/s
+  contra 4 m/s a andar) e os itens largados descem o rio devagar.
+- **Shader**: UV2 passa a `(profundidade, salinidade)` e COLOR leva
+  `(velocidade, turvação, corrente 2D)`. Ondas grandes no mar, ondulação curta
+  e riscos alinhados com a corrente no rio, espuma em corredeiras e margem,
+  água barrenta no mangue. O mesmo material serve mar, rio e lago.
+- **Custo**: um único raster de 400 KB e 4 leituras por vértice; a cache de
+  segmentos por bucket passou a usar a margem real do leito (com margem fixa
+  de 34 m, um chunk de rio custava **7 s**; agora fica abaixo de 400 ms).
+
+PNG: `docs/shots/07_rio_do_relevo.png` — o rio no vale, com as margens que o
+leito abriu.
+
+**Ainda por fazer na Etapa C:** maré desenhada (subida/descida visível na
+costa), espuma/ondulação do mar ao longe, juncos no mangue, peixes, filtro de
+carvão (C5) e a chuva a alimentar a rede em tempo real.
+
 ## Etapa B concluída — fome e sede passam a governar o corpo
 
 **Verificação: 229 ok, 0 falhas, 31 saltadas (SELFTEST_PASS).**
@@ -261,7 +308,7 @@ PT/EN, save/load. O cenário é híbrido: geração GDScript e um kit de modelos
 |--------------------|----------|-------|
 | Mundo/chunks       | OK       | selftest + rasterizador (`docs/shots/`) |
 | Controlos          | OK       | selftest (tabela de teclas) |
-| Água               | shader opaco dupla face, ondas/espuma; sem depth-texture | shader e arranque Godot headless; aparência no renderer real pendente |
+| Água               | hidrologia procedural (7 645 seg., 49 lagos), leito escavado, nível por leito, corrente no jogador/itens | selftest 242 ok; PNG `07_rio_do_relevo.png` no renderer real; maré e juncos pendentes |
 | Céu/sombra/LOD     | céu Kenney CC0 2K, sol/lua e nuvens dinâmicos; LODs por anel | importação e contratos no selftest; imagem/FPS GPU ainda não medidos |
 | Relva/árvores      | 14 famílias Quaternius CC0, espécies separadas e LODs | meshes, dimensões e instâncias validados no Godot headless; aparência no renderer por validar |
 | NPC                | componente sprite 2D com variações; sem aldeões ativos na cena atual | script incluído no selftest; aldeões não aparecem na cena |

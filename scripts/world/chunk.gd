@@ -14,7 +14,7 @@ const SKIRT := 1.2
 const RES := [48, 24, 12, 6]       # detalhe cai por faixa; o anel distante só desenha terreno
 const TREE_CELL := 3.0
 const ROCK_CELL := 6.0
-const WATER_LOD_RES := [24, 16, 12, 8] # costa suave perto, malha reduzida ao longe
+const WATER_LOD_RES := [24, 24, 16, 12] # rios precisam de malha fina mesmo a média distância
 ## Níveis de relva (shells). A altura efetiva vem de Materials.GRASS_HEIGHT; o
 ## número de níveis decide o espaçamento vertical da pilha: com 0,30 m e 9
 ## níveis, cada corte fica a ~3,3 cm. Os anéis distantes usam menos níveis porque
@@ -397,22 +397,64 @@ func _build_water(o: Vector2) -> void:
 	var water_res: int = WATER_LOD_RES[clampi(lod, 0, WATER_LOD_RES.size() - 1)]
 	var n := water_res + 1
 	var step := SIZE / float(water_res)
-	var levels := PackedFloat32Array()
-	levels.resize(n * n)
-	var depths := PackedFloat32Array()
-	depths.resize(n * n)
-	var has_water := false
+	var verts: Array[Dictionary] = []
+	verts.resize(n * n)
 	for j in n:
 		for i in n:
 			var x := o.x + i * step
 			var z := o.y + j * step
-			var water_sample := terrain.water_info(x, z)
-			var level := water_sample.x
+			var ws := terrain.water_sample(x, z)
+			if ws.is_empty():
+				verts[j * n + i] = {"p": Vector2(x, z), "level": 0.0, "depth": 0.0,
+					"salt": 0.0, "ex": Vector4.ZERO, "signed": -1.0, "wet": false}
+				continue
+			var flow: Vector2 = ws.get("flow", Vector2.ZERO)
+			var depth := float(ws.get("depth", 0.0))
+			verts[j * n + i] = {
+				"p": Vector2(x, z),
+				"level": float(ws.get("level", 0.0)),
+				"salt": clampf(float(ws.get("salinity", 0.0)), 0.0, 1.0),
+				"ex": Vector4(
+					clampf(float(ws.get("speed", 0.0)) / 3.4, 0.0, 1.0),
+					clampf(float(ws.get("turbidity", 0.0)), 0.0, 1.0),
+					flow.x, flow.y),
+				"depth": depth,
+				"signed": depth,
+				"wet": true,
+			}
+	# Segundo passo: os vértices SECOS que fazem fronteira com água recebem a
+	# cota do vizinho e a altura do chão. Assim o recorte da margem é uma
+	# interpolação linear do campo assinado — zero consultas por aresta.
+	# Antes, cada aresta molhada pagava 4–7 amostras completas e um só chunk de
+	# rio custava 1 segundo.
+	for j in n:
+		for i in n:
 			var idx := j * n + i
-			levels[idx] = level
-			if level > -99999.0:
-				depths[idx] = water_sample.y
-			has_water = has_water or level > -99999.0
+			if bool(verts[idx]["wet"]):
+				continue
+			var nb := -1
+			for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var ni := i + d.x
+				var nj := j + d.y
+				if ni < 0 or nj < 0 or ni >= n or nj >= n:
+					continue
+				if bool(verts[nj * n + ni]["wet"]):
+					nb = nj * n + ni
+					break
+			if nb < 0:
+				continue
+			var p2: Vector2 = verts[idx]["p"]
+			var lv := float(verts[nb]["level"])
+			verts[idx]["level"] = lv
+			verts[idx]["signed"] = lv - terrain.height(p2.x, p2.y)
+			verts[idx]["depth"] = 0.0
+			verts[idx]["salt"] = float(verts[nb]["salt"])
+			verts[idx]["ex"] = verts[nb]["ex"]
+	var has_water := false
+	for v in verts:
+		if bool(v["wet"]):
+			has_water = true
+			break
 	if not has_water:
 		return
 	var st := SurfaceTool.new()
@@ -423,14 +465,8 @@ func _build_water(o: Vector2) -> void:
 			var b := a + 1
 			var c := a + n + 1
 			var d := a + n
-			var pa := Vector2(o.x + i * step, o.y + j * step)
-			var pb := Vector2(pa.x + step, pa.y)
-			var pc := Vector2(pa.x + step, pa.y + step)
-			var pd := Vector2(pa.x, pa.y + step)
-			_add_clipped_water_triangle(st, pa, levels[a], depths[a], pb, levels[b], depths[b],
-				pc, levels[c], depths[c])
-			_add_clipped_water_triangle(st, pa, levels[a], depths[a], pc, levels[c], depths[c],
-				pd, levels[d], depths[d])
+			_add_clipped_water_triangle(st, verts[a], verts[b], verts[c])
+			_add_clipped_water_triangle(st, verts[a], verts[c], verts[d])
 	var mesh := st.commit()
 	if mesh == null or mesh.get_surface_count() == 0:
 		return
@@ -443,25 +479,40 @@ func _build_water(o: Vector2) -> void:
 	water_root.add_child(_water_inst)
 
 
-func _add_clipped_water_triangle(st: SurfaceTool, a: Vector2, la: float, da: float,
-		b: Vector2, lb: float, db: float, c: Vector2, lc: float, dc: float) -> void:
-	var polygon: Array[Dictionary] = [
-		{"p": a, "level": la, "depth": da, "wet": la > -99999.0},
-		{"p": b, "level": lb, "depth": db, "wet": lb > -99999.0},
-		{"p": c, "level": lc, "depth": dc, "wet": lc > -99999.0},
-	]
+func _wet(v: Dictionary) -> bool:
+	return float(v["signed"]) > 0.0
+
+
+func _mix_vert(a: Dictionary, b: Dictionary, t: float) -> Dictionary:
+	var exa: Vector4 = a["ex"]
+	var exb: Vector4 = b["ex"]
+	var out_ex := exa.lerp(exb, t)
+	return {
+		"p": (a["p"] as Vector2).lerp(b["p"], t),
+		"level": lerpf(float(a["level"]), float(b["level"]), t),
+		"depth": 0.0,
+		"salt": lerpf(float(a["salt"]), float(b["salt"]), t),
+		"ex": out_ex,
+		"signed": 0.0,
+		"wet": true,
+	}
+
+
+func _add_clipped_water_triangle(st: SurfaceTool, a: Dictionary, b: Dictionary,
+		c: Dictionary) -> void:
+	var polygon: Array[Dictionary] = [a, b, c]
 	var clipped: Array[Dictionary] = []
 	for i in 3:
 		var current: Dictionary = polygon[i]
 		var next: Dictionary = polygon[(i + 1) % 3]
-		var current_wet := bool(current["wet"])
-		var next_wet := bool(next["wet"])
+		var current_wet := _wet(current)
+		var next_wet := _wet(next)
 		if current_wet and next_wet:
 			clipped.append(next)
 		elif current_wet and not next_wet:
-			clipped.append(_water_boundary(current, next, true))
+			clipped.append(_water_boundary(current, next))
 		elif not current_wet and next_wet:
-			clipped.append(_water_boundary(current, next, false))
+			clipped.append(_water_boundary(next, current))
 			clipped.append(next)
 	if clipped.size() < 3:
 		return
@@ -469,28 +520,12 @@ func _add_clipped_water_triangle(st: SurfaceTool, a: Vector2, la: float, da: flo
 		_add_water_face(st, clipped[0], clipped[i], clipped[i + 1])
 
 
-func _water_boundary(a: Dictionary, b: Dictionary, start_wet: bool) -> Dictionary:
-	var pa: Vector2 = a["p"]
-	var pb: Vector2 = b["p"]
-	var low := 0.0
-	var high := 1.0
-	for _i in 7:
-		var mid := (low + high) * 0.5
-		var p := pa.lerp(pb, mid)
-		var wet := terrain.water_surface_height(p.x, p.y) > -99999.0
-		if wet == start_wet:
-			low = mid
-		else:
-			high = mid
-	var wet_t := low if start_wet else high
-	var wet_point := pa.lerp(pb, wet_t)
-	var level := terrain.water_surface_height(wet_point.x, wet_point.y)
-	if level < -99999.0:
-		var fallback_t := clampf(wet_t + (0.015 if start_wet else -0.015), 0.0, 1.0)
-		var fallback := pa.lerp(pb, fallback_t)
-		level = terrain.water_surface_height(fallback.x, fallback.y)
-	return {"p": pa.lerp(pb, (low + high) * 0.5), "level": level,
-		"depth": 0.0, "wet": true}
+## Ponto onde a água encontra a terra, por interpolação do campo assinado.
+func _water_boundary(wet: Dictionary, dry: Dictionary) -> Dictionary:
+	var sw := float(wet["signed"])
+	var sd := float(dry["signed"])
+	var t := clampf(sw / maxf(sw - sd, 0.0001), 0.0, 1.0)
+	return _mix_vert(wet, dry, t)
 
 
 func _add_water_face(st: SurfaceTool, a: Dictionary, b: Dictionary, c: Dictionary) -> void:
@@ -500,25 +535,25 @@ func _add_water_face(st: SurfaceTool, a: Dictionary, b: Dictionary, c: Dictionar
 	var va := Vector3(pa.x, float(a["level"]), pa.y)
 	var vb := Vector3(pb.x, float(b["level"]), pb.y)
 	var vc := Vector3(pc.x, float(c["level"]), pc.y)
-	# Mar fica no nível 0; o rio nasce acima dele e desce até à foz. UV2.y
-	# controla a força das ondas, portanto o mar recebe 1 e o rio 0.
-	var da := Vector2(float(a["depth"]), 1.0 if float(a["level"]) <= 0.4 else 0.0)
-	var db := Vector2(float(b["depth"]), 1.0 if float(b["level"]) <= 0.4 else 0.0)
-	var dc := Vector2(float(c["depth"]), 1.0 if float(c["level"]) <= 0.4 else 0.0)
+	# UV2 = (profundidade, salinidade). Salinidade 1 é mar; 0 é rio, lago ou
+	# mangue. É o que separa ondas grandes de água parada — e água salgada de
+	# doce para o jogo (beber, ferver, filtrar).
+	# COLOR = (velocidade, turvação, corrente x, corrente z), todos 0..1.
 	if (vb - va).cross(vc - va).y < 0.0:
 		var swap := vb
 		vb = vc
 		vc = swap
-		var swap_uv := db
-		db = dc
-		dc = swap_uv
-	for vertex in [[va, da], [vb, db], [vc, dc]]:
-		var p: Vector3 = vertex[0]
-		var water_data: Vector2 = vertex[1]
+		var swap_d := b
+		b = c
+		c = swap_d
+	for v in [a, b, c]:
+		var p: Vector2 = v["p"]
+		var ex: Vector4 = v["ex"]
 		st.set_normal(Vector3.UP)
-		st.set_uv(Vector2(p.x, p.z) * 0.12)
-		st.set_uv2(water_data)
-		st.add_vertex(p)
+		st.set_uv(Vector2(p.x, p.y) * 0.12)
+		st.set_uv2(Vector2(float(v["depth"]), float(v["salt"])))
+		st.set_color(Color(ex.x, ex.y, ex.z * 0.5 + 0.5, ex.w * 0.5 + 0.5))
+		st.add_vertex(Vector3(p.x, float(v["level"]), p.y))
 
 
 # ══════════════════════════════════════════════════════════════════════════
