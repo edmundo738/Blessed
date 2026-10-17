@@ -1095,9 +1095,15 @@ func _do_use_item(_a: Dictionary) -> Dictionary:
 		return {"failed": true, "reason": "no_water"}
 	if str(def.get("kind", "")) == "food":
 		if inv.remove(id, 1):
-			survival.eat(float(def.get("food", 0.0)), float(def.get("drink", 0.0)),
-				float(def.get("risk", 0.0)))
-			return {"used": id, "ate": true}
+			var ate: Dictionary = survival.eat(float(def.get("food", 0.0)),
+				float(def.get("drink", 0.0)), float(def.get("risk", 0.0)))
+			# O resultado tem de ser visível: quem come cru tem de perceber por
+			# que é que se sentiu mal — e que a fogueira resolve isso.
+			if bool(ate.get("sick", false)):
+				Bus.ui_message.emit(Loc.t("msg.food_sick", {"item": Db.item_name(id)}), 3.2)
+			else:
+				Bus.ui_message.emit(Loc.t("msg.ate", {"item": Db.item_name(id)}), 2.0)
+			return {"used": id, "ate": true, "sick": bool(ate.get("sick", false))}
 		return {"failed": true, "reason": "no_food"}
 	# 3) cana de pesca
 	if float(def.get("power", {}).get("fish", 0.0)) > 0.0:

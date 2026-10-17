@@ -308,8 +308,10 @@ func _use_item(id: String, slot_index: int) -> void:
 			Bus.say("msg.drink_flask", 2.0)
 	elif str(def.get("kind", "")) == "food":
 		if inv.remove(id, 1):
-			survival.eat(float(def.get("food", 0)), float(def.get("drink", 0)),
-				float(def.get("risk", 0)))
+			var ate: Dictionary = survival.eat(float(def.get("food", 0)),
+				float(def.get("drink", 0)), float(def.get("risk", 0)))
+			Bus.ui_message.emit(Loc.t("msg.food_sick" if bool(ate.get("sick", false))
+				else "msg.ate", {"item": Db.item_name(id)}), 3.0)
 	else:
 		inv.equip_slot(slot_index)
 		Bus.ui_message.emit(Loc.t("msg.equipped", [Db.item_name(id)]), 1.8)

@@ -136,17 +136,21 @@ func reset_warnings() -> void:
 # ══════════════════════════════════════════════════════════════════════════
 #  AÇÕES
 # ══════════════════════════════════════════════════════════════════════════
-func eat(food: float, drink: float, risk: float) -> void:
+## Comer devolve o que aconteceu: quem chama decide o que dizer ao jogador.
+## Antes, quem comia carne crua e se sentia mal via "Estás com fome" — o
+## oposto do que tinha acabado de acontecer.
+func eat(food: float, drink: float, risk: float) -> Dictionary:
 	hunger = clampf(hunger + food, 0.0, MAX_STAT)
 	thirst = clampf(thirst + drink, 0.0, MAX_STAT)
-	if risk > 0.0 and randf() < risk:
+	var sick := risk > 0.0 and randf() < risk
+	if sick:
 		damage(6.0, "sick")
-		Bus.toast.emit("msg.hungry", 2.0)
 	else:
 		health = clampf(health + 2.0, 0.0, MAX_STAT)
 	Sfx.play("eat", -8.0)
 	reset_warnings()
 	_emit_stats()
+	return {"sick": sick, "food": food, "drink": drink}
 
 
 ## Beber. `risk` é a probabilidade de dar-se mal com o que se bebeu: água crua

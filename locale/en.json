@@ -151,6 +151,8 @@
   "msg.water_salt_filled": "You filled the bottle with sea water. You can't drink this (not even boiled).",
   "msg.sea_water": "Sea water: the thirst eases for a moment — then it charges you back.",
   "msg.dehydrated": "Dehydration: the salt pulls the water out of you. Drink fresh water.",
+  "msg.ate": "You ate {item}.",
+  "msg.food_sick": "The {item} didn't sit well. Cooking it on the fire would have avoided this.",
   "msg.fire_fed": "You put wood on the fire. It burns for {h} more h.",
   "msg.fire_low": "The fire is dying. Add wood.",
   "msg.fire_out": "The fire went out. Only the smell of smoke is left.",

@@ -1143,6 +1143,19 @@ func _run() -> void:
 	var prazo_cadeira := Time.get_ticks_msec() + 12000
 	while bool(it.sleeping) and Time.get_ticks_msec() < prazo_cadeira:
 		await get_tree().process_frame
+	# ── comida: cru vs cozinhado ──────────────────────────────────────────
+	# O risco não pode ser decorativo: tem de vir dos dados e de ser dito.
+	check("a carne crua é um risco e a cozinhada não",
+		float(Db.item("meat_raw").get("risk", 0.0)) > 0.2
+		and float(Db.item("meat_cooked").get("risk", 1.0)) == 0.0,
+		"cru=%.2f cozido=%.2f" % [float(Db.item("meat_raw").get("risk", 0.0)),
+			float(Db.item("meat_cooked").get("risk", 0.0))])
+	var antes_comer := float(sv.hunger)
+	var comeu: Dictionary = sv.eat(12.0, 0.0, 0.0)
+	check("comer devolve o que aconteceu (para o jogo poder dizer)",
+		not bool(comeu.get("sick", true)) and float(sv.hunger) > antes_comer,
+		"hunger %.0f→%.0f" % [antes_comer, float(sv.hunger)])
+
 	check("a cadeira é um cochilo (recupera, mas não passa a noite)",
 		float(sv.energy) > 40.0 and float(Game.hour) < 5.0,
 		"energia %.1f, hora %.1f" % [float(sv.energy), float(Game.hour)])
@@ -1496,7 +1509,8 @@ func _run() -> void:
 	var missing_locale: Array = []
 	for key in ["msg.sleeping", "msg.sleep_bed", "msg.sleep_ground", "msg.cant_sleep",
 			"prompt.sleep", "msg.nap_done", "prompt.feed", "msg.fire_fed",
-			"msg.fire_low", "msg.fire_out", "msg.need_wood", "msg.dehydrated", "msg.sea_water", "item.water_salt"]:
+			"msg.fire_low", "msg.fire_out", "msg.need_wood", "msg.ate",
+			"msg.food_sick", "msg.dehydrated", "msg.sea_water", "item.water_salt"]:
 		if Loc.t(key) == key:
 			missing_locale.append(key)
 	check("os textos do sono e da água existem no idioma ativo",

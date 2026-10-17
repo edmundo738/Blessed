@@ -151,6 +151,8 @@
   "msg.water_salt_filled": "Encheste a garrafa no mar. Isto não se bebe (nem fervido).",
   "msg.sea_water": "Água do mar: a sede passa por um instante — e volta a cobrar-se.",
   "msg.dehydrated": "Desidratação: o sal puxa-te a água do corpo. Bebe água doce.",
+  "msg.ate": "Comeste {item}.",
+  "msg.food_sick": "Comeste {item} e caiu-te mal. Cozinhar na fogueira evitava isto.",
   "msg.fire_fed": "Puseste lenha na fogueira. Arde mais {h} h.",
   "msg.fire_low": "A fogueira está a morrer. Junta-lhe madeira.",
   "msg.fire_out": "A fogueira apagou-se. Ficou só o cheiro a fumo.",
