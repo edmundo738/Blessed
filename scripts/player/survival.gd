@@ -29,6 +29,12 @@ var companion_near := false
 
 var _warn := {}
 
+## Enjoo (comida/água estragada). 0..1. Não é dano instantâneo: sobe quando o
+## corpo recusa o que comeu e vai caindo, com dano lento e a vista a respirar.
+var illness := 0.0
+var _rumble_t := 6.0
+var _breath_t := 4.0
+
 ## Segundos de DESIDRATAÇÃO que faltam pagar (água do mar). Enquanto durar, a
 ## sede escorre mais depressa. Nunca é dano instantâneo: é uma dívida.
 var dehydrated_t := 0.0
@@ -89,6 +95,25 @@ func _process(delta: float) -> void:
 	if dehydrated_t > 0.0:
 		_warn_once("dehydrated", "msg.dehydrated")
 	# ── consequências ───────────────────────────────────────────────────
+	# ── o corpo faz barulho antes de o jogo dizer nada ───────────────────
+	# O estômago range quando a fome aperta; a respiração ouve-se quando o
+	# fôlego acaba. São os avisos que o jogador NÃO lê — ouve.
+	if hunger < 45.0:
+		_rumble_t -= d * (1.0 + (45.0 - hunger) * 0.05)
+		if _rumble_t <= 0.0:
+			_rumble_t = randf_range(5.0, 11.0)
+			Sfx.play("stomach", -20.0 + (45.0 - hunger) * 0.12, randf_range(0.9, 1.1))
+	if energy < 30.0:
+		_breath_t -= d * (1.0 + (30.0 - energy) * 0.04)
+		if _breath_t <= 0.0:
+			_breath_t = randf_range(3.2, 5.5)
+			Sfx.play("breath", -24.0 + (30.0 - energy) * 0.18, randf_range(0.92, 1.06))
+
+	# ── enjoo: a factura chega depois, em ondas ──────────────────────────
+	if illness > 0.0:
+		illness = maxf(0.0, illness - d * 0.012)
+		damage(0.22 * d * illness, "sick")
+
 	if hunger <= 0.0:
 		damage(1.1 * d, "starve")
 		_warn_once("hunger", "msg.hungry")
@@ -132,6 +157,11 @@ func _emit_stats() -> void:
 	Bus.stat_changed.emit("blessing", blessing, MAX_STAT)
 
 
+## Quanto enjoo o jogador sente agora (0..1), para o véu da HUD.
+func sickness() -> float:
+	return clampf(illness, 0.0, 1.0)
+
+
 func reset_warnings() -> void:
 	_warn.clear()
 
@@ -147,7 +177,11 @@ func eat(food: float, drink: float, risk: float) -> Dictionary:
 	thirst = clampf(thirst + drink, 0.0, MAX_STAT)
 	var sick := risk > 0.0 and randf() < risk
 	if sick:
-		damage(6.0, "sick")
+		# Não é dano instantâneo: é enjoo. O corpo avisa durante ~20 s (vista
+		# verde, ondas, dano lento). A causalidade vê-se; ninguém precisa de
+		# escrever "cozinha para evitar".
+		illness = clampf(illness + 0.75, 0.0, 1.0)
+		Sfx.play("growl", -14.0, 0.55)
 	else:
 		health = clampf(health + 2.0, 0.0, MAX_STAT)
 	Sfx.play("eat", -8.0)
@@ -322,6 +356,7 @@ func work_multiplier() -> float:
 
 func save_data() -> Dictionary:
 	return {
+		"illness": illness,
 		"health": health, "hunger": hunger, "thirst": thirst, "energy": energy,
 		"warmth": warmth, "sanity": sanity, "blessing": blessing, "alive": alive,
 		"dehydrated_t": dehydrated_t,
@@ -333,6 +368,7 @@ func load_data(d: Dictionary) -> void:
 	hunger = float(d.get("hunger", 100.0))
 	thirst = float(d.get("thirst", 100.0))
 	energy = float(d.get("energy", 100.0))
+	illness = float(d.get("illness", 0.0))
 	warmth = float(d.get("warmth", 100.0))
 	sanity = float(d.get("sanity", 100.0))
 	blessing = float(d.get("blessing", 60.0))
