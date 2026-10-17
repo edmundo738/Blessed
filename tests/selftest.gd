@@ -16,6 +16,8 @@ var passed := 0
 var failed := 0
 var skipped := 0
 var lines: Array = []
+## Passos do "primeiro dia" que falharam (o fecho da sessão lê isto).
+var _fd_failed: Array = []
 
 
 func check(what: String, ok: bool, detail: String = "") -> void:
@@ -60,6 +62,11 @@ func _ready() -> void:
 	Game.profile = {"name": "Teste", "body": "f", "soul": "hands"}
 	await get_tree().process_frame
 	await get_tree().process_frame
+	if "dia1" in OS.get_cmdline_user_args():
+		# modo de desenvolvimento: só a sessão do primeiro dia (minutos a menos)
+		await _first_day()
+		_report()
+		return
 	await _run()
 
 
@@ -822,9 +829,70 @@ func _run() -> void:
 	# O degrau do improviso tem de valer ALGUMA coisa (senão é só um item a mais
 	# no menu) e tem de ser claramente pior do que a bancada (senão a bancada
 	# não vale o trabalho de a construir).
-	check("a lasca de pedra (Criação) corta melhor que as mãos, pior que o machado",
-		blade_takes < hand_takes and blade_takes > axe_takes,
-		"mãos=%d, lasca=%d, machado=%d" % [hand_takes, blade_takes, axe_takes])
+	# A TRAVESSIA: mãos -> pedra solta -> picareta PRIMITIVA -> rocha. Sem esta
+	# ferramenta a rocha é impossível e a cadeia parte-se (foi o que aconteceu
+	# ao apagar a família de madeira).
+	var picareta_p: Dictionary = Db.item("primitive_pickaxe")
+	var machado_p: Dictionary = Db.item("primitive_axe")
+	var p_takes := maxi(int(ceil(float(hand_spec["hp"]) / float(machado_p["power"]["chop"]))), 1)
+	check("o machado primitivo abate a árvore em bem menos golpes que as mãos",
+		p_takes * 2 <= hand_takes, "mãos=%d, primitivo=%d" % [hand_takes, p_takes])
+	check("a lasca corta melhor que as mãos, mas é a pior ferramenta",
+		blade_takes < hand_takes and blade_takes > p_takes,
+		"mãos=%d, lasca=%d, primitivo=%d" % [hand_takes, blade_takes, p_takes])
+	check("a picareta PRIMITIVA é a primeira ferramenta que pica pedra",
+		picareta_p.get("power", {}).has("mine")
+		and not Db.item("stone_blade").get("power", {}).has("mine")
+		and not Db.recipe("primitive_pickaxe").has("station"),
+		"poder=%s" % str(picareta_p.get("power", {})))
+	check("as ferramentas de pedra são da bancada e mais fortes que as primitivas",
+		str(Db.recipe("stone_axe").get("station", "")) == "workbench"
+		and str(Db.recipe("stone_pickaxe").get("station", "")) == "workbench"
+		and float(axe_item["power"]["chop"]) > float(machado_p["power"]["chop"])
+		and int(axe_item["tier"]) > int(machado_p["tier"]))
+	check("a mão desperdiça e a ferramenta de pedra aproveita",
+		Db.yield_scale("", "chop") < 1.0
+		and Db.yield_scale("primitive_axe", "chop") == 1.0
+		and Db.yield_scale("axe", "chop") > 1.0,
+		"mão=%.2f tier1=%.2f tier2=%.2f" % [Db.yield_scale("", "chop"),
+			Db.yield_scale("primitive_axe", "chop"), Db.yield_scale("axe", "chop")])
+	# Uma só verdade: o JSON editável e a lista de reserva em código dizem o
+	# mesmo (foi esta divergência que deixou a família "apagada" viva no ficheiro).
+	var reserva := {}
+	for r in Db.RECIPES:
+		reserva[str(r["id"])] = r
+	var json_receitas := {}
+	for r in Db.all_recipes():
+		json_receitas[str(r["id"])] = r
+	var divergentes: Array = []
+	for id in json_receitas:
+		if not reserva.has(id):
+			divergentes.append(id + " (só no JSON)")
+			continue
+		var a: Dictionary = reserva[id]
+		var b: Dictionary = json_receitas[id]
+		# o JSON lê os números como float (mesmo "1"), por isso a comparação de
+		# ingredientes é feita chave a chave e em inteiro
+		var na: Dictionary = a["needs"]
+		var nb: Dictionary = b["needs"]
+		var iguais := na.size() == nb.size()
+		if iguais:
+			for k in na:
+				if not nb.has(k) or int(na[k]) != int(nb[k]):
+					iguais = false
+					break
+		if str(a["result"]) != str(b["result"]) \
+				or str(a.get("station", "")) != str(b.get("station", "")) \
+				or int(a.get("qty", 1)) != int(b.get("qty", 1)) or not iguais:
+			divergentes.append(id)
+	for id in reserva:
+		if not json_receitas.has(id):
+			divergentes.append(id + " (só na reserva)")
+	check("as receitas do JSON e as de reserva dizem o mesmo",
+		divergentes.is_empty(), ", ".join(divergentes))
+	check("a rocha dura existe e responde à ferramenta melhor",
+		Db.HARVEST.has("rock_hard")
+		and int(Db.HARVEST["rock_hard"]["yields"]["stone"]) > int(Db.HARVEST["rock"]["yields"]["stone"]))
 	var bare_rock_spec: Dictionary = Db.HARVEST["rock"]
 	check("a pedra exige picareta (e as mãos não a picam)",
 		str(bare_rock_spec.get("needs", "")) == "pickaxe")
@@ -832,9 +900,11 @@ func _run() -> void:
 		not Db.HARVEST["flint_node"].has("needs")
 		and int(Db.HARVEST["flint_node"]["yields"].get("stone", 0)) > 0)
 	check("as ferramentas a sério saem da bancada; a bancada sai da Criação",
-		str(Db.recipe("wood_axe").get("station", "")) == "workbench"
-		and str(Db.recipe("wood_pickaxe").get("station", "")) == "workbench"
-		and not Db.recipe("workbench").has("station"))
+		str(Db.recipe("stone_axe").get("station", "")) == "workbench"
+		and str(Db.recipe("stone_pickaxe").get("station", "")) == "workbench"
+		and not Db.recipe("workbench").has("station")
+		and not Db.recipe("primitive_axe").has("station")
+		and not Db.recipe("primitive_pickaxe").has("station"))
 	# A lasca de pedra é o degrau que destranca a pedra: é ELE que se improvisa,
 	# e é o que faz o ciclo mãos→pedra→ferramenta fechar sem becos sem saída.
 	check("o improviso (Criação) dá ferramenta com pedra e ramo, sem estação",
@@ -860,7 +930,7 @@ func _run() -> void:
 	for k in ["wood", "stick", "fiber"]:
 		inv.add(k, 12)
 	var before_bench: int = main.structures.list.size()
-	var no_bench := Game.request("craft", {"recipe": "wood_axe"})
+	var no_bench: Dictionary = Game.request("craft", {"recipe": "stone_axe"})
 	check("receita de bancada é recusada longe de uma bancada",
 		not bool(no_bench.get("ok", true))
 		and str(no_bench.get("reason", "")) == "no_station",
@@ -871,7 +941,7 @@ func _run() -> void:
 	check("bancada colocada é reconhecida como estação",
 		"workbench" in main.structures.stations_near(bench_pos, 4.5)
 		and main.structures.list.size() == before_bench + 1)
-	var made_axe := Game.request("craft", {"recipe": "wood_axe"})
+	var made_axe: Dictionary = Game.request("craft", {"recipe": "stone_axe"})
 	check("com bancada perto, o machado é feito",
 		bool(made_axe.get("ok", false)) and inv.count("axe") >= 1,
 		"reason=%s" % str(made_axe.get("reason", "-")))
@@ -1268,13 +1338,23 @@ func _run() -> void:
 	else:
 		var generic_icons: Array = []
 		for id in ["stone_blade", "fire_kit", "workbench", "axe", "pickaxe", "campfire",
-				"chest", "chair"]:
+				"chest", "chair", "primitive_axe", "primitive_pickaxe"]:
 			if not ('"%s"' % id in icon_art):
 				generic_icons.append(id)
 		check("os ícones das ferramentas novas estão desenhados",
 			generic_icons.is_empty(), ", ".join(generic_icons))
 
-	# ── relatório ─────────────────────────────────────────────────────────
+	# ══ PRIMEIRO DIA — teste de GAMEPLAY ══════════════════════════════════
+	# A constituição do projeto (§44) não aceita "as funções passam" como prova
+	# de que o jogo é jogável: exige uma SESSÃO. Este teste joga o primeiro dia
+	# de raiz — mochila vazia, mãos nuas — pelos sistemas reais (colheita,
+	# craft, estações, fogo, água, comida, sono).
+	await _first_day()
+
+	_report()
+
+
+func _report() -> void:
 	for l in lines:
 		print(l)
 	print("──────────────────────────────────────────────────")
@@ -1378,3 +1458,450 @@ func _node_has_surface_mesh(node: Node) -> bool:
 		if _node_has_surface_mesh(child):
 			return true
 	return false
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  PRIMEIRO DIA — teste de GAMEPLAY (constituição §44)
+#
+#  Não verifica funções isoladas: joga o primeiro dia de um jogador novo, do
+#  zero, e falha no PASSO em que o loop se parte. Se este teste passa, existe
+#  caminho — sem itens dados à mão — de mãos nuas até: pedra, ferramenta,
+#  picareta, rocha, bancada, picareta de pedra, fogueira, água segura, comida
+#  cozinhada e uma noite passada a dormir.
+# ══════════════════════════════════════════════════════════════════════════
+
+## A mochila do jogo em curso. Os ajudantes do primeiro dia são funções do
+## script e não vêem a variável local `inv` do `_run`.
+func _inv() -> Inventory:
+	return main.inv
+
+
+func _fd_trace(msg: String) -> void:
+	print("  [dia 1] " + msg)
+
+
+func _fd_step(what: String, ok: bool, detail: String = "") -> bool:
+	check(what, ok, detail)
+	if not ok:
+		_fd_failed.append(what.substr(0, 46))
+	return ok
+
+
+## Deixa o mundo assentar (chunks a carregar, física, pickups a caminho).
+func _fd_wait(frames: int) -> void:
+	for i in frames:
+		await get_tree().process_frame
+
+
+## Quantos nós colhíveis existem nos chunks carregados (diagnóstico).
+func _fd_area() -> int:
+	var total := 0
+	for c in main.world.chunks.values():
+		var ch := c as Chunk
+		if ch != null:
+			total += ch.harvest_nodes.size()
+	return total
+
+
+## Um nó vivo do tipo pedido nos chunks carregados.
+func _fd_node(kinds: Array) -> Dictionary:
+	for c in main.world.chunks.values():
+		var ch := c as Chunk
+		if ch == null:
+			continue
+		for n in ch.harvest_nodes:
+			if bool(n.get("alive", true)) and str(n.get("kind", "")) in kinds:
+				return n
+	return {}
+
+
+## Vai à procura desses nós: teleporta em espiral e ESPERA que a área carregue.
+## (Saltar de 70 em 70 m sem esperar libertava os chunks antigos antes de os
+## novos existirem — o teste "via" um mundo vazio e desistia.)
+func _fd_roam(kinds: Array) -> void:
+	var base: Vector3 = main.player.global_position
+	for step in 8:
+		var a := float(step) / 8.0 * TAU
+		var d := 45.0 + 35.0 * float(step)
+		var p: Vector3 = base + Vector3(cos(a) * d, 0.0, sin(a) * d)
+		if main.world.terrain.is_water(p.x, p.z):
+			continue
+		p.y = main.world.ground_height(p.x, p.z) + 1.2
+		main.player.teleport(p)
+		main.world.set_target(p)
+		for i in 90:
+			await get_tree().process_frame
+			if not _fd_node(kinds).is_empty():
+				return
+
+
+## Trabalha um nó até ceder, com o que estiver na mão.
+## Devolve true quando o nó cede (e o material cai ao chão).
+func _fd_work(n: Dictionary) -> bool:
+	var pos: Vector3 = n["pos"]
+	main.player.teleport(pos + Vector3(0.0, 0.8, 0.0))
+	await _fd_wait(2)
+	var hp_inicio := float(n.get("hp", 0.0))
+	var guard := 0
+	while bool(n.get("alive", true)) and guard < 70:
+		var hp_before := float(n.get("hp", 0.0))
+		# o `_process` da interacção recalcula o alvo a cada frame (é o que o
+		# jogador está a OLHAR); num teste headless não há mira, por isso o
+		# alvo tem de ser reposto a cada golpe. Sem isto cada nó levava um
+		# único golpe e uma árvore nunca caía.
+		main.interaction.focus = {"kind": "harvest", "ref": n, "pos": pos}
+		main.interaction._hold_work(0.56, 1.0)
+		guard += 1
+		if bool(n.get("alive", true)) and is_equal_approx(float(n.get("hp", 0.0)), hp_before):
+			break   # a ferramenta não chega: bater mais não muda nada
+		await get_tree().physics_frame
+	var vivo := bool(n.get("alive", true))
+	if vivo or guard >= 8:
+		_fd_trace("%s: hp %.1f -> %.1f em %d golpes (mão: %s)" % [str(n.get("kind", "?")),
+			hp_inicio, float(n.get("hp", 0.0)), guard, _inv().hotbar_id()])
+	return not vivo
+
+
+## Colhe os tipos dados até haver `want` do item. Devolve o que há no fim.
+func _fd_gather(kinds: Array, item: String, want: int, max_nodes: int = 10) -> int:
+	var used := 0
+	while _inv().count(item) < want and used < max_nodes:
+		var n := _fd_node(kinds)
+		if n.is_empty():
+			await _fd_roam(kinds)
+			n = _fd_node(kinds)
+			if n.is_empty():
+				break
+		await _fd_work(n)
+		# o material cai ao chão e vem ter com o jogador: esperar pelo pickup
+		# (ler o contador no frame seguinte lia 0 e o teste ia colher mais)
+		var alvo: int = _inv().count(item) + 1
+		for i in 30:
+			await get_tree().process_frame
+			if _inv().count(item) >= alvo:
+				break
+		used += 1
+	await _fd_wait(8)
+	return _inv().count(item)
+
+
+## Abate árvores e retira os toros: é assim que a madeira entra na mochila.
+func _fd_wood(want: int) -> int:
+	var trees := ["tree_oak", "tree_birch", "tree_willow", "tree_sakura", "tree_pine"]
+	var attempts := 0
+	while _inv().count("wood") < want and attempts < 6:
+		var n := _fd_node(trees)
+		if n.is_empty():
+			await _fd_roam(trees)
+			n = _fd_node(trees)
+			if n.is_empty():
+				break
+		var at: Vector3 = n["pos"]
+		await _fd_work(n)
+		await _fd_wait(26)      # tempo da árvore cair
+		var felled: Node3D = null
+		for item in get_tree().get_nodes_in_group("fellable_logs"):
+			if not is_instance_valid(item):
+				continue
+			var node := item as Node3D
+			if node != null and node.has_method("take_log") \
+					and node.global_position.distance_to(at) < 9.0:
+				felled = node
+				break
+		_fd_trace("árvore %s: caiu=%s troncos=%d" % [str(n.get("kind", "?")),
+			str(felled != null), int(felled.get("remaining_logs")) if felled != null else 0])
+		if felled != null:
+			for _i in int(felled.get("remaining_logs")):
+				main.interaction.focus = {"kind": "felled_tree", "ref": felled,
+					"pos": (felled.call("interaction_target") as Dictionary)["pos"]}
+				main.interaction._do_interact({})
+				await _fd_wait(14)
+		await _fd_collect_near("wood", at)
+		attempts += 1
+	await _fd_wait(12)
+	return _inv().count("wood")
+
+
+## Vai buscar os pickups de um item que ficaram ao alcance de um ponto.
+## O toro cai ao longo do tronco deitado (~2 m do jogador), fora do íman: um
+## jogador a sério caminha até lá — o teste faz o mesmo.
+func _fd_collect_near(item_id: String, centre: Vector3, radius: float = 14.0) -> void:
+	for child in main.world.get_children():
+		# o pickup pode ter sido apanhado/libertado neste mesmo frame: tocar num
+		# objecto morto rebenta a build web ("null function or signature mismatch")
+		if not is_instance_valid(child):
+			continue
+		var rb := child as RigidBody3D
+		if rb == null or str(rb.get("item_id")) != item_id:
+			continue
+		if rb.global_position.distance_to(centre) > radius:
+			continue
+		main.player.teleport(rb.global_position + Vector3(0.0, 0.9, 0.0))
+		await _fd_wait(12)
+
+
+## Põe um item na mão (o `_hold_work` lê a barra rápida).
+func _fd_hold(id: String) -> bool:
+	for i in _inv().SLOTS:
+		var s: Dictionary = _inv().slots[i]
+		if not s.is_empty() and str(s["id"]) == id:
+			_inv().equip_slot(i)
+			return true
+	return false
+
+
+## Volta ao acampamento: as receitas de bancada/fogueira exigem a estação a
+## menos de 4,5 m do jogador, e a colheita pode levá-lo para longe.
+func _fd_back_to(p: Vector3) -> void:
+	main.player.teleport(p + Vector3(1.2, 0.8, 0.0))
+	main.world.set_target(p)
+	await _fd_wait(10)
+
+
+func _fd_craft(id: String) -> bool:
+	var r: Dictionary = Game.request("craft", {"recipe": id})
+	return bool(r.get("ok", false))
+
+
+## Garante os materiais de uma receita, colhendo o que falta (como o jogador).
+func _fd_ensure(recipe_id: String, rounds: int = 4) -> void:
+	var needs: Dictionary = Db.recipe(recipe_id).get("needs", {})
+	for round_i in rounds:
+		var missing := {}
+		for k in needs:
+			var falta: int = int(needs[k]) - _inv().count(str(k))
+			if falta > 0:
+				missing[str(k)] = falta
+		if missing.is_empty():
+			return
+		for k in missing:
+			var alvo: int = _inv().count(str(k)) + int(missing[k])
+			match str(k):
+				"wood":
+					await _fd_wood(alvo)
+				"stick", "fiber", "leaf":
+					await _fd_gather(["bush"], str(k), alvo, 8)
+				"stone", "flint":
+					await _fd_gather(["flint_node"], str(k), alvo, 8)
+				"mushroom":
+					await _fd_gather(["mushroom"], str(k), alvo, 4)
+		# as folhas que sobram dão fibra: não se anda a apanhar arbustos até secar o vale
+		while _inv().count("fiber") < int(needs.get("fiber", 0)) and _inv().count("leaf") >= 3:
+			if not _fd_craft("leaf_fiber"):
+				break
+		# e um graveto também se tira de um pedaço de madeira
+		while _inv().count("stick") < int(needs.get("stick", 0)) and _inv().count("wood") >= 1:
+			if not _fd_craft("stick"):
+				break
+
+
+func _first_day() -> void:
+	var sv: Survival = main.survival
+	_fd_failed.clear()
+
+	# ── 0. um jogador novo ────────────────────────────────────────────────
+	for i in _inv().SLOTS:
+		_inv().slots[i] = {}
+	_inv().select(0)
+	sv.health = 100.0
+	sv.hunger = 55.0
+	sv.thirst = 55.0
+	sv.energy = 85.0
+	Game.started = true
+	Game.hour = 8.0
+	# As bancadas/fogueiras que os testes anteriores deixaram no mundo saem
+	# daqui: no primeiro dia, a estação tem de ser construída pelo jogador.
+	for e in main.structures.list.duplicate():
+		main.structures.remove(e)
+	await _fd_wait(4)
+	# O acampamento fica ao lado do jogador — uma área JÁ carregada. Teleportar
+	# para 150 m de distância punha o teste a correr contra o carregamento de
+	# chunks e a "não encontrar" arbustos que existiam.
+	var camp: Vector3 = _dry_spot(main.player.global_position, 12.0)
+	main.player.teleport(camp + Vector3(0.0, 0.8, 0.0))
+	main.world.set_target(camp)
+	await _fd_wait(10)
+	print("  [dia 1] área: %d nós em %d chunks" % [_fd_area(), main.world.chunks.size()])
+	check("DIA 1 · o jogador começa de mãos vazias",
+		_inv().count("stone") == 0 and _inv().count("wood") == 0 and _inv().count("fiber") == 0,
+		"stone=%d wood=%d fiber=%d" % [_inv().count("stone"), _inv().count("wood"),
+			_inv().count("fiber")])
+
+	# ── 1. o primeiro minuto: fibra e graveto ─────────────────────────────
+	var fibra = await _fd_gather(["bush"], "fiber", 4, 8)
+	_fd_step("DIA 1 · mãos apanham fibra e graveto no arbusto",
+		fibra >= 4 and _inv().count("stick") >= 2,
+		"fiber=%d stick=%d" % [fibra, _inv().count("stick")])
+
+	# ── 2. pedra solta (a porta de entrada) ───────────────────────────────
+	var pedra = await _fd_gather(["flint_node"], "stone", 5, 6)
+	_fd_step("DIA 1 · mãos apanham pedra solta (a porta da pedra)",
+		pedra >= 5, "stone=%d" % pedra)
+
+	# ── 3. madeira: a árvore cai e o tronco dá toros ──────────────────────
+	var madeira = await _fd_wood(3)
+	_fd_step("DIA 1 · a árvore cai à mão e o tronco dá madeira",
+		madeira >= 3, "wood=%d" % madeira)
+
+	# ── 4. a primeira ferramenta: a lasca ─────────────────────────────────
+	await _fd_ensure("stone_blade")
+	_fd_step("DIA 1 · a lasca de pedra faz-se na mão (Criação)",
+		_fd_craft("stone_blade") and _inv().count("stone_blade") >= 1)
+	_fd_hold("stone_blade")
+
+	# ── 5. a picareta primitiva: o primeiro objecto que quebra pedra ──────
+	await _fd_ensure("primitive_pickaxe")
+	_fd_step("DIA 1 · a picareta primitiva faz-se à mão",
+		_fd_craft("primitive_pickaxe") and _inv().count("primitive_pickaxe") >= 1)
+	_fd_hold("primitive_pickaxe")
+
+	# ── 6. a rocha cede à picareta primitiva ──────────────────────────────
+	var rock := _fd_node(["rock"])
+	if rock.is_empty():
+		await _fd_roam(["rock"])
+		rock = _fd_node(["rock"])
+	var rock_ok := false
+	if not rock.is_empty():
+		rock_ok = await _fd_work(rock)
+		await _fd_wait(14)
+	_fd_step("DIA 1 · a picareta primitiva quebra a rocha e dá pedra",
+		rock_ok and _inv().count("stone") > 0,
+		"rocha=%s stone=%d" % [str(not rock.is_empty()), _inv().count("stone")])
+
+	# ── 7. a bancada: objecto do mundo, não menu ──────────────────────────
+	await _fd_ensure("workbench")
+	_fd_step("DIA 1 · a bancada faz-se na Criação e leva-se na mão",
+		_fd_craft("workbench") and _inv().count("workbench") >= 1)
+	var bench_pos: Vector3 = main.player.global_position + Vector3(-2.0, 0.0, 0.0)
+	bench_pos.y = main.world.ground_height(bench_pos.x, bench_pos.z)
+	_inv().remove("workbench", 1)
+	var bench: Dictionary = main.structures.place("workbench", bench_pos, 0.0, false)
+	_fd_step("DIA 1 · a bancada é um objecto pousado no chão",
+		"workbench" in main.structures.stations_near(bench_pos, 4.5))
+	main.player.teleport(bench_pos + Vector3(1.0, 0.8, 0.0))
+	await _fd_wait(4)
+	main.interaction.focus = {"kind": "structure", "ref": bench, "pos": bench["pos"]}
+	var list_before: int = main.structures.list.size()
+	main.interaction._do_interact({})
+	_fd_step("DIA 1 · F na bancada abre o painel dela (e não a apaga)",
+		main.structures.list.size() == list_before
+		and str(main.menus.station_filter) == "workbench",
+		"filtro=%s" % str(main.menus.station_filter))
+	main.menus.close()
+
+	# ── 8. a picareta de pedra e a rocha dura ─────────────────────────────
+	await _fd_ensure("stone_pickaxe")
+	await _fd_back_to(bench_pos)
+	_fd_step("DIA 1 · a bancada faz a picareta de pedra",
+		_fd_craft("stone_pickaxe") and _inv().count("pickaxe") >= 1)
+	var dura := _fd_node(["rock_hard"])
+	if dura.is_empty():
+		await _fd_roam(["rock_hard"])
+		dura = _fd_node(["rock_hard"])
+	var fake := false
+	if dura.is_empty():
+		dura = {"pos": main.player.global_position + Vector3(1.5, 0.0, 0.0),
+			"kind": "rock_hard", "height": 0.8, "radius": 0.6, "hp": 9, "alive": true}
+		fake = true
+	_fd_hold("primitive_pickaxe")
+	var hp_antes := float(dura["hp"])
+	main.interaction.focus = {"kind": "harvest", "ref": dura, "pos": dura["pos"]}
+	main.interaction._hold_work(0.56, 1.0)
+	var recusa := is_equal_approx(float(dura["hp"]), hp_antes)
+	_fd_hold("pickaxe")
+	main.interaction._hold_work(0.56, 1.0)
+	var cede := float(dura["hp"]) < hp_antes
+	_fd_step("DIA 1 · a rocha dura recusa a picareta primitiva e cede à de pedra",
+		recusa and cede, "recusa=%s cede=%s%s" % [str(recusa), str(cede),
+			" (nó sintético)" if fake else ""])
+
+	# ── 9. fogueira + isqueiro ────────────────────────────────────────────
+	await _fd_ensure("campfire")
+	_fd_step("DIA 1 · a fogueira faz-se na Criação",
+		_fd_craft("campfire") and _inv().count("campfire") >= 1)
+	var fire_pos: Vector3 = main.player.global_position + Vector3(2.5, 0.0, 0.0)
+	fire_pos.y = main.world.ground_height(fire_pos.x, fire_pos.z)
+	_inv().remove("campfire", 1)
+	var fogueira: Dictionary = main.structures.place("campfire", fire_pos, 0.0, false)
+	_fd_step("DIA 1 · a fogueira é um objecto no mundo (ainda apagada)",
+		main.structures.list.size() > 0 and str(fogueira.get("id", "")) == "campfire")
+	main.interaction.focus = {"kind": "structure", "ref": fogueira, "pos": fogueira["pos"]}
+	var sem_kit: Dictionary = main.interaction._do_interact({})
+	var fica_apagada := not bool(fogueira.get("lit", false)) \
+		and str(sem_kit.get("reason", "")) == "no_fire_kit"
+	await _fd_ensure("fire_kit")
+	_fd_step("DIA 1 · acender exige isqueiro (e o isqueiro faz-se à mão)",
+		fica_apagada and _fd_craft("fire_kit"))
+	main.interaction.focus = {"kind": "structure", "ref": fogueira, "pos": fogueira["pos"]}
+	main.interaction._do_interact({})
+	_fd_step("DIA 1 · com isqueiro a fogueira acende, dá luz e vira estação",
+		bool(fogueira.get("lit", false)) and fogueira.get("light") != null
+		and "campfire" in main.structures.stations_near(fire_pos, 4.5))
+
+	# ── 10. água: garrafa vazia → encher → ferver → beber ─────────────────
+	await _fd_ensure("bottle")
+	_fd_step("DIA 1 · a garrafa improvisada faz-se na Criação",
+		_fd_craft("bottle") and _inv().count("bottle") >= 1)
+	var agua_spot: Vector3 = _water_spot(main.player.global_position, 90.0, 0.4, 4.0)
+	if agua_spot != Vector3.INF:
+		main.player.teleport(agua_spot + Vector3(0.0, 0.8, 0.0))
+		main.world.set_target(agua_spot)
+		await _fd_wait(20)
+	main.interaction.focus = {"kind": "water", "ref": null,
+		"pos": main.player.global_position}
+	main.interaction._do_interact({})
+	_fd_step("DIA 1 · a garrafa nasce vazia e enche-se na água",
+		agua_spot != Vector3.INF and _inv().count("water") >= 1,
+		"agua=%s water=%d" % [str(agua_spot != Vector3.INF), _inv().count("water")])
+	main.player.teleport(fire_pos + Vector3(1.2, 0.8, 0.0))
+	main.world.set_target(fire_pos)
+	await _fd_wait(20)
+	await _fd_back_to(fire_pos)
+	_fd_step("DIA 1 · a fogueira ferve a água (deixa de ser crua)",
+		_fd_craft("boil_water") and _inv().count("water_clean") >= 1)
+	sv.thirst = 40.0
+	_fd_hold("water_clean")
+	var bebeu: Dictionary = Game.request("use_item")
+	_fd_step("DIA 1 · beber água tratada mata a sede sem risco",
+		bool(bebeu.get("ok", false)) and float(sv.thirst) > 40.0 and float(sv.health) >= 99.0,
+		"thirst=%.0f health=%.0f" % [float(sv.thirst), float(sv.health)])
+
+	# ── 11. comida: cru ≠ cozinhado ───────────────────────────────────────
+	_inv().add("meat_raw", 1)   # a caça tem teste próprio; aqui interessa a cozinha
+	await _fd_back_to(fire_pos)
+	var cozinhou := _fd_craft("meat_cooked")
+	var carne: Dictionary = Db.item("meat_cooked")
+	var crua: Dictionary = Db.item("meat_raw")
+	_fd_step("DIA 1 · cozinhar transforma a carne (cru ≠ cozinhado)",
+		cozinhou and _inv().count("meat_cooked") >= 1
+		and float(carne.get("food", 0.0)) > float(crua.get("food", 0.0))
+		and float(crua.get("risk", 0.0)) > float(carne.get("risk", 0.0)))
+	sv.hunger = 35.0
+	_fd_hold("meat_cooked")
+	Game.request("use_item")
+	_fd_step("DIA 1 · comer a carne assada repõe a fome", float(sv.hunger) > 35.0,
+		"hunger=%.0f" % float(sv.hunger))
+
+	# ── 12. dormir: a noite passa ─────────────────────────────────────────
+	await _fd_ensure("bed")
+	await _fd_back_to(bench_pos)
+	_fd_step("DIA 1 · a cama faz-se na bancada",
+		_fd_craft("bed") and _inv().count("bed") >= 1)
+	var bed_pos: Vector3 = bench_pos + Vector3(2.5, 0.0, 2.5)
+	bed_pos.y = main.world.ground_height(bed_pos.x, bed_pos.z)
+	_inv().remove("bed", 1)
+	var cama_e: Dictionary = main.structures.place("bed", bed_pos, 0.0, false)
+	Game.hour = 21.5
+	sv.energy = 30.0
+	main.interaction.focus = {"kind": "structure", "ref": cama_e, "pos": cama_e["pos"]}
+	main.interaction._do_interact({})
+	var hora := float(Game.hour)
+	_fd_step("DIA 1 · dormir passa a noite e devolve a energia",
+		hora >= 5.0 and hora <= 9.5 and float(sv.energy) > 31.0,
+		"hora=%.1f energia=%.0f" % [hora, float(sv.energy)])
+
+	# ── 13. o dia fecha ───────────────────────────────────────────────────
+	_fd_step("DIA 1 · o primeiro dia fecha-se ponta a ponta",
+		_fd_failed.is_empty(), ", ".join(_fd_failed))
+	main.menus.close()
+	Game.paused = false

@@ -104,6 +104,35 @@ fechado, o teste que o apanha entra no `tests/selftest.gd` para não voltar.
     _Teste:_ as verificações "GLB Blender ..." do self-test são exatamente este
     aviso, e falham no sandbox por esse motivo (não é regressão de código).
 
+15. **O harness headless em Node** (`tools/run.mjs` + `tools/mkpack.py`):
+    - o binário nativo do Godot **não é instalável** aqui (os *release assets*
+      do GitHub não são alcançáveis), por isso o motor é o **template web**
+      (`@ringozz/godot-web-wasm32@4.7.2-664`) corrido em Node;
+    - **NÃO chamar `emnapiInit`**: ele regista o motor como módulo Node-API e
+      arranca uma **segunda** instância com argumentos vazios (sem
+      `--headless`), que rebenta a pedir WebGL2
+      (`TypeError: ctx.getExtension is not a function`). O motor arranca com
+      **`Module.callMain(args)`** — só assim os argumentos chegam;
+    - `--headless` funciona porque o `DisplayServerHeadless` está compilado no
+      wasm (confirmado nos `.symbols`); não é preciso WebGL nem shims de GL;
+    - o `wasmBinary` tem de ser passado à mão (em `file://` não há `fetch`);
+    - `navigator` é só-de-leitura no Node 22 → `Object.defineProperty`;
+    - `tools/pack_pck.py` **exclui `tests/` de propósito**; para correr testes
+      usar `tools/mkpack.py` (mesma coisa, mas com os testes dentro). Sintoma
+      contrário: `SELFTEST_FAIL: res://tests/selftest.gd em falta`;
+    - o processo **não sai sozinho** quando o motor termina: usar `timeout`.
+
+16. **Alvo de interacção em teste headless** (`tests/selftest.gd`): o
+    `interaction._process` recalcula o `focus` a cada frame (é o que o jogador
+    está a olhar). Sem mira, o teste tem de repor
+    `main.interaction.focus = {…}` **antes de cada** `_hold_work`/`_do_interact`.
+    Foi isto que fez o primeiro dia parecer "a árvore não cai".
+
+17. **Pickups fora do íman** (`scripts/world/dropped_item.gd`): a madeira do
+    toro nasce a ~2 m do jogador (ao longo do tronco), fora do `MAGNET_DISTANCE`
+    (2,1 m) e do `PICKUP_DISTANCE` (0,95 m). Não é bug — é o jogador ter de
+    andar até ao tronco — mas qualquer teste tem de "caminhar" até ao pickup.
+
 ## LIMITES DO SANDBOX (não corrigíveis aqui)
 9. **Sem GPU/browser** → não se valida o ecrã real; usa-se `tools/render_shot.py`.
 10. **Sem build Windows** → não há templates de export oficiais no sandbox.

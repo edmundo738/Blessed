@@ -17,6 +17,7 @@ const TREE_ASSIST := 0.14        # só se o raio falhar a forma toda
 var player: Player
 var world: World
 var survival: Survival
+var menus: Node
 var inv: Inventory
 var structures: Structures
 var fx: Node3D
@@ -418,6 +419,8 @@ func prompt_key() -> String:
 				return "prompt.sit"
 			if str(e["id"]) == "chest":
 				return "prompt.open_chest"
+			if str(e["id"]) in Structures.STATION_IDS:
+				return "prompt.open_station"
 			return "prompt.remove"
 		"npc":
 			return "prompt.talk"
@@ -475,9 +478,23 @@ func _do_interact(_a: Dictionary) -> Dictionary:
 				_rest_in_chair()
 			elif str(e["id"]) == "chest":
 				_use_chest(e)
+			elif str(e["id"]) in Structures.STATION_IDS:
+				# A bancada/fogueira acesa são ESTAÇÕES: apontar e F abre a
+				# interface DO OBJETO que está no mundo. Antes o F "removia" a
+				# estrutura — quem apontasse a uma bancada e carregasse em F
+				# destruía a bancada, e o craft só existia dentro do inventário.
+				_open_station(str(e["id"]))
 			else:
 				Game.request("remove_structure", {"entry": e})
 	return {"handled": true, "ok": true}
+
+
+## Abre a interface daquela estação (as receitas dela, e só as dela).
+func _open_station(id: String) -> void:
+	if menus == null:
+		return
+	menus.call("open_station", id)
+	Sfx.play("ui_open", -12.0, 1.1)
 
 
 ## Tem isqueiro na mão (ou no saco)? Acender fogueiras é a única coisa que ele
@@ -640,6 +657,17 @@ func _hold_work(delta: float, seconds: float) -> void:
 				Sfx.play_at("ui_click", focus["pos"], -14.0, 0.7)
 			player.hands.swing(0.28)
 			return
+		# Um nó pode exigir uma ferramenta MELHOR, não só uma qualquer: é assim
+		# que a picareta de pedra passa a valer mais do que a primitiva (a rocha
+		# dura não cede de outra forma).
+		var need_tier := int(spec.get("needs_tier", 0))
+		if need_tier > 0 and int(tool.get("tier", 0)) < need_tier:
+			if _tool_hint_t <= 0.0:
+				_tool_hint_t = 3.0
+				Bus.ui_message.emit(Loc.t("hud.needs_better_tool", [Db.item_name(needs)]), 2.5)
+				Sfx.play_at("ui_click", focus["pos"], -14.0, 0.6)
+			player.hands.swing(0.28)
+			return
 		# Mãos nuas cortam, mas devagar (o machado tem `power`): é a diferença
 		# que faz o primeiro machado de madeira valer a pena.
 		var damage := float(power[action]) if has_tool else float(spec.get("hand", 0.5))
@@ -721,6 +749,10 @@ func _harvest_done() -> void:
 		var bonus := 0.35 if str(Game.profile.get("soul", "")) != "curious" else 0.6
 		if randf() < bonus:
 			qty += 1
+		# As mãos desperdiçam, a ferramenta aproveita. É uma diferença que se vê
+		# no material que entra na mochila, não no texto do menu.
+		var escala := Db.yield_scale(inv.hotbar_id(), str(spec.get("action", "")))
+		qty = maxi(int(round(float(qty) * escala)), 1)
 		# Colher altera o mundo; não teletransporta o recurso para a mochila.
 		# Cada tipo de material cria um pickup físico visível para o jogador.
 		_drop_resource(str(k), qty, n["pos"] as Vector3)

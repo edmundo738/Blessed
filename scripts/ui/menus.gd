@@ -93,8 +93,20 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 # ══════════════════════════════════════════════════════════════════════════
+## Interface DA estação: só as receitas dela. É isto que faz da bancada um
+## objeto do mundo em vez de uma secção escondida no inventário.
+var station_filter := ""
+
+
+func open_station(id: String) -> void:
+	station_filter = id
+	open("craft")
+
+
 func open(which: String) -> void:
 	current = which
+	if which != "craft":
+		station_filter = ""
 	panel_root.visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	Game.paused = true
@@ -104,6 +116,7 @@ func open(which: String) -> void:
 
 
 func close() -> void:
+	station_filter = ""
 	if current == "dialogue" and dialogue_npc != null:
 		Bus.dialogue_ended.emit(str(dialogue_npc.id))
 	current = ""
@@ -305,8 +318,11 @@ func _use_item(id: String, slot_index: int) -> void:
 
 # ── bancada ───────────────────────────────────────────────────────────────
 func _build_craft() -> void:
-	_title.text = Loc.t("tab.crafting")
 	var stations: Array = interaction.nearby_stations() if interaction != null else []
+	if station_filter != "":
+		_build_station(stations)
+		return
+	_title.text = Loc.t("tab.crafting")
 	# Agrupado por degrau, porque o degrau é a informação que interessa:
 	# o que se improvisa agora, o que precisa de bancada, o que precisa de fogo.
 	for st in ["", "workbench", "campfire"]:
@@ -336,6 +352,26 @@ func _build_craft() -> void:
 				Color(0.72, 0.76, 0.7, 0.72))
 	_label("")
 	_button(Loc.t("settings.back"), func(): open("pause"))
+
+
+## Painel de uma estação: o título é o nome do objeto que está à frente do
+## jogador e a lista é só o que ali se faz. Nada de receitas da mão no meio.
+func _build_station(stations: Array) -> void:
+	_title.text = "▲ " + Db.station_label(station_filter)
+	if not (station_filter in stations):
+		_label(Loc.t("menu.station_gone"), 11, Color(0.8, 0.6, 0.5, 0.9))
+		_button(Loc.t("settings.back"), func(): close())
+		return
+	var feitas := 0
+	for r in Db.recipes_for(stations):
+		if str(r.get("station", "")) != station_filter:
+			continue
+		_craft_row(r)
+		feitas += 1
+	if feitas == 0:
+		_label(Loc.t("menu.station_empty"), 11, Color(0.78, 0.82, 0.75, 0.78))
+	_label("")
+	_button(Loc.t("settings.back"), func(): close())
 
 
 ## Uma linha de receita: ícone, nome, ingredientes com o que falta, botão.

@@ -32,15 +32,28 @@ const ITEMS := {
 	"stew":         {"kind": "food", "stack": 5, "icon": "stew",
 					 "food": 70, "drink": 25, "risk": 0.0},
 	# ── ferramentas / utilidades ────────────────────────────────────────────
-	# Dois degraus, só dois:
-	#   CRIAÇÃO (na mão)  — `stone_blade`: uma lasca de pedra amarrada a um ramo.
-	#                       Corta e pica devagar, e é o que destranca a pedra.
-	#   BANCADA           — `axe` e `pickaxe` a sério: o dobro da potência.
-	# Havia aqui uma família de madeira a mais (machado e picareta de madeira):
-	# era um passo intermédio que não mudava nada na mão do jogador e só enchia
-	# o menu — foi dito que o craft estava complicado sem ser preciso.
+	# TRÊS degraus, e cada um existe por uma RAZÃO, não por um número:
+	#   CRIAÇÃO (na mão)
+	#     `stone_blade`      — lasca amarrada a um ramo: corta plantas, arbustos
+	#                          e caça melhor que os punhos. NÃO pica pedra.
+	#     `primitive_axe`    — machado primitivo (pau + pedra + fibra): abate
+	#                          árvores em 6 golpes em vez de 18.
+	#     `primitive_pickaxe`— picareta primitiva: é A FERRAMENTA QUE ABRE O
+	#                          MUNDO. A primeira com `mine`: sem ela a rocha é
+	#                          impossível e a pedra fica presa na pedra solta.
+	#   BANCADA
+	#     `axe` / `pickaxe`  — pedra trabalhada: mais potência, MENOS
+	#                          desperdício por nó (ver `yield_scale`) e acesso
+	#                          à rocha dura, que só cede a tier >= 2.
+	# A família de madeira tinha exactamente esta função (era a travessia para a
+	# pedra) e foi apagada por parecer "um passo intermédio". O nome estava
+	# errado; a função não. Aqui fica com o nome certo: PRIMITIVA.
 	"stone_blade":  {"kind": "tool", "stack": 4, "icon": "stone_blade",
-					 "power": {"chop": 0.62, "mine": 0.7}, "tier": 1, "tool": "blade"},
+					 "power": {"chop": 0.62}, "tier": 1, "tool": "blade"},
+	"primitive_axe": {"kind": "tool", "stack": 1, "icon": "primitive_axe",
+					 "power": {"chop": 1.15}, "tier": 1, "tool": "axe"},
+	"primitive_pickaxe": {"kind": "tool", "stack": 1, "icon": "primitive_pickaxe",
+					 "power": {"mine": 1.0}, "tier": 1, "tool": "pickaxe"},
 	"axe":          {"kind": "tool", "stack": 1, "icon": "axe", "power": {"chop": 2.2},
 					 "tier": 2, "tool": "axe"},
 	"pickaxe":      {"kind": "tool", "stack": 1, "icon": "pickaxe", "power": {"mine": 2.4},
@@ -81,29 +94,34 @@ const ITEMS := {
 ##   "workbench" → BANCADA: ferramentas a sério, mobiliário, peças de construção
 ##   "campfire"  → FOGUEIRA: cozinhar e ferver água
 ## O degrau não é burocracia: é o que separa "apanhei isto agora" de "construí
-## uma oficina". A lista em código fica como reserva, para o jogo não morrer se
-## o JSON for apagado ou ficar inválido.
+## uma oficina". Esta lista é a RESERVA do data/recipes.json — as duas têm de
+## dizer o mesmo, e há um teste que o verifica ("as receitas do JSON e as de
+## reserva dizem o mesmo"): foi por ficarem dessincronizadas que apareceu uma
+## família de ferramentas "apagada" a continuar a existir no ficheiro.
 const RECIPES := [
-	{"id": "stick",     "result": "stick",       "qty": 2, "needs": {"wood": 1}},
-	{"id": "leaf_fiber", "result": "fiber",       "qty": 1, "needs": {"leaf": 3}},
-	{"id": "torch",     "result": "torch",       "qty": 2, "needs": {"stick": 1, "fiber": 1}},
-	{"id": "fire_kit",  "result": "fire_kit",    "qty": 1, "needs": {"flint": 2, "stone": 1, "fiber": 2}},
+	{"id": "stick", "result": "stick", "qty": 2, "needs": {"wood": 1}},
+	{"id": "leaf_fiber", "result": "fiber", "qty": 1, "needs": {"leaf": 3}},
+	{"id": "torch", "result": "torch", "qty": 2, "needs": {"stick": 1, "fiber": 1}},
+	{"id": "fire_kit", "result": "fire_kit", "qty": 1, "needs": {"flint": 2, "stone": 1, "fiber": 2}},
 	{"id": "stone_blade", "result": "stone_blade", "qty": 1, "needs": {"stone": 2, "stick": 1, "fiber": 2}},
-	{"id": "campfire",  "result": "campfire",    "qty": 1, "needs": {"stone": 4, "stick": 3, "wood": 2}},
-	{"id": "bottle",    "result": "bottle",      "qty": 1, "needs": {"fiber": 4, "wood": 1}, "station": "workbench"},
-	{"id": "wood_axe",  "result": "axe",         "qty": 1, "needs": {"stick": 2, "stone": 2, "fiber": 2}, "station": "workbench"},
-	{"id": "wood_pickaxe", "result": "pickaxe",  "qty": 1, "needs": {"stick": 2, "stone": 3, "fiber": 1}, "station": "workbench"},
-	{"id": "rod",       "result": "rod",         "qty": 1, "needs": {"stick": 3, "fiber": 3}, "station": "workbench"},
-	{"id": "chest",     "result": "chest",       "qty": 1, "needs": {"wood": 6, "fiber": 2}, "station": "workbench"},
-	{"id": "chair",     "result": "chair",       "qty": 1, "needs": {"wood": 3, "fiber": 1}, "station": "workbench"},
-	{"id": "bed",       "result": "bed",         "qty": 1, "needs": {"fiber": 12, "stick": 4}, "station": "workbench"},
-	{"id": "wall",      "result": "wall",        "qty": 1, "needs": {"wood": 3}, "station": "workbench"},
-	{"id": "floor",     "result": "floor",       "qty": 1, "needs": {"wood": 2}, "station": "workbench"},
-	{"id": "pillar",    "result": "pillar",      "qty": 2, "needs": {"wood": 2, "fiber": 1}, "station": "workbench"},
-	{"id": "meat_cooked", "result": "meat_cooked", "qty": 1, "needs": {"meat_raw": 1}, "station": "campfire"},
+	{"id": "workbench", "result": "workbench", "qty": 1, "needs": {"wood": 4, "stick": 2}},
+	{"id": "campfire", "result": "campfire", "qty": 1, "needs": {"stone": 4, "stick": 3, "wood": 2}},
+	{"id": "stone_axe", "result": "axe", "qty": 1, "needs": {"stick": 2, "stone": 3, "fiber": 1}, "station": "workbench"},
+	{"id": "stone_pickaxe", "result": "pickaxe", "qty": 1, "needs": {"stick": 2, "stone": 4, "fiber": 1}, "station": "workbench"},
+	{"id": "bottle", "result": "bottle", "qty": 1, "needs": {"fiber": 4, "wood": 1}},
+	{"id": "primitive_axe", "result": "primitive_axe", "qty": 1, "needs": {"stick": 2, "stone": 2, "fiber": 2}},
+	{"id": "primitive_pickaxe", "result": "primitive_pickaxe", "qty": 1, "needs": {"stick": 2, "stone": 3, "fiber": 2}},
+	{"id": "rod", "result": "rod", "qty": 1, "needs": {"stick": 3, "fiber": 3}, "station": "workbench"},
+	{"id": "chest", "result": "chest", "qty": 1, "needs": {"wood": 6, "fiber": 2}, "station": "workbench"},
+	{"id": "chair", "result": "chair", "qty": 1, "needs": {"wood": 3, "fiber": 1}, "station": "workbench"},
+	{"id": "bed", "result": "bed", "qty": 1, "needs": {"fiber": 12, "stick": 4}, "station": "workbench"},
+	{"id": "wall", "result": "wall", "qty": 1, "needs": {"wood": 3}, "station": "workbench"},
+	{"id": "floor", "result": "floor", "qty": 1, "needs": {"wood": 2}, "station": "workbench"},
+	{"id": "pillar", "result": "pillar", "qty": 2, "needs": {"wood": 2, "fiber": 1}, "station": "workbench"},
+	{"id": "boil_water", "result": "water_clean", "qty": 1, "needs": {"water": 1}, "station": "campfire"},
 	{"id": "fish_cooked", "result": "fish_cooked", "qty": 1, "needs": {"fish_raw": 1}, "station": "campfire"},
-	{"id": "stew",      "result": "stew",        "qty": 1,
-	 "needs": {"meat_cooked": 1, "mushroom": 2, "water": 1}, "station": "campfire"},
+	{"id": "meat_cooked", "result": "meat_cooked", "qty": 1, "needs": {"meat_raw": 1}, "station": "campfire"},
+	{"id": "stew", "result": "stew", "qty": 1, "needs": {"meat_cooked": 1, "mushroom": 2, "water": 1}, "station": "campfire"},
 ]
 
 ## Etiquetas das estações (o menu mostra estas palavras, não os ids).
@@ -135,13 +153,24 @@ const HARVEST := {
 					"yields": {"wood": 3, "stick": 2, "leaf": 4}},
 	"rock":        {"action": "mine", "tool": "pickaxe", "needs": "pickaxe", "hp": 5,
 					"yields": {"stone": 2, "flint": 1}},
-	"bush":        {"action": "pick", "tool": "", "hp": 1, "yields": {"fiber": 1, "leaf": 2}},
+	# Rocha dura: a pedra consolidada. Cede a qualquer picareta (tier 1) mas
+	# devolve pouco; com picareta de pedra (tier 2) parte depressa e rende o
+	# DOBRO. É isto que faz a picareta de pedra valer a bancada — sem um nó que
+	# responda à ferramenta melhor, "tier 2" era só um número maior.
+	"rock_hard":   {"action": "mine", "tool": "pickaxe", "needs": "pickaxe",
+					"needs_tier": 2, "hp": 9,
+					"yields": {"stone": 4, "flint": 2}},
+	# Arbusto: o "primeiro minuto" do jogo tem de dar para fibra, folha e um
+	# graveto seco. Antes dava 1 fibra e o jogador precisava de 12 arbustos
+	# para uma cama — ou de abater uma árvore à mão só para ter um graveto.
+	"bush":        {"action": "pick", "tool": "", "hp": 1,
+					"yields": {"fiber": 2, "leaf": 3, "stick": 1}},
 	"tuft":        {"action": "pick", "tool": "", "hp": 1, "yields": {"fiber": 2}},
 	"mushroom":    {"action": "pick", "tool": "", "hp": 1, "yields": {"mushroom": 1}},
 	# Pedra solta: apanha-se com as mãos e dá PEDRA. É a porta de entrada da
 	# progressão — sem ela não havia como chegar à primeira picareta.
 	"flint_node":  {"action": "pick", "tool": "", "hp": 1,
-					"yields": {"stone": 2, "flint": 1}},
+					"yields": {"stone": 3, "flint": 1}},
 }
 
 ## Objectivos do prólogo/primeiras horas. `goal` é verificável pelo Game.
@@ -173,6 +202,28 @@ func item_kind(id: String) -> String:
 
 func max_stack(id: String) -> int:
 	return int(item(id).get("stack", 1))
+
+
+## Quanto material sai de um nó conforme a ferramenta na mão.
+##
+## É aqui que a diferença entre MÃO e FERRAMENTA deixa de ser "mais depressa":
+## a mão estraga parte do que apanha e a ferramenta de pedra aproveita mais do
+## que o nó dá. Sem isto, tier era decoração.
+func yield_scale(tool_id: String, action: String) -> float:
+	var def := item(tool_id)
+	if def.is_empty() or not def.get("power", {}).has(action):
+		# Mãos nuas. Apanhar é o que as mãos fazem bem (bagas, fibra, pedra
+		# solta): não se perde nada. ARRANCAR madeira ou pedra sem ferramenta
+		# estraga parte do material — é aí que a mão perde.
+		# Sem esta distinção o primeiro minuto era colher arbustos até secar o
+		# vale só para juntar fibra: o jogador desistia antes da 1ª ferramenta.
+		if action == "chop" or action == "mine":
+			return 0.7
+		return 1.0
+	match int(def.get("tier", 1)):
+		1: return 1.0
+		2: return 1.35
+		_: return 1.7
 
 
 func is_placeable(id: String) -> bool:

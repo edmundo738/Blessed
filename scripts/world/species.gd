@@ -294,6 +294,25 @@ func _build_rocks() -> void:
 		s.collider_scale = Vector3.ONE
 		s.materials_authored = not blender_rocks.is_empty()
 		rocks[s.id] = s
+	# Rocha dura: pedra consolidada, escura e mais alta. Cede a qualquer
+	# picareta mas devolve pouco; com a de pedra rende o dobro. É a peça que dá
+	# função à bancada no que toca a ferramentas.
+	var hd: ArrayMesh = (blender_rocks[1] if blender_rocks.size() > 1
+		else MeshKit.rock(rng, 0.62))
+	var hs := Species.new()
+	hs.id = "rock_hard"
+	hs.lods = [hd, hd, hd]
+	hs.tint = Color(0.62, 0.60, 0.66)
+	hs.scale_range = Vector2(0.75, 1.25)
+	hs.biomes = PackedInt32Array([Terrain.B_ROCK, Terrain.B_MEADOW])
+	hs.weight = 0.35
+	hs.harvest = "rock_hard"
+	hs.y_offset = -0.2
+	hs.height = 1.2
+	hs.collider_scale = Vector3.ONE
+	hs.materials_authored = not blender_rocks.is_empty()
+	rocks["rock_hard"] = hs
+
 	# pedregulho pequeno que se apanha à mão
 	var flint := MeshKit.rock(rng, 0.24)
 	var fs := Species.new()

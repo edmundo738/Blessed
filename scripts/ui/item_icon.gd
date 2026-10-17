@@ -81,6 +81,17 @@ func _draw() -> void:
 			_stroke(center + Vector2(9, 14) * k, center + Vector2(-7, -9) * k, WOOD, 4.5 * k)
 			_poly(center + Vector2(-8, -10) * k, [Vector2(-6, -3), Vector2(4, -8), Vector2(10, -2), Vector2(2, 7), Vector2(-5, 5)], STONE)
 			_stroke(center + Vector2(-2, -6) * k, center + Vector2(4, 2) * k, Color("6f5a3a"), 1.6 * k)
+		# Ferramentas primitivas: MESMA silhueta das de pedra, mas o cabo é um
+		# pau cru e a cabeça é pedra clara amarrada com fibra. O ícone diz
+		# "isto é o degrau de baixo" sem uma linha de texto.
+		"primitive_axe":
+			_stroke(center + Vector2(7, 13) * k, center + Vector2(-8, -13) * k, Color("8a6136"), 4.6 * k)
+			_poly(center + Vector2(-9, -12) * k, [Vector2(-1, -8), Vector2(11, -7), Vector2(10, 1), Vector2(1, 6), Vector2(-3, 2)], STONE)
+			_stroke(center + Vector2(-3, -5) * k, center + Vector2(5, 1) * k, Color("6f5a3a"), 1.8 * k)
+		"primitive_pickaxe":
+			_stroke(center + Vector2(8, 13) * k, center + Vector2(-7, -11) * k, Color("8a6136"), 4.6 * k)
+			_stroke(center + Vector2(-14, -10) * k, center + Vector2(12, -14) * k, STONE, 5.0 * k)
+			_stroke(center + Vector2(-2, -12) * k, center + Vector2(4, -11) * k, Color("6f5a3a"), 1.8 * k)
 		# Isqueiro primitivo: pedra de sílex + pedra de bater + feixe de fibra.
 		"fire_kit":
 			_stroke(center + Vector2(-9, 6) * k, center + Vector2(2, 12) * k, Color("8f8b84"), 4.6 * k)

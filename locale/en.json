@@ -17,6 +17,8 @@
   "menu.craft_locked": "Still missing:",
   "menu.craft_bench": "Workbench",
   "menu.craft_fire": "Campfire",
+  "menu.station_gone": "I stepped away from the station — point at it again.",
+  "menu.station_empty": "This station has nothing to do here yet.",
 
   "settings.locale": "Language",
   "settings.sensitivity": "Mouse sensitivity",
@@ -94,7 +96,7 @@
   "hud.needs": "Needs",
   "hud.hold_action": "hold to work",
   "hud.hold_interact": "[HOLD F]",
-  "hud.needs_tool": "requires %s",
+  "hud.needs_tool": "Without %s this won't give.",
   "hud.target_tree": "Tree",
   "hud.target_rock": "Rock",
   "hud.target_log": "Felled tree",
@@ -108,6 +110,7 @@
   "hud.target_animal": "Animal",
   "hud.target_chest": "Chest",
   "hud.target_chair": "Chair",
+  "hud.needs_better_tool": "Your %s isn't enough here — you need a better one.",
 
   "prompt.chop": "Chop",
   "prompt.mine": "Mine",
@@ -132,6 +135,7 @@
   "prompt.hunt": "Hunt",
   "prompt.sit": "Rest",
   "prompt.open_chest": "Open",
+  "prompt.open_station": "Open station",
 
   "tab.inventory": "Bag",
   "tab.crafting": "Workbench",
@@ -228,6 +232,8 @@
   "item.chest": "Chest",
   "item.chair": "Chair",
   "item.water_clean": "Boiled water",
+  "item.primitive_axe": "Primitive axe",
+  "item.primitive_pickaxe": "Primitive pickaxe",
 
   "npc.elder.name": "Gran Miren",
   "npc.elder.greet_first": "Well now… another one fell out of the sky. Are you in one piece?",

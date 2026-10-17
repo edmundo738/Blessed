@@ -57,7 +57,8 @@
         "stone": 2,
         "stick": 1,
         "fiber": 2
-      }
+      },
+      "_why": "lasca: corta melhor que as mãos; nao pica pedra"
     },
     {
       "id": "workbench",
@@ -79,29 +80,8 @@
       }
     },
     {
-      "id": "bottle",
-      "result": "bottle",
-      "qty": 1,
-      "needs": {
-        "fiber": 4,
-        "wood": 1
-      },
-      "station": "workbench"
-    },
-    {
-      "id": "wood_axe",
+      "id": "stone_axe",
       "result": "axe",
-      "qty": 1,
-      "needs": {
-        "stick": 2,
-        "stone": 2,
-        "fiber": 2
-      },
-      "station": "workbench"
-    },
-    {
-      "id": "wood_pickaxe",
-      "result": "pickaxe",
       "qty": 1,
       "needs": {
         "stick": 2,
@@ -109,6 +89,49 @@
         "fiber": 1
       },
       "station": "workbench"
+    },
+    {
+      "id": "stone_pickaxe",
+      "result": "pickaxe",
+      "qty": 1,
+      "needs": {
+        "stick": 2,
+        "stone": 4,
+        "fiber": 1
+      },
+      "station": "workbench"
+    },
+    {
+      "id": "bottle",
+      "result": "bottle",
+      "qty": 1,
+      "needs": {
+        "fiber": 4,
+        "wood": 1
+      },
+      "_why": "recipiente improvisado: nasce VAZIO, existe para transportar agua"
+    },
+    {
+      "id": "primitive_axe",
+      "result": "primitive_axe",
+      "qty": 1,
+      "needs": {
+        "stick": 2,
+        "stone": 2,
+        "fiber": 2
+      },
+      "_why": "abre a madeira a serio: 18 golpes -> 6"
+    },
+    {
+      "id": "primitive_pickaxe",
+      "result": "primitive_pickaxe",
+      "qty": 1,
+      "needs": {
+        "stick": 2,
+        "stone": 3,
+        "fiber": 2
+      },
+      "_why": "A TRAVESSIA: primeira ferramenta com mine; sem ela a rocha e impossivel"
     },
     {
       "id": "rod",

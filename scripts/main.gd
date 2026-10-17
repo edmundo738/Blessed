@@ -254,6 +254,9 @@ func _build_ui() -> void:
 	menus.survival = survival
 	menus.player = player
 	add_child(menus)
+	# a interação abre a interface DA estação apontada (bancada, fogueira)
+	if interaction != null:
+		interaction.menus = menus
 
 	prologo = Prologo.new()
 	add_child(prologo)

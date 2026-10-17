@@ -17,6 +17,8 @@
   "menu.craft_locked": "Ainda falta construir:",
   "menu.craft_bench": "Bancada",
   "menu.craft_fire": "Fogueira",
+  "menu.station_gone": "Afastei-me da estação — volto a apontar para ela.",
+  "menu.station_empty": "Esta estação ainda não faz nada por aqui.",
 
   "settings.locale": "Idioma",
   "settings.sensitivity": "Sensibilidade do rato",
@@ -94,7 +96,7 @@
   "hud.needs": "Necessidades",
   "hud.hold_action": "manter para agir",
   "hud.hold_interact": "[F · MANTER]",
-  "hud.needs_tool": "precisa de %s",
+  "hud.needs_tool": "Sem %s isto não cede.",
   "hud.target_tree": "Árvore",
   "hud.target_rock": "Rocha",
   "hud.target_log": "Tronco caído",
@@ -108,6 +110,7 @@
   "hud.target_animal": "Animal",
   "hud.target_chest": "Cofre",
   "hud.target_chair": "Cadeira",
+  "hud.needs_better_tool": "A tua %s não chega aqui — precisa de uma melhor.",
 
   "prompt.chop": "Cortar",
   "prompt.mine": "Picar",
@@ -132,6 +135,7 @@
   "prompt.hunt": "Caçar",
   "prompt.sit": "Descansar",
   "prompt.open_chest": "Abrir",
+  "prompt.open_station": "Abrir estação",
 
   "tab.inventory": "Mochila",
   "tab.crafting": "Bancada",
@@ -228,6 +232,8 @@
   "item.chest": "Cofre",
   "item.chair": "Cadeira",
   "item.water_clean": "Água fervida",
+  "item.primitive_axe": "Machado primitivo",
+  "item.primitive_pickaxe": "Picareta primitiva",
 
   "npc.elder.name": "Vó Miren",
   "npc.elder.greet_first": "Olha só… mais um que caiu do céu. Estás inteiro?",

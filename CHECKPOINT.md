@@ -6,6 +6,41 @@
 > O histórico de auditoria abaixo preserva resultados antigos; quando diferirem, prevalecem
 > este marco mais recente e `docs/AUDIT_2026-10-14.md`.
 
+## Marco mais recente — o PRIMEIRO DIA joga-se de ponta a ponta (2026-10-17)
+
+**Verificação: 192 ok, 0 falhas, 30 saltadas (SELFTEST_PASS)** — 167 verificações
+anteriores + **25 do novo teste de GAMEPLAY do primeiro dia**.
+
+- **Existe agora o teste que a constituição exige** (`tests/selftest.gd::_first_day()`):
+  uma SESSÃO, não um teste de função. Mochila vazia, mãos nuas, e a cadeia
+  inteira pelos sistemas reais:
+  fibra/graveto → pedra solta → árvore abatida à mão → madeira →
+  **lasca** → **picareta primitiva** → **rocha** → **bancada** (feita na
+  Criação, pousada no mundo, F abre o painel DELA e não a apaga) →
+  **picareta de pedra** → **rocha dura** (recusa tier 1, cede a tier 2) →
+  **fogueira** (acender exige isqueiro) → **garrafa** → encher → **ferver** →
+  beber → **carne assada** → **cama** → **noite passada**.
+  Modo rápido: `-- selftest dia1`.
+- **A travessia da pedra está fechada e é a certa:** mãos → pedra solta
+  (`flint_node`) → **lasca** → **picareta primitiva** (Criação, na mão) →
+  rocha → bancada → picareta de pedra. A lasca **não pica pedra** (é faca); é
+  a picareta primitiva que faz a travessia — a função que a família de madeira
+  fazia, agora com o nome certo.
+- **`needs_tier` deixou de ser código morto:** o `_hold_work` já o lia, mas
+  nenhum nó o declarava. `rock_hard` declara `"needs_tier": 2`, e é isso que
+  faz a picareta de pedra valer a bancada.
+- **Rendimento das mãos corrigido por *feel*:** as mãos só desperdiçam quando
+  **arrancam** (`chop`/`mine`, 0,7×); **apanhar** é preciso (1,0×). E o arbusto
+  passou a dar `fiber 2 + leaf 3 + stick 1`: o primeiro minuto tem fibra,
+  folha e um graveto sem obrigar a abater uma árvore à mão só para um pau.
+- **Harness headless recuperado e agora PERSISTENTE** em `tools/`:
+  `tools/run.mjs` (motor web em Node; arranca com `Module.callMain`, **nunca**
+  `emnapiInit`) e `tools/mkpack.py` (`.pck` com `tests/` dentro). O sandbox
+  perdeu o `/tmp` duas vezes nesta sessão e o harness com ele.
+
+> Nota de método: as 4 causas que este teste apanhou e que os testes de função
+> não apanhavam estão em `docs/GAMEPLAY_ARCHITECTURE.md` §6.2.
+
 ## Marco mais recente — ciclo do primeiro dia fechado (2026-10-16, continuação)
 
 **Verificação: 161 ok, 0 falhas, 30 saltadas (SELFTEST_PASS)**, depois do merge

@@ -243,14 +243,24 @@ func _item_mesh() -> ArrayMesh:
 				_placed(MeshKit.box(Vector3(0.05, 0.05, 0.24), Color("c9a45e")),
 					Vector3(-0.05, 0.02, 0.0)),
 			])
-		"wood_axe", "axe":
-			var head := Color("bd8b53") if item_id == "wood_axe" else Color("c8d5d2")
+		"primitive_pickaxe":
+			return _merge([
+				MeshKit.tapered(rng, 0.46, 0.035, 0.03, 6, 2, 0.0, false, Color("8a6136")),
+				MeshKit.box(Vector3(0.26, 0.07, 0.07), Color("9aa1a0")),
+			])
+		"primitive_axe":
+			return _merge([
+				MeshKit.tapered(rng, 0.44, 0.036, 0.03, 6, 2, 0.0, false, Color("8a6136")),
+				MeshKit.box(Vector3(0.13, 0.16, 0.05), Color("9aa1a0")),
+			])
+		"axe":
+			var head := Color("c8d5d2")
 			return _merge([
 				MeshKit.tapered(rng, 0.5, 0.045, 0.04, 6, 2, 0.0, false, Color("8a6136")),
 				_placed(MeshKit.box(Vector3(0.2, 0.15, 0.06), head), Vector3(0.0, 0.24, 0.06)),
 			])
-		"wood_pickaxe", "pickaxe":
-			var tip := Color("bd8b53") if item_id == "wood_pickaxe" else Color("c8d5d2")
+		"pickaxe":
+			var tip := Color("c8d5d2")
 			return _merge([
 				MeshKit.tapered(rng, 0.5, 0.045, 0.04, 6, 2, 0.0, false, Color("8a6136")),
 				_placed(MeshKit.box(Vector3(0.34, 0.07, 0.07), tip), Vector3(0.0, 0.24, 0.02)),
