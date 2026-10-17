@@ -6,6 +6,33 @@
 > O histórico de auditoria abaixo preserva resultados antigos; quando diferirem, prevalecem
 > este marco mais recente e `docs/AUDIT_2026-10-14.md`.
 
+## Etapa B concluída — fome e sede passam a governar o corpo
+
+**Verificação: 229 ok, 0 falhas, 31 saltadas (SELFTEST_PASS).**
+
+A fome era um contador de rodapé: descia sozinha e não mudava nada até chegar a
+zero. Agora atravessa o corpo inteiro, e o jogador sente-a nas pernas:
+
+- **Fôlego**: `player.stamina_reserve()` — com fome a 5 e sede a 5, a reserva
+  cai de 100 para **40**, e a recuperação de **9/s para 2,2/s**. O sprint deixa
+  de ser infinito quando o corpo está vazio.
+- **Braços**: `survival.work_multiplier()` passou a contar sede (<20 → 0,88) e
+  enjoo (>0,2 → 0,85), além da fome; bater num nó esfomeado gasta **1,45×** mais
+  energia e **1,3×** mais com sede.
+- **Esforço medido** (`player.exertion`): correr acumula cansaço a 0,11/s. O
+  sono lê-o — `sleep_until_morning(..., exertion)` soma até **+0,18** de
+  qualidade. Um dia duro rende uma noite melhor; um dia parado, pior. O esforço
+  é gasto ao dormir (−80), por isso não se acumula entre dias.
+- **Sem texto novo.** Nada disto diz ao jogador o que fazer: ele sente o sprint
+  a acabar mais cedo e percebe que precisa de comer.
+
+PNG: `docs/shots/06_fome_sede_folego.png` (o efeito no ecrã a acompanhar).
+
+**Bug apanhado pelos testes:** o bloco novo foi inserido entre a ação da
+cadeira e a sua verificação, e os testes de sono lá dentro avançavam o relógio
+para as 6,8 — a cadeira "passava a noite". Reordenado; é a prova de que os
+testes estão a ver o estado real e não só a correr.
+
 ## Etapa A concluída — o corpo sente-se em vez de se explicar (branch 49b92551)
 
 **Verificação: 224 ok, 0 falhas, 31 saltadas (SELFTEST_PASS).**

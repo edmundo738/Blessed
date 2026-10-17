@@ -592,8 +592,12 @@ func _start_sleep(entry: Dictionary, place: String, short: bool = false) -> void
 	await _sleep_pose(true, short)
 	await _sleep_fade(1.0, 0.35 if short else 0.55)
 	# O TEMPO passa aqui — e cobra-se (fome, sede) em `survival`.
+	var esforco := float(player.exertion) if player != null else 0.0
 	var res := survival.nap(quality, context) if short \
-		else survival.sleep_until_morning(quality, context)
+		else survival.sleep_until_morning(quality, context, esforco)
+	# O esforço é gasto ao dormir (um dia, um cansaço) e o corpo continua.
+	if player != null:
+		player.exertion = maxf(0.0, float(player.exertion) - 80.0)
 	# O fogo também queima enquanto se dorme. Sem esta linha, o fogo seria o
 	# único sistema do jogo a quem a noite não passa.
 	if structures != null:
@@ -823,13 +827,21 @@ func _hold_work(delta: float, seconds: float) -> void:
 		player.hands.recoil_kick(0.35 if has_tool and damage >= 2.0 else 0.2)
 		_hit_feedback()
 		# Trabalhar cansa: sem isto, cortar era um clique infinito sem custo.
+		# E cansa MAIS de barriga vazia — bater com fome quase não rende.
 		if survival != null:
-			survival.energy = maxf(0.0, survival.energy - 0.55)
+			var esforco := 0.55
+			if float(survival.hunger) < 25.0:
+				esforco *= 1.45
+			if float(survival.thirst) < 20.0:
+				esforco *= 1.3
+			survival.energy = maxf(0.0, survival.energy - esforco)
 		if float(node["hp"]) <= 0.0:
 			_harvest_done()
 		return
 	var tool_id := inv.hotbar_id()
 	var power := 1.0
+	# A fome e a sede pesam nos braços ANTES de o jogador as ler: um golpe com
+	# fome sai mais lento. `work_multiplier()` já junta energia e doença.
 	progress = minf(1.0, progress + delta * power * survival.work_multiplier() / maxf(seconds, 0.05))
 	_impact_t -= delta
 	if _impact_t <= 0.0:
