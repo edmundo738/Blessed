@@ -98,7 +98,10 @@ func _process(delta: float) -> void:
 	if warmth < 25.0:
 		damage(0.9 * d, "cold")
 		_warn_once("cold", "msg.cold")
-	if energy <= 0.0:
+	# Avisar só a 0 é tarde: o jogador já está a arrastar-se sem saber porquê.
+	if energy <= 20.0 and energy > 0.0:
+		_warn_once("tired", "msg.tired")
+	elif energy <= 0.0:
 		_warn_once("energy", "msg.sleepy")
 	if sanity < 30.0 and randf() < 0.0015:
 		Sfx.play_at("growl", _random_near(), -18.0, randf_range(0.7, 1.1))
@@ -310,6 +313,10 @@ func work_multiplier() -> float:
 		m *= 0.8
 	if health < 40.0:
 		m *= 0.85
+	# Sem isto, a energia era um número decorativo: cortar 20 árvores a pé
+	# firme saía ao mesmo ritmo de quem acabou de acordar.
+	if energy < 10.0:
+		m *= 0.7
 	return m
 
 

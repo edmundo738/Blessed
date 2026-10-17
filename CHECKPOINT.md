@@ -6,7 +6,31 @@
 > O histórico de auditoria abaixo preserva resultados antigos; quando diferirem, prevalecem
 > este marco mais recente e `docs/AUDIT_2026-10-14.md`.
 
-## Marco mais recente — o PRIMEIRO DIA joga-se de ponta a ponta (2026-10-17)
+## Marco mais recente — o SONO e o FOGO passam a ser sistemas (2026-10-17, tarde)
+
+**Verificação: 215 ok, 0 falhas, 31 saltadas (SELFTEST_PASS)**, incluindo o
+teste do primeiro dia (25/25 no modo rápido).
+
+- **Dormir deixou de ser um salto no relógio.** `data/sleep.json` guarda
+  qualidades (chão 0,30 / cadeira 0,45 / cama 1,00), horas e custos. A sequência
+  é: deitar → a câmara desce → o ecrã escurece → as horas passam → clareia →
+  levantar. O jogador fica sem controlo durante ela e o teste espera por
+  `interaction.sleeping == false`.
+- **Dormir paga-se:** fome −3,4/h e sede −4,2/h. Sem isso era um botão grátis
+  para saltar a noite. Fogueira acesa (+0,25) e abrigo (+0,20) melhoram a
+  qualidade; uma criatura a rondar (`creature_threat ≥ 0,35`) **impede** de
+  dormir.
+- **A cadeira é um cochilo** (1,5 h, não passa a noite) — antes era +14 de
+  energia instantâneos, exactamente o "Sleep -= X" que o projecto recusa.
+- **O fogo gasta-se** (`data/fire.json`): 5 h por carga, +1,4 h por madeira (F),
+  aviso a 1 h, e dormir queima combustível. Sem lenha, a noite acaba em cinzas
+  e o `near_fire` desaparece.
+- **Feedback corrigido:** comer carne crua e adoecer já não diz "Estás com
+  fome"; diz que caiu mal e que cozinhar evitava. E o cansaço avisa aos 20 de
+  energia com a tecla que resolve (Z), não só a zero.
+- **Trabalhar exausto rende 30% menos** — a energia passou a pesar no loop.
+
+## Marco anterior — o PRIMEIRO DIA joga-se de ponta a ponta (2026-10-17)
 
 **Verificação: 197 ok, 0 falhas, 30 saltadas (SELFTEST_PASS)** — 167 verificações
 anteriores + **25 do teste de GAMEPLAY do primeiro dia** + **5 da água do mar**.

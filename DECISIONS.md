@@ -42,3 +42,19 @@
   COOP/COEP/CORP só são precisos em builds com threads; num build single-thread
   impediam a página de ser embutida (pré-visualização) e forçavam CORP em todos
   os recursos. `--isolate` liga-os quando forem necessários.
+
+- **Sono é tempo e custa recursos, não um botão.** Decisão: `sleep_until_morning`
+  cobra fome e sede; a cama resolve a noite, a cadeira só dá um cochilo, o chão
+  é mau. _Alternativa rejeitada:_ `energy += X` instantâneo (o "Sleep -= X" que
+  o dono recusou) e o ecrã a preto sem tempo a passar. _Custo:_ dormir é
+  assíncrono, e os testes têm de esperar em vez de ler `Game.hour` a seguir.
+- **O fogo tem combustível (5 h + 1,4 h/madeira).** Motivo: uma fogueira acesa
+  para sempre é uma lâmpada, não um sistema; sem isto juntar lenha não tinha
+  razão e o `near_fire` era dado, não conquistado. _Custo:_ fogueiras podem
+  apagar-se a meio da noite — é intencional.
+- **`data/*.json` para números de sobrevivência** (`sleep.json`, `fire.json`),
+  com valores de reserva no código para o jogo nunca depender do ficheiro para
+  arrancar.
+- **Texto de consequência em vez de texto de estado:** quando algo corre mal, a
+  mensagem diz o que aconteceu e o que o teria evitado ("caiu-te mal; cozinhar
+  na fogueira evitava isto"), não apenas "estás doente".

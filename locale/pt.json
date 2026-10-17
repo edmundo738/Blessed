@@ -176,6 +176,7 @@
   "msg.dawn": "Sobreviveste à noite. Dia %s.",
   "msg.thirsty": "Estás com sede.",
   "msg.hungry": "Estás com fome.",
+  "msg.tired": "Estás a cair de sono. Deita-te (Z no chão) ou dorme numa cama.",
   "msg.sleepy": "Os olhos pesam-te.",
   "msg.cold": "Estás a ficar frio.",
   "msg.heard": "Ouviste alguma coisa.",

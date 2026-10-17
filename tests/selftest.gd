@@ -1143,6 +1143,18 @@ func _run() -> void:
 	var prazo_cadeira := Time.get_ticks_msec() + 12000
 	while bool(it.sleeping) and Time.get_ticks_msec() < prazo_cadeira:
 		await get_tree().process_frame
+	# ── energia: o cansaço tem de doer ───────────────────────────────────
+	sv.energy = 100.0
+	var rende_fresco := float(sv.work_multiplier())
+	sv.energy = 0.0
+	var rende_exausto := float(sv.work_multiplier())
+	check("trabalhar exausto rende menos (a energia não é decorativa)",
+		rende_exausto < rende_fresco * 0.85,
+		"%.2f vs %.2f" % [rende_exausto, rende_fresco])
+	sv.energy = 50.0
+	check("o aviso de cansaço diz o que fazer (Z ou cama)",
+		Loc.t("msg.tired") != "msg.tired" and "Z" in Loc.t("msg.tired"))
+
 	# ── comida: cru vs cozinhado ──────────────────────────────────────────
 	# O risco não pode ser decorativo: tem de vir dos dados e de ser dito.
 	check("a carne crua é um risco e a cozinhada não",
@@ -1510,7 +1522,7 @@ func _run() -> void:
 	for key in ["msg.sleeping", "msg.sleep_bed", "msg.sleep_ground", "msg.cant_sleep",
 			"prompt.sleep", "msg.nap_done", "prompt.feed", "msg.fire_fed",
 			"msg.fire_low", "msg.fire_out", "msg.need_wood", "msg.ate",
-			"msg.food_sick", "msg.dehydrated", "msg.sea_water", "item.water_salt"]:
+			"msg.food_sick", "msg.tired", "msg.dehydrated", "msg.sea_water", "item.water_salt"]:
 		if Loc.t(key) == key:
 			missing_locale.append(key)
 	check("os textos do sono e da água existem no idioma ativo",

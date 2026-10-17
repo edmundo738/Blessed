@@ -176,6 +176,7 @@
   "msg.dawn": "You survived the night. Day %s.",
   "msg.thirsty": "You are thirsty.",
   "msg.hungry": "You are hungry.",
+  "msg.tired": "You are dropping with sleep. Lie down (Z on the ground) or sleep in a bed.",
   "msg.sleepy": "Your eyes are heavy.",
   "msg.cold": "You are getting cold.",
   "msg.heard": "You heard something.",
