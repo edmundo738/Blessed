@@ -1110,6 +1110,74 @@ func _run() -> void:
 	check("a cadeira descansa (serve para algo, não é enfeite)",
 		float(sv.energy) > 40.0, "energia %.1f" % float(sv.energy))
 
+	# ── sono: chão (mau) / cadeira (cochilo) / cama (boa) ─────────────────
+	# A constituição é explícita: dormir não é "avançar o relógio". Tem de ser
+	# uma sequência (deitar → escurecer → noite → acordar) e tem de custar algo.
+	check("a qualidade do sono vem dos dados (cama > chão)",
+		Db.sleep_quality("bed") > Db.sleep_quality("ground")
+		and Db.sleep_quality("ground") > 0.0,
+		"cama=%.2f chão=%.2f" % [Db.sleep_quality("bed"), Db.sleep_quality("ground")])
+
+	# o mesmo tempo, sítios diferentes: a cama rende mais do que o chão
+	Game.hour = 22.0
+	sv.energy = 20.0
+	sv.hunger = 90.0
+	sv.thirst = 90.0
+	var sonho_chao: Dictionary = sv.sleep_until_morning(Db.sleep_quality("ground"))
+	var horas_chao := float(sonho_chao.get("hours", 0.0))
+	var ganho_chao := float(sonho_chao.get("energy", 0.0))
+	Game.hour = 22.0
+	sv.energy = 20.0
+	sv.hunger = 90.0
+	sv.thirst = 90.0
+	var sonho_cama: Dictionary = sv.sleep_until_morning(Db.sleep_quality("bed"))
+	var ganho_cama := float(sonho_cama.get("energy", 0.0))
+	check("a cama rende mais do que o chão na mesma noite",
+		ganho_cama > ganho_chao * 1.8,
+		"chão=+%.0f cama=+%.0f (%.1f h)" % [ganho_chao, ganho_cama, horas_chao])
+	check("dormir custa fome e sede (não é um salto grátis)",
+		float(sonho_cama.get("hunger", 0.0)) < 0.0 and float(sonho_cama.get("thirst", 0.0)) < 0.0,
+		"fome %.1f sede %.1f" % [float(sonho_cama.get("hunger", 0.0)),
+			float(sonho_cama.get("thirst", 0.0))])
+	check("dormir acorda de manhã (e não a meio da noite)",
+		float(Game.hour) >= 5.0 and float(Game.hour) <= 9.5,
+		"hora=%.1f" % float(Game.hour))
+
+	# a sequência: deitar, escurecer, acordar — e o jogador não se mexe a dormir
+	var cama: Dictionary = main.structures.place("bed",
+		main.player.global_position + Vector3(2.0, 0.0, 0.0), 0.0, false)
+	Game.hour = 21.0
+	sv.energy = 30.0
+	it.focus = {"kind": "structure", "ref": cama, "pos": cama["pos"]}
+	# lambda em GDScript captura LOCAIS por valor: um `bool` lá dentro não
+	# voltava a fora. Uma lista é uma referência, por isso o sinal chega cá.
+	var dormiu_em: Array = []
+	var catcher_sleep := func(_q: float, place: String) -> void:
+		dormiu_em.append(place)
+	main.interaction.slept.connect(catcher_sleep)
+	it._do_interact({})
+	check("dormir é uma sequência (o jogador deita-se e fica preso nela)",
+		bool(it.sleeping) and not bool(main.player.enabled))
+	var deadline := Time.get_ticks_msec() + 12000
+	while bool(it.sleeping) and Time.get_ticks_msec() < deadline:
+		await get_tree().process_frame
+	main.interaction.slept.disconnect(catcher_sleep)
+	check("a sequência de dormir termina e devolve o controlo",
+		not bool(it.sleeping) and bool(main.player.enabled), "12 s de limite")
+	check("o corpo fica deitado no leito (não dorme a flutuar)",
+		main.player.global_position.distance_to(cama["pos"]) < 2.0,
+		"distância=%.2f m" % main.player.global_position.distance_to(cama["pos"]))
+	check("o sinal de dormir diz onde e com que qualidade",
+		"bed" in dormiu_em and float(sv.energy) > 30.0,
+		"local=%s energia=%.0f" % [str(dormiu_em), float(sv.energy)])
+
+	# com uma criatura a rondar, o corpo não deixa dormir
+	sv.creature_threat = 1.0
+	Game.hour = 22.0
+	it._start_sleep({}, "ground")
+	check("com uma criatura a rondar não se dorme", not bool(it.sleeping))
+	sv.creature_threat = 0.0
+
 	# ── árvore abatida: tem de CAIR e ficar deitada ───────────────────────
 	# (o sintoma descrito: "só encosta um pouquinho e fica parada", com uma cor
 	#  plana, sem luz — o nó levava `sync_to_physics` a reescrever-lhe a rotação
@@ -1385,6 +1453,16 @@ func _run() -> void:
 				generic_icons.append(id)
 		check("os ícones das ferramentas novas estão desenhados",
 			generic_icons.is_empty(), ", ".join(generic_icons))
+
+	# O sono tem de estar escrito no idioma ativo: uma chave em falta aparece
+	# como "msg.sleep_bed" em cru no ecrã.
+	var missing_locale: Array = []
+	for key in ["msg.sleeping", "msg.sleep_bed", "msg.sleep_ground", "msg.cant_sleep",
+			"prompt.sleep", "msg.dehydrated", "msg.sea_water", "item.water_salt"]:
+		if Loc.t(key) == key:
+			missing_locale.append(key)
+	check("os textos do sono e da água existem no idioma ativo",
+		missing_locale.is_empty(), ", ".join(missing_locale))
 
 	# ══ PRIMEIRO DIA — teste de GAMEPLAY ══════════════════════════════════
 	# A constituição do projeto (§44) não aceita "as funções passam" como prova
@@ -1950,9 +2028,14 @@ func _first_day() -> void:
 	sv.energy = 30.0
 	main.interaction.focus = {"kind": "structure", "ref": cama_e, "pos": cama_e["pos"]}
 	main.interaction._do_interact({})
+	# dormir é uma sequência: deitar → escurecer → noite → acordar
+	var prazo: int = Time.get_ticks_msec() + 12000
+	while bool(main.interaction.sleeping) and Time.get_ticks_msec() < prazo:
+		await get_tree().process_frame
 	var hora := float(Game.hour)
 	_fd_step("DIA 1 · dormir passa a noite e devolve a energia",
-		hora >= 5.0 and hora <= 9.5 and float(sv.energy) > 31.0,
+		not bool(main.interaction.sleeping) and hora >= 5.0 and hora <= 9.5
+		and float(sv.energy) > 31.0,
 		"hora=%.1f energia=%.0f" % [hora, float(sv.energy)])
 
 	# ── 13. o dia fecha ───────────────────────────────────────────────────

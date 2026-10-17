@@ -107,8 +107,25 @@ assado sem risco → guisado (carne + cogumelo + água) que alimenta E hidrata`.
 Cozinhar é uma **estação de transformação**, não um botão `raw → cooked`.
 
 ### 5.3 Sono
-`cansaço → chão (mau) | cadeira (descansa a energia, não passa a noite) | cama
+`cansaço → chão (mau) | cadeira (cochilo: energia, sem passar a noite) | cama
 (boa: passa a noite e recupera a sério)`. Cada degrau exige mais trabalho.
+
+**Implementado (2026-10-17).** Dormir é uma **sequência**, não um salto no
+relógio: o corpo deita-se no leito (ou no chão), a câmara desce, o ecrã
+escurece, as horas passam, o ecrã clareia e o jogador levanta-se. Regras em
+`data/sleep.json` (qualidades, horas, custos) — editáveis sem GDScript:
+
+| sítio | qualidade | o que se ganha |
+|---|---|---|
+| `ground` (Z) | 0,30 | pouco descanso; a calma até piora |
+| `chair` | 0,45 | cochilo: energia, **não** passa a noite |
+| `bed` | 1,00 | a noite passa; energia, vida e calma |
+
+O que está à volta conta: **fogueira acesa +0,25**, **abrigo +0,20**. E dormir
+**paga-se**: fome −3,4/h e sede −4,2/h (senão era um botão grátis para saltar a
+noite, e o jogador nunca precisava de preparar comida antes de se deitar).
+Com uma criatura a rondar (`creature_threat ≥ 0,35`) o corpo **não deixa
+dormir** — nenhuma cama resolve o medo; isso é trabalho do fogo e do abrigo.
 
 ### 5.4 Árvore (loop completo, ponta a ponta)
 `árvore em pé → golpes (com feedback de lascas e som) → cai → tronco fica

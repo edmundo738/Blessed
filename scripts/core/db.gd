@@ -214,6 +214,28 @@ func max_stack(id: String) -> int:
 ## É aqui que a diferença entre MÃO e FERRAMENTA deixa de ser "mais depressa":
 ## a mão estraga parte do que apanha e a ferramenta de pedra aproveita mais do
 ## que o nó dá. Sem isto, tier era decoração.
+## Qualidade de descanso de um sítio ("ground", "chair", "bed").
+##
+## Sem data/sleep.json há uma reserva sensata — mas o JSON manda, para se poder
+## afinar o sono sem recompilar nada.
+func sleep_quality(place: String) -> float:
+	var places = sleep_cfg.get("places", {})
+	if typeof(places) == TYPE_DICTIONARY and (places as Dictionary).has(place):
+		var entry = (places as Dictionary)[place]
+		if typeof(entry) == TYPE_DICTIONARY:
+			return float((entry as Dictionary).get("quality", 0.3))
+	var fallback := {"ground": 0.30, "chair": 0.45, "bed": 1.0}
+	return float(fallback.get(place, 0.30))
+
+
+## Um número do data/sleep.json (secção + chave), com reserva.
+func sleep_num(section: String, key: String, fallback: float) -> float:
+	var sec = sleep_cfg.get(section, {})
+	if typeof(sec) == TYPE_DICTIONARY and (sec as Dictionary).has(key):
+		return float((sec as Dictionary)[key])
+	return fallback
+
+
 func yield_scale(tool_id: String, action: String) -> float:
 	var def := item(tool_id)
 	if def.is_empty() or not def.get("power", {}).has(action):
@@ -293,6 +315,10 @@ var biomes: Array = []
 var terrain_cfg: Dictionary = {}
 var quality_cfg: Dictionary = {}
 var species_cfg: Dictionary = {}
+## Regras do sono (data/sleep.json): qualidades do chão/cadeira/cama, horas e
+## custo em fome/sede. O desenho do projeto é chão (mau) → cadeira (cochilo) →
+## cama (boa); aqui ficam os números, para se afinarem sem tocar em código.
+var sleep_cfg: Dictionary = {}
 var _biome_idx: Dictionary = {}
 
 
@@ -309,6 +335,7 @@ func reload_data() -> void:
 	biomes = arr if typeof(arr) == TYPE_ARRAY else []
 	terrain_cfg = _json_dict("res://data/terrain.json")
 	quality_cfg = _json_dict("res://data/quality.json")
+	sleep_cfg = _json_dict("res://data/sleep.json")
 	species_cfg = _json_dict("res://data/species.json")
 	var rc := _json_dict("res://data/recipes.json")
 	var lista = rc.get("recipes", [])
@@ -326,6 +353,9 @@ func reload_data() -> void:
 	print("[Db] data-driven: biomas=%d | terrain=%d chaves | quality=%s | espécies=%d | receitas=%d" % [
 		biomes.size(), terrain_cfg.size(),
 		"sim" if not quality_cfg.is_empty() else "não", _count_species(), all_recipes().size()])
+	if not sleep_cfg.is_empty():
+		print("[Db] sono: cama=%.2f chão=%.2f | acordar às %.1fh" % [
+			sleep_quality("bed"), sleep_quality("ground"), sleep_num("hours", "wake_at", 6.8)])
 
 
 func _json_dict(path: String) -> Dictionary:

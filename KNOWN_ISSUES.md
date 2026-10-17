@@ -133,6 +133,15 @@ fechado, o teste que o apanha entra no `tests/selftest.gd` para não voltar.
     (2,1 m) e do `PICKUP_DISTANCE` (0,95 m). Não é bug — é o jogador ter de
     andar até ao tronco — mas qualquer teste tem de "caminhar" até ao pickup.
 
+18. **Dormir é assíncrono** (`interaction._start_sleep`): usa `Tween`s e
+    `create_timer`, por isso um teste não pode ler `Game.hour` logo a seguir ao
+    `_do_interact` — tem de esperar por `interaction.sleeping == false` (ou pelo
+    sinal `slept`). O primeiro dia já o faz, com tecto de 12 s.
+
+19. **`data/sleep.json` tem de existir no `.pck`**: sem ele o jogo não parte (usa
+    a reserva de `Db.sleep_quality`), mas os números afinados perdem-se. O
+    `tools/pack_pck.py` inclui `data/`; o `mkpack.py` também.
+
 ## LIMITES DO SANDBOX (não corrigíveis aqui)
 9. **Sem GPU/browser** → não se valida o ecrã real; usa-se `tools/render_shot.py`.
 10. **Sem build Windows** → não há templates de export oficiais no sandbox.

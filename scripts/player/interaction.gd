@@ -37,11 +37,23 @@ var _tool_hint_t := 0.0
 var _fish_state := 0
 var _fish_t := 0.0
 
+# ── sono ────────────────────────────────────────────────────────────────
+## Dormir é uma AÇÃO com princípio, meio e fim, não um salto no relógio:
+## deitar → escurecer → o tempo passa → amanhecer → levantar.
+signal slept(quality: float, place: String)
+var sleeping := false
+var _sleep_layer: CanvasLayer
+var _sleep_rect: ColorRect
+var _eye_y := -1.0
+
 
 func _ready() -> void:
 	name = "Interaction"
 	_make_ghost()
 	Game.register_command("interact", self, _can_interact, _do_interact, "prompt.use")
+	# Dormir no chão é a alternativa de quem ainda não construiu cama: sem isto
+	# a primeira noite não tinha saída nenhuma (a cama exige bancada + 12 de fibra).
+	Game.register_command("sleep", self, _can_sleep, _do_sleep, "prompt.sleep")
 	Game.register_command("craft", self, _can_craft, _do_craft, "tab.crafting")
 	Game.register_command("place", self, _can_place, _do_place, "prompt.place")
 	Game.register_command("use_item", self, _can_use_item, _do_use_item, "prompt.use")
@@ -76,12 +88,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		Game.request("interact")
 	elif event.is_action_pressed("use_item"):
 		Game.request("use_item")
+	elif event.is_action_pressed("sleep"):
+		Game.request("sleep")
 
 
 func _process(delta: float) -> void:
 	if Game.paused or not Game.started:
 		return
 	_tool_hint_t = maxf(0.0, _tool_hint_t - delta)
+	if sleeping:
+		# a dormir não se colhe, não se constrói e não se abre a mochila
+		return
 	_tick_fishing(delta)
 	_update_focus()
 	_handle_use(delta)
@@ -443,6 +460,8 @@ func _can_interact(_a: Dictionary) -> bool:
 ##   • rato direito  — usar o que se tem na mão (comer, beber, colocar)
 ## Antes, F e o rato faziam o mesmo e o jogador não tinha como saber qual usar.
 func _do_interact(_a: Dictionary) -> Dictionary:
+	if sleeping:
+		return {"handled": false, "reason": "sleeping"}
 	if focus.is_empty():
 		return {"handled": false, "ok": false}
 	match str(focus["kind"]):
@@ -473,7 +492,7 @@ func _do_interact(_a: Dictionary) -> Dictionary:
 				structures.light(e)
 				Sfx.play("craft", -10.0, 1.3)
 			elif str(e["id"]) == "bed":
-				_rest_in_bed()
+				_rest_in_bed(e)
 			elif str(e["id"]) == "chair":
 				_rest_in_chair()
 			elif str(e["id"]) == "chest":
@@ -497,8 +516,6 @@ func _open_station(id: String) -> void:
 	Sfx.play("ui_open", -12.0, 1.1)
 
 
-## Tem isqueiro na mão (ou no saco)? Acender fogueiras é a única coisa que ele
-## faz — não se gasta, é uma ferramenta.
 ## Este ponto de água é MAR? (o rio e o mar não são a mesma água)
 func _is_sea(p: Vector3) -> bool:
 	if world == null:
@@ -507,20 +524,116 @@ func _is_sea(p: Vector3) -> bool:
 	return ter != null and ter.is_ocean(p.x, p.z)
 
 
+## Tem isqueiro na mão (ou no saco)? Acender fogueiras é a única coisa que ele
+## faz — não se gasta, é uma ferramenta.
 func _has_fire_starter() -> bool:
 	if Db.item(inv.hotbar_id()).get("power", {}).has("fire"):
 		return true
 	return inv.count("fire_kit") > 0
 
 
-## Descansar na cama: repõe stats e avança até de manhã.
-func _rest_in_bed() -> void:
-	var to_morning := fmod(7.0 - Game.hour + 24.0, 24.0)
-	if to_morning > 12.0 or to_morning < 0.5:
-		to_morning = 6.0
-	survival.rest(to_morning, 1.0)
-	Sfx.play("ui_click", -10.0, 0.8)
-	Bus.say("prompt.rest", 2.5)
+## Dormir na cama: alinha o corpo ao leito e arranca a sequência do sono.
+func _rest_in_bed(e: Dictionary) -> void:
+	_start_sleep(e, "bed")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  SONO — uma acção, não um teletransporte de tempo
+# ══════════════════════════════════════════════════════════════════════════
+
+func _can_sleep(_a: Dictionary) -> bool:
+	return not sleeping and survival != null and survival.alive
+
+
+## Dormir no chão (tecla Z). A cama usa o mesmo caminho, mas com outra
+## qualidade e o corpo alinhado ao leito.
+func _do_sleep(_a: Dictionary) -> Dictionary:
+	if sleeping:
+		return {"failed": true, "reason": "already_sleeping"}
+	_start_sleep({}, "ground")
+	return {"sleeping": true, "place": "ground"}
+
+
+## Arranca a sequência. `entry` vazio = chão; com entrada = deitar no leito.
+func _start_sleep(entry: Dictionary, place: String) -> void:
+	if sleeping or survival == null or not survival.alive:
+		return
+	# Com uma criatura a rondar, o corpo não deixa: o medo é a única coisa que
+	# nenhuma cama resolve. É esta regra que dá peso a ter fogo e abrigo.
+	var block := Db.sleep_num("context", "threat_blocks_sleep", 0.35)
+	if float(survival.creature_threat) >= block:
+		Bus.ui_message.emit(Loc.t("msg.cant_sleep"), 3.0)
+		Sfx.play("ui_click", -16.0, 0.6)
+		return
+	sleeping = true
+	player.enabled = false
+	player.velocity = Vector3.ZERO
+	if not entry.is_empty():
+		# deitar NO leito, virado como ele
+		var pos: Vector3 = entry["pos"]
+		var rot := float(entry.get("rot", 0.0))
+		player.teleport(pos + Vector3(0.0, 0.55, 0.0))
+		player.yaw = rot
+		player.target_yaw = rot
+		player.pitch = 0.0
+		player.target_pitch = 0.0
+	var quality := Db.sleep_quality(place)
+	var context := 0.0
+	if survival.near_fire:
+		context += Db.sleep_num("context", "near_fire", 0.25)
+	if survival.sheltered:
+		context += Db.sleep_num("context", "sheltered", 0.20)
+	Bus.ui_message.emit(Loc.t("msg.sleeping"), 2.0)
+	Sfx.play("ui_click", -14.0, 0.7)
+	await _sleep_pose(true)
+	await _sleep_fade(1.0, 0.55)
+	# O TEMPO passa aqui — e cobra-se (fome, sede) em `sleep_until_morning`.
+	var res := survival.sleep_until_morning(quality, context)
+	await get_tree().create_timer(0.45).timeout
+	await _sleep_fade(0.0, 0.75)
+	await _sleep_pose(false)
+	player.enabled = true
+	sleeping = false
+	Bus.say("msg.sleep_bed" if place == "bed" else "msg.sleep_ground", 3.0)
+	Sfx.play("ui_click", -12.0, 1.0)
+	slept.emit(float(res.get("quality", quality)), place)
+
+
+## Deita/levanta: a câmara desce até ao chão e volta à altura dos olhos.
+func _sleep_pose(down: bool) -> void:
+	if player == null or player.cam_pivot == null:
+		return
+	if _eye_y < 0.0:
+		_eye_y = player.cam_pivot.position.y
+	var target := 0.42 if down else _eye_y
+	var t := create_tween()
+	t.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	t.tween_property(player.cam_pivot, "position:y", target, 0.75)
+	await t.finished
+
+
+## Escurece/clareia o ecrã. Sem isto "dormir" era um corte seco.
+func _sleep_fade(target: float, secs: float) -> void:
+	_ensure_sleep_layer()
+	var t := create_tween()
+	t.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	t.tween_property(_sleep_rect, "color:a", target, secs)
+	await t.finished
+
+
+func _ensure_sleep_layer() -> void:
+	if _sleep_layer != null:
+		return
+	_sleep_layer = CanvasLayer.new()
+	_sleep_layer.name = "SleepFade"
+	_sleep_layer.layer = 120
+	add_child(_sleep_layer)
+	_sleep_rect = ColorRect.new()
+	_sleep_rect.name = "Black"
+	_sleep_rect.color = Color(0.0, 0.0, 0.0, 0.0)
+	_sleep_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_sleep_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_sleep_layer.add_child(_sleep_rect)
 
 
 ## Cofre: guarda o que tens na mão e devolve o que lá está.

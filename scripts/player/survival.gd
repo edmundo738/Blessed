@@ -174,6 +174,53 @@ func dehydrate(seconds: float = 45.0) -> void:
 	_emit_stats()
 
 
+## Dormir até de manhã.
+##
+## `quality` é o SÍTIO (chão 0,30 … cama 1,00, de data/sleep.json) e `context`
+## é o que o mundo acrescenta (fogueira acesa, abrigo). Devolve o que mudou,
+## para o HUD/testemunho poderem dizer a verdade.
+##
+## O tempo não é de graça: as horas passam e o corpo paga fome e sede. Sem
+## isto, dormir era um botão para saltar a noite sem consequência — e o
+## jogador nunca precisava de preparar comida antes de se deitar.
+func sleep_until_morning(quality: float, context: float = 0.0) -> Dictionary:
+	var wake_at := Db.sleep_num("hours", "wake_at", 6.8)
+	var to_morning := fmod(wake_at - Game.hour + 24.0, 24.0)
+	var hours := to_morning
+	if Game.hour > wake_at and Game.hour < 19.0:
+		# de dia não se salta o dia: é uma sesta curta
+		hours = Db.sleep_num("hours", "nap", 1.5)
+	else:
+		hours = clampf(hours, Db.sleep_num("hours", "min", 3.0),
+			Db.sleep_num("hours", "max", 9.0))
+	var q := clampf(quality + context, 0.05, 1.5)
+	var energy_before := energy
+	var hunger_before := hunger
+	var thirst_before := thirst
+	energy = clampf(energy + hours * Db.sleep_num("recovery", "energy_per_hour", 9.0) * q,
+		0.0, MAX_STAT)
+	health = clampf(health + hours * Db.sleep_num("recovery", "health_per_hour", 0.8) * q,
+		0.0, MAX_STAT)
+	# a calma depende da qualidade: no chão, ao relento, acorda-se pior do que
+	# se deitou; na cama (com fogo/abrigo) acorda-se melhor
+	sanity = clampf(sanity + Db.sleep_num("recovery", "sanity", 16.0) * (q - 0.55),
+		0.0, MAX_STAT)
+	hunger = clampf(hunger - hours * Db.sleep_num("recovery", "hunger_per_hour", 3.4),
+		0.0, MAX_STAT)
+	thirst = clampf(thirst - hours * Db.sleep_num("recovery", "thirst_per_hour", 4.2),
+		0.0, MAX_STAT)
+	dehydrated_t = maxf(0.0, dehydrated_t - hours * 600.0)
+	Game.hour = fmod(Game.hour + hours, 24.0)
+	reset_warnings()
+	_emit_stats()
+	return {
+		"hours": hours, "quality": q,
+		"energy": energy - energy_before,
+		"hunger": hunger - hunger_before,
+		"thirst": thirst - thirst_before,
+	}
+
+
 func rest(hours: float, quality: float) -> void:
 	energy = clampf(energy + hours * 12.0 * quality, 0.0, MAX_STAT)
 	sanity = clampf(sanity + 18.0 * quality, 0.0, MAX_STAT)

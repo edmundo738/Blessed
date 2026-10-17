@@ -138,6 +138,9 @@ func _build_input_map() -> void:
 		"locale": [KEY_F2],
 		"camera_toggle": [KEY_V],
 		"status_panel": [KEY_N],
+		# Deitar no chão. Existe porque a cama exige bancada + 12 de fibra: sem
+		# isto a primeira noite não tinha saída. `Z` de "zzz" (o `R` é a bênção).
+		"sleep": [KEY_Z],
 	}
 	for action in keys:
 		if not InputMap.has_action(action):
