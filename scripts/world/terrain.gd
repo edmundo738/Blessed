@@ -12,9 +12,6 @@ extends RefCounted
 ##   →  rio (curva de nível de um ruído)  →  caminho (achatado)  →  aldeia
 
 const SEA_LEVEL := 0.0
-const RIVER_WIDTH := 0.030
-const RIVER_VALLEY := 0.105
-const RIVER_BED := -2.6
 const PATH_HALF_WIDTH := 2.6
 const PATH_SOFT := 5.2
 
@@ -61,7 +58,6 @@ var n_mask: FastNoiseLite
 var n_moist: FastNoiseLite
 var n_temp: FastNoiseLite
 var n_grove: FastNoiseLite
-var n_river: FastNoiseLite
 var n_tint: FastNoiseLite
 var n_warp: FastNoiseLite
 var n_erosion: FastNoiseLite
@@ -70,6 +66,8 @@ var n_hills: FastNoiseLite
 var n_mesa: FastNoiseLite
 var n_dune: FastNoiseLite
 var n_crag: FastNoiseLite
+## O sistema de água (BHFS). Construído no `_init`, depois do relevo existir.
+var water: Water
 var _coast_axis := Vector2.RIGHT
 var _coast_side := Vector2.DOWN
 
@@ -90,7 +88,6 @@ func _init(p_seed: int = 1) -> void:
 	n_moist = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.00075, 3, 0.5, 2.0, p_seed + 5)
 	n_temp = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.00055, 3, 0.5, 2.0, p_seed + 6)
 	n_grove = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.0040, 2, 0.5, 2.0, p_seed + 7)
-	n_river = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.0024, 4, 0.5, 2.4, p_seed + 8)
 	n_tint = _noise(FastNoiseLite.TYPE_PERLIN, 0.09, 2, 0.5, 2.0, p_seed + 9)
 	n_warp = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.0009, 2, 0.5, 2.0, p_seed + 10)
 	n_erosion = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.0016, 3, 0.5, 2.0, p_seed + 11)
@@ -100,6 +97,10 @@ func _init(p_seed: int = 1) -> void:
 	n_dune = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.011, 2, 0.5, 2.0, p_seed + 15)
 	n_crag = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.0085, 3, 0.5, 2.1, p_seed + 16)
 	n_crag.fractal_type = FastNoiseLite.FRACTAL_RIDGED
+	# A água vem depois do relevo: a rede de drenagem é calculada uma vez e o
+	# resto do mundo (chunks, jogador, colisões) consulta-a por interpolação.
+	water = Water.new()
+	water.build(self, village_center())
 
 
 func _noise(t: FastNoiseLite.NoiseType, freq: float, oct: int, gain: float,
@@ -154,7 +155,9 @@ func climate(x: float, z: float) -> Vector2:
 	return Vector2(t, m)
 
 
-func height(x: float, z: float) -> float:
+## Relevo puro: o chão tal como a geologia o fez, ANTES de a água lhe abrir o
+## leito. É a única função que a hidrologia pode consultar (sem ciclo).
+func relief(x: float, z: float) -> float:
 	var h := _land(x, z, true)
 	# Caminho e aldeia são aplicados primeiro. O rio passa por baixo da estrada
 	# como um vau raso, em vez de a estrada voltar a encher o leito.
@@ -179,16 +182,21 @@ func height(x: float, z: float) -> float:
 	var sea_bed := SEA_LEVEL - 22.0 + n_erosion.get_noise_2d(x * 0.7, z * 0.7) * 2.4
 	h = lerpf(h, sea_bed, ocean)
 
-	# Um único rio sinuoso, de nível descendente e largura de curso d'água,
-	# atravessa o vale e entrega na costa. As margens são talhadas em seguida.
-	var flow := _river_activity(along, coast)
-	if flow > 0.001:
-		var river_distance := absf(across - _river_center(along))
-		var surface := _river_level(along, coast)
-		var bank := 1.0 - _smooth(6.5, 20.0, river_distance)
-		var channel := 1.0 - _smooth(3.8, 7.0, river_distance)
-		h = lerpf(h, minf(h, surface + 1.25), bank * flow * 0.92)
-		h = lerpf(h, minf(h, surface - 1.7), channel * flow)
+	# O rio já não é escavado aqui: quem o escava é o `Water`, a partir da rede
+	# de drenagem do relevo (`height()` = `relief()` − leito). Uma senóide escrita
+	# à mão deixava um canyon seco ao lado do rio verdadeiro.
+	return h
+
+
+## O chão do jogo: relevo menos o leito que a rede de drenagem escavou.
+##
+## É esta a inversão que faltava. Antes, a água era uma superfície derivada do
+## chão; agora é o chão que se adapta à água, e os rios passam em vales verdadeiros
+## em vez de flutuarem por cima de uma encosta.
+func height(x: float, z: float) -> float:
+	var h := relief(x, z)
+	if water != null:
+		h -= water.carve(x, z)
 	return h
 
 
@@ -202,43 +210,59 @@ func _coastline(across: float) -> float:
 		+ sin(across * 0.013 + float(seed_value) * 0.027) * 9.0
 
 
-func _river_center(along: float) -> float:
-	var phase := float(seed_value) * 0.019
-	return 58.0 + sin(along * 0.008 + phase) * 15.0 \
-		+ sin(along * 0.019 - phase * 0.7) * 6.0
+# O rio já não tem geometria própria: `Water` calcula a rede de drenagem a
+# partir do relevo e `height()` escava-lhe o leito. Aqui só se lê a água.
 
 
-func _river_activity(along: float, coast: float) -> float:
-	return _smooth(-270.0, -210.0, along) \
-		* (1.0 - _smooth(coast - 24.0, coast + 8.0, along))
-
-
-func _river_level(along: float, coast: float) -> float:
-	var t := clampf((along + 220.0) / maxf(coast + 220.0, 1.0), 0.0, 1.0)
-	return lerpf(4.2, SEA_LEVEL + 0.12, t)
+## Amostra completa de água (mar, rio, lago, mangue) para o jogo.
+## Devolve {} quando está seco.
+func water_sample(x: float, z: float) -> Dictionary:
+	var ocean := _ocean_info(x, z)
+	if ocean.x > -99999.0:
+		var oc := _starter_coords(x, z)
+		var deep := float(ocean.y)
+		# Corrente de maré: lenta, paralela à costa. Dá vida à superfície e
+		# empurra de leve quem nada — sem simular uma gota.
+		var tide_dir := Vector2(-_coast_side.y, _coast_side.x)
+		return {
+			"kind": Water.KIND_OCEAN,
+			"level": float(ocean.x),
+			"depth": deep,
+			"flow": tide_dir,
+			"speed": 0.18 + 0.10 * sin(oc.x * 0.01 + oc.y * 0.013),
+			"salinity": 1.0,
+			"turbidity": clampf(0.10 + 0.20 * (1.0 - clampf(deep / 12.0, 0.0, 1.0)), 0.0, 1.0),
+			"half_width": 0.0,
+			"body": -1,
+		}
+	if water != null:
+		var s := water.sample(x, z)
+		if not s.is_empty():
+			return s
+	return {}
 
 
 func water_info(x: float, z: float) -> Vector2:
 	# x = superfície (sentinela negativa quando seco), y = coluna de água.
+	var s := water_sample(x, z)
+	if s.is_empty():
+		return Vector2(-100000.0, 0.0)
+	return Vector2(float(s["level"]), float(s["depth"]))
+
+
+## Só o mar. A água doce vem de `Water.sample()`; isto é a costa.
+func _ocean_info(x: float, z: float) -> Vector2:
 	var coords := _starter_coords(x, z)
 	var coast := _coastline(coords.y)
-	var flow := _river_activity(coords.x, coast)
-	var river_candidate := flow > 0.05 \
-		and absf(coords.y - _river_center(coords.x)) < 7.0
-	var ocean_candidate := coords.x > coast - 42.0
-	if not river_candidate and not ocean_candidate:
+	if coords.x < coast - 42.0:
 		return Vector2(-100000.0, 0.0)
 	# Depois da faixa costeira, o leito já está totalmente abaixo do mar. Evita
 	# recalcular ruído e relevo em cada vértice do oceano durante a geração.
-	if not river_candidate and coords.x >= coast + 38.0:
+	if coords.x >= coast + 38.0:
 		return Vector2(SEA_LEVEL, 22.0)
 	var ground := height(x, z)
-	if river_candidate:
-		var river_surface := _river_level(coords.x, coast)
-		if ground < river_surface + 0.05:
-			return Vector2(river_surface, maxf(river_surface - ground, 0.0))
 	if ground < SEA_LEVEL - 0.12:
-		return Vector2(SEA_LEVEL, maxf(SEA_LEVEL - ground, 0.0))
+		return Vector2(SEA_LEVEL, SEA_LEVEL - ground)
 	return Vector2(-100000.0, 0.0)
 
 
@@ -247,12 +271,12 @@ func water_surface_height(x: float, z: float) -> float:
 
 
 func is_ocean(x: float, z: float) -> bool:
-	var coords := _starter_coords(x, z)
-	var coast := _coastline(coords.y)
-	if _river_activity(coords.x, coast) > 0.05 \
-			and absf(coords.y - _river_center(coords.x)) < 9.0:
+	# A foz de um rio também está abaixo do nível do mar, mas é água doce: quem
+	# enche a garrafa ali bebe água de rio. O leito escavado diz-nos isso sem
+	# pagar uma amostra completa por instância de alga.
+	if water != null and water.carve(x, z) > 0.25:
 		return false
-	return height(x, z) < SEA_LEVEL - 0.12
+	return _ocean_info(x, z).x > -99999.0
 
 
 func grass_coverage_s(h: float, sl: float, weights: PackedFloat32Array) -> float:
@@ -400,26 +424,30 @@ func biome_weights_s(x: float, z: float, h: float, sl: float, out: PackedFloat32
 	var grove_n := n_grove.get_noise_2d(x, z)
 	var tint_n := n_tint.get_noise_2d(x, z)
 	var flat := 1.0 - _smooth(0.40, 0.70, sl)   # biomas de superfície só em terreno plano
-	# proximidade de rio: margens húmidas → lama
+	# A margem do rio sente-se pelo LEITO: quanto mais fundo o corte, mais perto
+	# do eixo. É a água a mudar o terreno — sem calcular uma amostra completa.
 	var river_prox := 0.0
-	var coords := _starter_coords(x, z)
-	var coast := _coastline(coords.y)
-	if _river_activity(coords.x, coast) > 0.05:
-		river_prox = (1.0 - _smooth(7.0, 24.0,
-			absf(coords.y - _river_center(coords.x)))) * (1.0 - _smooth(3.0, 9.0, above))
+	var bank_sand := 0.0
+	var marsh := 0.0
+	if water != null:
+		var cut := water.carve(x, z)
+		river_prox = clampf(_smooth(0.05, 1.1, cut), 0.0, 1.0)
+		bank_sand = _smooth(0.10, 0.70, cut) * (1.0 - _smooth(0.62, 0.80, m))
+		if water.is_marsh(x, z):
+			marsh = 1.0
 
 	for i in BIOME_COUNT:
 		out[i] = 0.0
 
 	# altitude / declive
 	var snowline := Db.terrain_num("snowline_base", 150.0) - cl.x * Db.terrain_num("snowline_temp_scale", 70.0)
-	out[B_SAND] = 1.0 - _smooth(-0.3, 1.8, above)
+	out[B_SAND] = (1.0 - _smooth(-0.3, 1.8, above)) + bank_sand * 0.85
 	out[B_SNOW] = _smooth(snowline, snowline + 36.0, h) * 1.4 + _smooth(0.20, 0.04, t) * 0.8
 	out[B_ROCK] = _smooth(0.34, 0.66, sl) * 1.5 + _smooth(Db.terrain_num("rock_altitude_min", 85.0), Db.terrain_num("rock_altitude_max", 135.0), h) * 0.55
 
 	# clima (Whittaker)
 	var lowland := 1.0 - _smooth(1.0, 3.0, above)
-	out[B_MARSH] = _smooth(0.62, 0.82, m) * lowland * (1.0 - _smooth(0.55, 0.75, t)) * 1.7
+	out[B_MARSH] = _smooth(0.62, 0.82, m) * lowland * (1.0 - _smooth(0.55, 0.75, t)) * 1.7 + marsh * 1.3
 	out[B_MUD] = river_prox * _smooth(0.40, 0.62, m) * (1.0 - _smooth(3.0, 9.0, above)) * (0.7 + 0.5 * tint_n) * 1.9
 	out[B_DESERT] = _smooth(0.60, 0.80, t) * (1.0 - _smooth(0.34, 0.54, m)) * flat * 1.7
 	out[B_BADLANDS] = _smooth(0.66, 0.86, t) * (1.0 - _smooth(0.22, 0.42, m)) \

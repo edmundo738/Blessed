@@ -432,6 +432,11 @@ func water_surface_height(x: float, z: float) -> float:
 	return terrain.water_surface_height(x, z)
 
 
+## A amostra completa (corrente, salinidade, tipo) para o jogador e os objetos.
+func water_sample(x: float, z: float) -> Dictionary:
+	return terrain.water_sample(x, z) if terrain != null else {}
+
+
 func is_in_water(p: Vector3) -> bool:
 	var surface := terrain.water_surface_height(p.x, p.z)
 	if surface < -99999.0:

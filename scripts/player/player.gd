@@ -59,6 +59,9 @@ var mantle_cooldown := 0.0
 var crouching := false
 var sprinting := false
 var swimming := false
+## Corrente da água onde o corpo está (m/s, no plano XZ). Vem do BHFS.
+var _flow := Vector2.ZERO
+var _flow_speed := 0.0
 ## Água rasa: anda-se dentro dela (só mais devagar). Nadar num rio de 40 cm é o
 ## que prendia o jogador: o modo natação tira-lhe o chão e o movimento normal.
 var wading := false
@@ -298,6 +301,11 @@ func _wish_direction() -> Vector3:
 
 
 func _move_land(delta: float, wish: Vector3) -> void:
+	# vadear: a corrente puxa de lado, mas pouco (0,6 m/s no pior caso contra
+	# 4 m/s a andar). Serve para o rio se SENTIR, não para roubar o controlo.
+	if wading and _flow_speed > 0.05:
+		velocity.x += _flow.x * _flow_speed * 0.18 * delta
+		velocity.z += _flow.y * _flow_speed * 0.18 * delta
 	# gravidade
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
@@ -388,7 +396,9 @@ func _move_land(delta: float, wish: Vector3) -> void:
 func _move_swim(delta: float, wish: Vector3) -> void:
 	var dir_world := (transform.basis * Vector3(wish.x, 0, wish.z)).normalized() \
 		if wish.length_squared() > 0.0001 else Vector3.ZERO
-	var flat := Vector3(velocity.x, 0, velocity.z).move_toward(dir_world * SWIM, 9.0 * delta)
+	var push := _flow * _flow_speed * 0.58
+	var flat := Vector3(velocity.x, 0, velocity.z).move_toward(
+		dir_world * SWIM + Vector3(push.x, 0, push.y), 9.0 * delta)
 	velocity.x = flat.x
 	velocity.z = flat.z
 	# flutuação: sobe devagar, afunda devagar, salto = braçada
@@ -421,6 +431,16 @@ func _swim_check() -> void:
 	if in_water and water_world.has_method("water_surface_height"):
 		_surface_y = float(water_world.call("water_surface_height",
 			global_position.x, global_position.z))
+	# A corrente empurra, mas nunca prende: o máximo é 60 % da velocidade a
+	# nadar, por isso dá para atravessar um rio a favor ou contra.
+	_flow = Vector2.ZERO
+	_flow_speed = 0.0
+	if in_water and water_world.has_method("water_sample"):
+		var ws: Dictionary = water_world.call("water_sample",
+			global_position.x, global_position.z)
+		if not ws.is_empty():
+			_flow = ws.get("flow", Vector2.ZERO)
+			_flow_speed = clampf(float(ws.get("speed", 0.0)), 0.0, 3.4)
 	var deep := in_water
 	if in_water and water_world.has_method("ground_height"):
 		var bed := float(water_world.call("ground_height",

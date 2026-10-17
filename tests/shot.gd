@@ -80,6 +80,22 @@ func _run() -> void:
 		eye = player.global_position + Vector3(0, 1.62, 0)
 	print("SHOT_EYE: (%.1f, %.1f, %.1f) jogador=%s" % [eye.x, eye.y, eye.z,
 		"sim" if player != null else "NAO ENCONTRADO"])
+	# --tp x,z: leva o JOGADOR (não só a câmara) para um sítio. O mundo só
+	# constrói chunks à volta do jogador; sem isto uma vista para longe
+	# fotografava o vazio.
+	var tp := _opt("--tp", "")
+	if tp != "" and player != null:
+		var tps := tp.split(",")
+		if tps.size() == 2:
+			var tx := float(tps[0])
+			var tz := float(tps[1])
+			var ty: float = main.world.ground_height(tx, tz) + 1.0
+			player.teleport(Vector3(tx, ty, tz))
+			main.world.set_target(Vector3(tx, ty, tz))
+			for _i in 90:
+				await get_tree().process_frame
+			eye = Vector3(tx, ty + 0.62, tz)
+			print("SHOT_TP: (%.1f, %.1f, %.1f)" % [tx, ty, tz])
 	var vp := _opt("--view", "")
 	if vp != "":
 		var ps := vp.split(",")

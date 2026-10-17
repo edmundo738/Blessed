@@ -134,6 +134,16 @@ func _physics_process(delta: float) -> void:
 			if _frozen:
 				global_position.y = lerpf(global_position.y, surface - 0.06,
 					1.0 - exp(-3.5 * delta))
+				# A corrente leva o que se larga no rio. É lenta de propósito:
+				# o jogador vê o item a descer e ainda o apanha.
+				if world.has_method("water_sample"):
+					var ws: Dictionary = world.call("water_sample",
+						global_position.x, global_position.z)
+					if not ws.is_empty():
+						var flow: Vector2 = ws.get("flow", Vector2.ZERO)
+						var spd := clampf(float(ws.get("speed", 0.0)), 0.0, 3.4)
+						global_position.x += flow.x * spd * 0.22 * delta
+						global_position.z += flow.y * spd * 0.22 * delta
 			else:
 				gravity_scale = -0.55      # empurra para cima enquanto não assenta
 		elif gravity_scale < 0.0:

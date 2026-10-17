@@ -1675,9 +1675,99 @@ func _run() -> void:
 	# de que o jogo é jogável: exige uma SESSÃO. Este teste joga o primeiro dia
 	# de raiz — mochila vazia, mãos nuas — pelos sistemas reais (colheita,
 	# craft, estações, fogo, água, comida, sono).
+	await _water_system()
+
 	await _first_day()
 
 	_report()
+
+
+## ── água: a rede de drenagem existe e o MUNDO obedece-lhe ────────────────
+## Não se testa "a função devolve um dicionário". Testa-se que nasce água de
+## sítios onde o relevo manda, que o chão desceu para lhe abrir o leito, e que
+## o mar e o rio não se confundem.
+func _water_system() -> void:
+	var ter: Terrain = main.world.terrain
+	var w: Water = ter.water
+	var st: Dictionary = w.stats() if w != null else {}
+	check("o mundo tem uma rede de drenagem (rios calculados do relevo)",
+		w != null and int(st.get("segments", 0)) > 0,
+		"segmentos=%d células=%d lagos=%d %s" % [int(st.get("segments", 0)),
+			int(st.get("river_cells", 0)), int(st.get("lakes", 0)), str(st.get("phases", {}))])
+	check("a hidrologia cabe no orçamento de arranque", float(st.get("ms", 9999.0)) < 1500.0,
+		"%.0f ms" % float(st.get("ms", 9999.0)))
+	# 1) um rio perto da aldeia, encontrado pelo EFEITO (amostra de água)
+	var c := ter.village_center()
+	var river := Vector2(INF, INF)
+	var lake := Vector2(INF, INF)
+	for r: float in [40.0, 90.0, 170.0, 300.0, 520.0, 800.0]:
+		for i in 96:
+			var a := TAU * float(i) / 96.0
+			var x := c.x + cos(a) * r
+			var z := c.y + sin(a) * r
+			var s: Dictionary = ter.water_sample(x, z)
+			if s.is_empty():
+				continue
+			var kind := int(s.get("kind", 0))
+			if kind == Water.KIND_RIVER and float(s.get("depth", 0.0)) >= 0.5 \
+					and river.x == INF:
+				river = Vector2(x, z)
+			elif kind == Water.KIND_LAKE and float(s.get("depth", 0.0)) >= 0.3 \
+					and lake.x == INF:
+				lake = Vector2(x, z)
+	check("nasce um rio do relevo (não de uma senóide escrita à mão)",
+		river.x != INF, "" if river.x == INF else "em (%.0f, %.0f)" % [river.x, river.y])
+	check("há pelo menos um lago numa depressão do terreno", lake.x != INF,
+		"" if lake.x == INF else "em (%.0f, %.0f)" % [lake.x, lake.y])
+
+	if river.x != INF:
+		var s2: Dictionary = ter.water_sample(river.x, river.y)
+		var level := float(s2.get("level", 0.0))
+		var depth := float(s2.get("depth", 0.0))
+		var ground := ter.height(river.x, river.y)
+		var base := ter.relief(river.x, river.y)
+		check("o chão desceu para abrir o leito do rio", base - ground > 0.05,
+			"escavado=%.2f m" % (base - ground))
+		check("a coluna de água é a do nível menos o chão",
+			absf(level - ground - depth) < 0.03,
+			"nível=%.2f chão=%.2f prof=%.2f" % [level, ground, depth])
+		var wi := ter.water_info(river.x, river.y)
+		check("water_info continua a responder à assinatura antiga",
+			absf(wi.x - level) < 0.001 and absf(wi.y - depth) < 0.001)
+		check("o rio é doce e o mar é salgado (não se confundem)",
+			float(s2.get("salinity", 1.0)) == 0.0 and not ter.is_ocean(river.x, river.y))
+		# ── a corrente não está só no dicionário: move o corpo ────────────
+		var flow_v: Vector2 = s2.get("flow", Vector2.ZERO)
+		check("a corrente tem direção e velocidade",
+			flow_v.length() > 0.5 and float(s2.get("speed", 0.0)) > 0.03,
+			"fluxo=%.2f vel=%.2f" % [flow_v.length(), float(s2.get("speed", 0.0))])
+		var home: Vector3 = main.player.global_position
+		main.player.teleport(Vector3(river.x, level - 0.35, river.y))
+		await get_tree().physics_frame
+		await get_tree().physics_frame
+		check("o jogador sente a corrente da água onde está",
+			float(main.player._flow_speed) > 0.03 and (main.player._flow as Vector2).length() > 0.5,
+			"vel=%.2f fluxo=%.2f" % [float(main.player._flow_speed),
+				(main.player._flow as Vector2).length()])
+		# ── a garrafa distingue rio de mar ────────────────────────────────
+		var inv_w := _inv()
+		inv_w.add("bottle", 1)
+		main.interaction.focus = {"kind": "water", "ref": null,
+			"pos": Vector3(river.x, level, river.y)}
+		main.interaction._do_interact({})
+		check("a garrafa enche-se de água DOCE no rio",
+			inv_w.count("water") >= 1 and inv_w.count("water_salt") == 0,
+			"doce=%d salgada=%d" % [inv_w.count("water"), inv_w.count("water_salt")])
+		main.player.teleport(home)
+		main.world.set_target(home)
+		await get_tree().physics_frame
+		# 2) determinismo: o mesmo mundo, a mesma rede
+		var ter2 := Terrain.new(ter.seed_value)
+		var st2: Dictionary = ter2.water.stats()
+		check("a rede é determinística para a mesma semente",
+			int(st2.get("segments", -1)) == int(st.get("segments", -2))
+			and absf(float(ter2.water.sample(river.x, river.y).get("level", -1.0e9)) - level) < 0.001,
+			"segmentos=%d/%d" % [int(st.get("segments", 0)), int(st2.get("segments", 0))])
 
 
 func _report() -> void:
