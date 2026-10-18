@@ -121,6 +121,15 @@ jogo responde, e fá-lo em todo o lado de uma vez.
   destrói-se e reconstrói-se pelos deltas do `dig()`/`fill()`.
 - **Verificação: LABSCENE_PASS 12/12, LABTEST_PASS 14/14, selftest
   245 ok / 0 falhas / 30 saltadas.** PNG: `docs/shots/09_lab_3d.png`.
+- **Correção winding/normais (2026-10-18, pós-teste do dono):** os índices
+  do terreno e da água em `LabMesh` estavam espelhados face à convenção do
+  repo (`chunk.gd`; KNOWN_ISSUES #9 — frontal = horário no Godot), por isso
+  a face de cima era descartada por backface culling e só se via por baixo.
+  Ordem corrigida (terreno `[a,b,d / a,d,c]`, água `[0,1,3 / 0,3,2]`,
+  colisão igual), auditoria nova `LabMesh.winding_mismatch()` e regressão
+  no labscene: **LABSCENE_PASS 14/14 (0 triângulos maus no terreno e na
+  água)**, LABTEST_PASS 14/14, selftest 245 ok / 0 falhas / 30 saltadas.
+  `tools/render_lab3d.py` passou a recusar PNG se a winding voltar a virar.
 - Pack de teste local: `Blessed_Lab_Etapa2_pack.zip` (só ficheiros da
   etapa; extrair por cima da pasta Blessed e abrir `scenes/lab.tscn`).
 

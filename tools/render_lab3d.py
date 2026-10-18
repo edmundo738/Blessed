@@ -1,7 +1,50 @@
 #!/usr/bin/env python3
 # Render obliquo do laboratorio a partir do LABGRID_B64 do tests/labscene.gd.
 # Uso: render_lab3d.py <log> <saida.png>  — stdlib apenas.
-import base64, math, struct, sys, zlib
+#
+# SENSIVEL A WINDING: antes de desenhar, le a ordem real dos indices de
+# scripts/world/lab_mesh.gd e aplica a regra do Godot (KNOWN_ISSUES #9:
+# frontal = winding horaria; vista de cima, uma face so e desenhada se o
+# produto cruzado geometrico apontar para BAIXO, cross_y < 0). Se o
+# terreno ou a agua voltarem a ficar espelhados, este script FALHA e nao
+# gera PNG — a imagem antiga escondia o bug porque desenhava os dois lados.
+import base64, math, os, re, struct, sys, zlib
+
+
+def _cross_y(p, q, r):
+    ux, uz = q[0] - p[0], q[1] - p[1]
+    vx, vz = r[0] - p[0], r[1] - p[1]
+    return uz * vx - ux * vz
+
+
+def check_winding():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "..", "scripts", "world", "lab_mesh.gd")
+    src = open(path).read()
+    corner = {"a": (0, 0), "b": (1, 0), "c": (0, 1), "d": (1, 1)}
+    m = re.search(r"idx\.append_array\(\[([a-d](?:, [a-d]){5})\]\)", src)
+    if not m:
+        sys.exit("render_lab3d: nao encontrei a ordem de indices do terreno")
+    tok = [t.strip() for t in m.group(1).split(",")]
+    tris = [(tok[0], tok[1], tok[2]), (tok[3], tok[4], tok[5])]
+    for t in tris:
+        if _cross_y(corner[t[0]], corner[t[1]], corner[t[2]]) > 0:
+            sys.exit("render_lab3d: winding do TERRENO virada — a face de "
+                     "cima seria cullada no Godot (PNG recusado)")
+    wcorner = {0: (0, 0), 1: (1, 0), 2: (0, 1), 3: (1, 1)}
+    w = re.search(r"idx\.append_array\(\[base, base \+ (\d), base \+ (\d), "
+                  r"base, base \+ (\d), base \+ (\d)\]\)", src)
+    if not w:
+        sys.exit("render_lab3d: nao encontrei a ordem de indices da agua")
+    nums = [int(g) for g in w.groups()]
+    for t in [(0, nums[0], nums[1]), (0, nums[2], nums[3])]:
+        if _cross_y(wcorner[t[0]], wcorner[t[1]], wcorner[t[2]]) > 0:
+            sys.exit("render_lab3d: winding da AGUA virada — a face de "
+                     "cima seria cullada no Godot (PNG recusado)")
+    print("winding ok: faces de cima sao frontais (terreno + agua)")
+
+
+check_winding()
 
 W, H = 960, 540
 log = open(sys.argv[1]).read()

@@ -73,8 +73,11 @@ recolha, escavação, craft, construção, geração — pequenos, finitos, jog�
   Partículas de poeira no ponto da escavação (feedback do material).
 - `Player.dev_fly`: voo sem gravidade (ferramenta dev, fora do gameplay).
 - Item novo `soil`: cavar largar solo; aterrar é o seu par.
-- Prova: `tests/labscene.gd` — LABSCENE_PASS 12/12 (mesh 7744 vértices,
+- Prova: `tests/labscene.gd` — LABSCENE_PASS 14/14 (mesh 7744 vértices,
   colisão por raycast, spawn assenta, cavar baixa, aterrar reconstrói,
-  voo ativo) + LABTEST_PASS 14/14 + selftest 245 ok/0 falhas.
+  voo ativo, **winding do terreno e da água coerente com as normais —
+  0 triângulos virados**, regressão do bug em que a face de cima era
+  cullada e só se via por baixo) + LABTEST_PASS 14/14 + selftest
+  245 ok/0 falhas.
 - Como testar local: extrair o pack da etapa por cima da pasta Blessed,
   abrir `scenes/lab.tscn`, F5. Primeiro teste sugerido: cavar.

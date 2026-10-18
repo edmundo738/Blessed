@@ -41,6 +41,21 @@ func _ready() -> void:
 	_check(total_verts > 5000, "mesh 3D com geometria real (%d vértices)" % total_verts)
 	_check(scene._water_inst != null, "malha de água presente")
 
+	# REGRESSAO winding/normais: a face de cima tem de ser a frontal.
+	# O bug original (indices espelhados) passava em todos os testes
+	# antigos porque nenhum olhava para a orientacao das faces — o
+	# terreno e a agua so se viam por baixo (backface culling).
+	var bad_terrain := 0
+	for key in scene._chunks.keys():
+		var mi := scene._chunks[key]["mesh"] as MeshInstance3D
+		if mi != null and mi.mesh != null:
+			bad_terrain += LabMesh.winding_mismatch(mi.mesh.surface_get_arrays(0))
+	_check(bad_terrain == 0, "winding do terreno coerente com as normais (%d maus)" % bad_terrain)
+	var bad_water := -1
+	if scene._water_inst != null and scene._water_inst.mesh != null:
+		bad_water = LabMesh.winding_mismatch(scene._water_inst.mesh.surface_get_arrays(0))
+	_check(bad_water == 0, "winding da água coerente com as normais (%d maus)" % bad_water)
+
 	# spawn em terra firme, acima do chão
 	_check(scene.player != null, "jogador nasceu")
 	var sp := scene.player.global_position

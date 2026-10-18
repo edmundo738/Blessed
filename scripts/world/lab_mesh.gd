@@ -25,6 +25,31 @@ static func chunk_count() -> int:
 	return (LabWorld.N - 1) / CHUNK_CELLS
 
 
+## Auditoria de winding (regressao do bug "so se ve por baixo"): conta os
+## triangulos cuja winding contradiz a normal do vertice. Na convencao do
+## Godot (frontal = horario), o produto cruzado geometrico de uma face
+## correta aponta para o lado OPOSTO ao da normal de shading; dot > 0 (ou
+## triangulo degenerado) = face virada ao contrario. Tem de dar 0.
+static func winding_mismatch(arrays: Array) -> int:
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	if verts.is_empty() or normals.size() != verts.size() or idx.size() < 3:
+		return 0
+	var bad := 0
+	var t := 0
+	while t + 2 < idx.size():
+		var ia: int = idx[t]
+		var ib: int = idx[t + 1]
+		var ic: int = idx[t + 2]
+		var geo := (verts[ib] - verts[ia]).cross(verts[ic] - verts[ia])
+		var vn := normals[ia] + normals[ib] + normals[ic]
+		if geo.length_squared() < 1e-12 or geo.dot(vn) > 0.0:
+			bad += 1
+		t += 3
+	return bad
+
+
 static func build_chunk(lab: LabWorld, ci: int, cj: int) -> Dictionary:
 	var seg := CHUNK_CELLS
 	var verts := PackedVector3Array()
@@ -53,8 +78,14 @@ static func build_chunk(lab: LabWorld, ci: int, cj: int) -> Dictionary:
 			var b := a + 1
 			var c := a + seg + 1
 			var d := c + 1
-			idx.append_array([a, c, b, b, c, d])
-			faces.append_array([verts[a], verts[c], verts[b], verts[b], verts[c], verts[d]])
+			# CONVENCAO DO REPO (chunk.gd, KNOWN_ISSUES #9): no Godot a face
+			# frontal e a de winding HORARIA vista de frente. Com b=+x,
+			# c=+z, d=diagonal, a ordem certa vista de cima e [a,b,d / a,d,c].
+			# A ordem anterior [a,c,b] estava espelhada: o rasterizador
+			# deitava fora a face de cima (backface culling) e o terreno so
+			# se via por baixo, apesar das normais apontarem para cima.
+			idx.append_array([a, b, d, a, d, c])
+			faces.append_array([verts[a], verts[b], verts[d], verts[a], verts[d], verts[c]])
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
@@ -106,7 +137,10 @@ static func build_water(lab: LabWorld) -> Dictionary:
 				verts.append(v)
 				normals.append(Vector3.UP)
 				colors.append(c)
-			idx.append_array([base, base + 2, base + 1, base + 1, base + 2, base + 3])
+			# Mesma convencao do terreno: cantos 0=(-,-) 1=(+,-) 2=(-,+)
+			# 3=(+,+); frente (de cima) = [0,1,3 / 0,3,2]. A ordem anterior
+			# so era visivel por baixo.
+			idx.append_array([base, base + 1, base + 3, base, base + 3, base + 2])
 			base += 4
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
