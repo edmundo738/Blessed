@@ -12,7 +12,7 @@ var _spark_mesh: QuadMesh
 var _cpu_combo_mesh: ArrayMesh
 var _use_gpu := true
 
-const SPARK_TEXTURE := preload("res://content/fx/kenney/particles/star_02.png")
+const SPARK_PATH := "res://content/fx/kenney/particles/star_02.png"
 
 
 func _ready() -> void:
@@ -31,7 +31,7 @@ func _ready() -> void:
 	spark_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	spark_material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	spark_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	spark_material.albedo_texture = SPARK_TEXTURE
+	spark_material.albedo_texture = Assets.texture(SPARK_PATH)
 	spark_material.vertex_color_use_as_albedo = true
 	_spark_mesh.material = spark_material
 	_cpu_combo_mesh = _build_cpu_mesh()

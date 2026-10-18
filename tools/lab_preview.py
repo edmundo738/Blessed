@@ -31,12 +31,13 @@ def relief(x, z):
     dm = math.hypot(x + 80, z + 70)
     dl = math.hypot(x - 85, z - 78)
     vx = -80 + (z + 70) * 0.42 + math.sin(z * 0.018) * 14
+    rim = 3.2 * math.exp(-((dl - 31) ** 2) / (2 * 9 * 9)) + 6.0 * math.exp(-(dl * dl) / (2 * 45 * 45))
     vt = max(0.0, min(1.0, (z + 95) / 265))
     valley = 4.2 * math.exp(-((x - vx) ** 2) / (2 * 26 * 26)) * math.sin(math.pi * max(0.02, min(0.98, vt)))
     return (land + 34 * math.exp(-(dm * dm) / (2 * 62 * 62))
             + noise(x, z, 0.012, 1358) * 3.2 * t
             + noise(x, z, 0.045, 1359) * 0.6
-            - 5.5 * math.exp(-(dl * dl) / (2 * 30 * 30)) - valley)
+            - 5.5 * math.exp(-(dl * dl) / (2 * 30 * 30)) + rim - valley)
 
 # grelha + D8
 G = N * N

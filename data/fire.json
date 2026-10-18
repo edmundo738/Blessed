@@ -1,0 +1,9 @@
+{
+  "_comment": "O fogo é um sistema, não uma lâmpada: gasta combustível em horas de JOGO e tem de ser alimentado com madeira. Editar aqui não precisa de GDScript.",
+  "campfire": {
+    "hours_per_load": 5.0,
+    "wood_hours": 1.4,
+    "warn_hours": 1.0,
+    "near_radius": 14.0
+  }
+}

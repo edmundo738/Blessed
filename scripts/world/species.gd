@@ -19,6 +19,11 @@ class Species extends RefCounted:
 	var height: float = 1.0              # altura útil (sombra, som)
 	var wind: float = 0.0                # 0 = rígido, 1 = balança muito
 	var materials_authored: bool = false # material Blender preservado no GLB
+	## Tronco + ramos SEM copa: é o que fica quando a árvore cai. Sem isto a
+	## árvore abatida era o modelo inteiro (copa incluída) com o material das
+	## FOLHAS — translúcido e sem resposta à luz. Era este o "fica com uma cor
+	## esquisita, mais plana, como se a luz já não a afetasse".
+	var trunk_lods: Array[ArrayMesh] = []
 
 
 class Structure extends RefCounted:
@@ -136,6 +141,8 @@ func _tree(id: String, trunk_h: float, trunk_rb: float, trunk_rt: float,
 			max_blobs = 1
 		var parts: Array = [MeshKit.tapered(rng, trunk_h, trunk_rb, trunk_rt,
 			7 if lvl >= 2 else 5, 3, 0.1, true, trunk_tint)]
+		# cópia só do tronco/ramos, feita ANTES de entrarem as bolhas de copa
+		var trunk_parts: Array = parts.duplicate()
 		for bi in canopy.size():
 			if bi >= max_blobs:
 				break
@@ -145,15 +152,22 @@ func _tree(id: String, trunk_h: float, trunk_rb: float, trunk_rt: float,
 			if li < 2 and bi < (2 if li == 1 else canopy.size()):
 				var branch_end: Vector3 = c["pos"] * 0.76
 				var branch_start := Vector3(0.0, trunk_h * 0.46, 0.0)
-				parts.append(_branch(branch_start, branch_end,
-					maxf(trunk_rt * 0.55, float(c["r"]) * 0.075), trunk_tint))
+				var branch := _branch(branch_start, branch_end,
+					maxf(trunk_rt * 0.55, float(c["r"]) * 0.075), trunk_tint)
+				parts.append(branch)
+				trunk_parts.append(branch)
 			var blob := MeshKit.blob(rng, float(c["r"]), lvl, float(c.get("jit", 0.18)),
 				c.get("scale", Vector3.ONE), c.get("tint", Color.WHITE))
 			parts.append(_offset(blob, c["pos"]))
 		s.lods.append(_merge(parts))
+		s.trunk_lods.append(_merge(trunk_parts))
 	var blender_lods := BlessedBlenderAssets.lods_for("tree_" + id)
 	if not blender_lods.is_empty():
 		s.lods = blender_lods
+		# Um GLB é uma malha só: não há tronco separado. A árvore abatida usa o
+		# modelo inteiro (aceitável: é o que o artista desenhou) — o que NÃO se
+		# aceita é ela levar o material das folhas.
+		s.trunk_lods = blender_lods
 		s.materials_authored = true
 		# Imported models use a ground-level origin; do not sink their root into terrain.
 		s.y_offset = 0.0
@@ -231,8 +245,11 @@ func _build_trees() -> void:
 	var pb := PackedInt32Array([Terrain.B_FOREST, Terrain.B_ROCK, Terrain.B_SNOW])
 	pine.biomes = pb
 	for segs in [11, 7, 4]:
-		var parts: Array = [MeshKit.tapered(rng, 6.8, 0.27, 0.06, segs, 3, 0.05, true,
-			Color(0.34, 0.24, 0.18))]
+		var pine_trunk := MeshKit.tapered(rng, 6.8, 0.27, 0.06, segs, 3, 0.05, true,
+			Color(0.34, 0.24, 0.18))
+		var parts: Array = [pine_trunk]
+		# o abate do pinheiro fica com o mastro, sem os cones (que são as folhas)
+		pine.trunk_lods.append(pine_trunk)
 		for i in 7:
 			var t := float(i) / 6.0
 			parts.append(_offset(
@@ -256,7 +273,17 @@ func _build_rocks() -> void:
 			MeshKit.rock(rng, lerpf(0.55, 1.15, float(i) / 2.0))
 		var s := Species.new()
 		s.id = "rock_%d" % i
-		s.lods = blender_rocks if not blender_rocks.is_empty() else [m, m, m]
+		if blender_rocks.is_empty():
+			# ATENÇÃO: `s.lods = A if cond else [m, m, m]` NÃO funciona — o array
+			# literal não sobrevive à conversão para Array[ArrayMesh] dentro do
+			# ternário e o resultado saía VAZIO (medido nesta build: tamanho 0).
+			# Espécie sem LODs = MultiMesh com mesh=null: as rochas não apareciam
+			# no mundo e a instância morta rebentava a build web a quem lhe lesse
+			# a malha. Com o array tipado construído à parte fica correto.
+			var fallback: Array[ArrayMesh] = [m, m, m]
+			s.lods = fallback
+		else:
+			s.lods = blender_rocks
 		s.tint = Color(0.85, 0.85, 0.92)
 		s.scale_range = Vector2(0.8, 1.5)
 		s.biomes = PackedInt32Array([Terrain.B_ROCK, Terrain.B_MEADOW, Terrain.B_SAND, Terrain.B_MARSH])
@@ -267,6 +294,25 @@ func _build_rocks() -> void:
 		s.collider_scale = Vector3.ONE
 		s.materials_authored = not blender_rocks.is_empty()
 		rocks[s.id] = s
+	# Rocha dura: pedra consolidada, escura e mais alta. Cede a qualquer
+	# picareta mas devolve pouco; com a de pedra rende o dobro. É a peça que dá
+	# função à bancada no que toca a ferramentas.
+	var hd: ArrayMesh = (blender_rocks[1] if blender_rocks.size() > 1
+		else MeshKit.rock(rng, 0.62))
+	var hs := Species.new()
+	hs.id = "rock_hard"
+	hs.lods = [hd, hd, hd]
+	hs.tint = Color(0.62, 0.60, 0.66)
+	hs.scale_range = Vector2(0.75, 1.25)
+	hs.biomes = PackedInt32Array([Terrain.B_ROCK, Terrain.B_MEADOW])
+	hs.weight = 0.35
+	hs.harvest = "rock_hard"
+	hs.y_offset = -0.2
+	hs.height = 1.2
+	hs.collider_scale = Vector3.ONE
+	hs.materials_authored = not blender_rocks.is_empty()
+	rocks["rock_hard"] = hs
+
 	# pedregulho pequeno que se apanha à mão
 	var flint := MeshKit.rock(rng, 0.24)
 	var fs := Species.new()
@@ -323,13 +369,39 @@ func _build_plants() -> void:
 
 
 func _build_structures() -> void:
-	_add_struct("campfire", _merge([
-		MeshKit.blob(rng, 0.55, 1, 0.25, Vector3(1.3, 0.45, 1.3), Color(0.55, 0.53, 0.58)),
-		_offset(MeshKit.tapered(rng, 0.5, 0.09, 0.05, 5, 2, 0.2, false, Color(0.36, 0.24, 0.18)),
-			Vector3(0.05, 0.1, 0)),
-		_offset(MeshKit.tapered(rng, 0.45, 0.08, 0.04, 5, 2, -0.25, false, Color(0.42, 0.28, 0.2)),
-			Vector3(-0.08, 0.08, 0.05)),
-	]), Vector3(1.2, 0.8, 1.2), true, 9.0)
+	# Fogueira. Antes era um chumaço de pedra com dois pauzinhos — não lia como
+	# lareira e não dava vontade de acender. Agora tem as três coisas que fazem
+	# uma fogueira: um ANEL de pedras (o sítio onde se faz), um leito de CINZA
+	# (diz que ali já ardeu), e LENHA em estrela inclinada para dentro, que é a
+	# forma como se empilha madeira para arder bem. É o objeto central do
+	# primeiro dia; tem de se reconhecer de longe.
+	var fogo: Array = [MeshKit.blob(rng, 0.44, 1, 0.16, Vector3(1.25, 0.26, 1.25),
+		Color(0.21, 0.20, 0.20))]
+	for i in 9:
+		var a := TAU * float(i) / 9.0 + 0.15
+		var raio := 0.46 + (0.04 if i % 2 == 0 else 0.0)
+		# Pedra de granito, um pouco escurecida na cara interior (a que apanha
+		# com a cinza): pedras brancas de cal faziam a fogueira parecer um monte
+		# de neve.
+		var tom := Color(0.52, 0.51, 0.50).lerp(Color(0.66, 0.64, 0.61), float(i % 3) / 2.0)
+		fogo.append(_offset(MeshKit.rock(rng, 0.145 + 0.03 * float(i % 3), tom),
+			Vector3(cos(a) * raio, 0.045, sin(a) * raio)))
+	# Lenha RADIAL: quatro achas deitadas com as pontas a encontrarem-se no
+	# centro, sobre o leito de cinza. É assim que se monta uma fogueira de
+	# verdade — e lê-se logo como fogueira, mesmo sem chama.
+	for i in 4:
+		var b := TAU * float(i) / 4.0 + 0.35
+		var comp := 0.62 + 0.10 * float(i % 2)
+		var lenha: ArrayMesh = MeshKit.tapered(rng, comp, 0.062, 0.048, 5, 2, 0.0, false,
+			Color(0.33, 0.21, 0.14))
+		var dir := Vector3(-cos(b) * 0.86, 0.51, -sin(b) * 0.86).normalized()
+		fogo.append(_placed_rot(lenha, Vector3(cos(b) * 0.34, 0.075, sin(b) * 0.34), dir))
+	# Tições queimados no meio (a parte que ficou preta do fogo anterior).
+	for i in 3:
+		var c := TAU * float(i) / 3.0 + 1.1
+		fogo.append(_offset(MeshKit.tapered(rng, 0.30, 0.032, 0.026, 4, 1, 0.55, false,
+			Color(0.16, 0.14, 0.13)), Vector3(cos(c) * 0.09, 0.035, sin(c) * 0.09)))
+	_add_struct("campfire", _merge(fogo), Vector3(1.3, 0.9, 1.3), true, 9.0)
 
 	_add_struct("wall", MeshKit.box(Vector3(3.0, 2.4, 0.28), Color(0.62, 0.44, 0.30)),
 		Vector3(3.0, 2.4, 0.28), true, 0.0)
@@ -341,6 +413,51 @@ func _build_structures() -> void:
 		MeshKit.box(Vector3(1.1, 0.22, 2.1), Color(0.5, 0.36, 0.25)),
 		_offset(MeshKit.box(Vector3(1.0, 0.26, 1.9), Color(0.35, 0.62, 0.35)), Vector3(0, 0.22, 0)),
 	]), Vector3(1.1, 0.5, 2.1), true, 0.0)
+	# Bancada: a mesa onde se fazem ferramentas a sério. Tem de ser visível de
+	# longe (é um marco de progressão) — tampo, quatro pernas e ferramentas em
+	# cima, para se perceber o que é antes de chegar perto.
+	_add_struct("workbench", _merge([
+		_offset(MeshKit.box(Vector3(1.5, 0.12, 0.9), Color(0.62, 0.45, 0.30)),
+			Vector3(0, 0.92, 0)),
+		_offset(MeshKit.box(Vector3(0.13, 0.9, 0.13), Color(0.48, 0.34, 0.22)),
+			Vector3(-0.6, 0.45, -0.32)),
+		_offset(MeshKit.box(Vector3(0.13, 0.9, 0.13), Color(0.48, 0.34, 0.22)),
+			Vector3(0.6, 0.45, -0.32)),
+		_offset(MeshKit.box(Vector3(0.13, 0.9, 0.13), Color(0.48, 0.34, 0.22)),
+			Vector3(-0.6, 0.45, 0.32)),
+		_offset(MeshKit.box(Vector3(0.13, 0.9, 0.13), Color(0.48, 0.34, 0.22)),
+			Vector3(0.6, 0.45, 0.32)),
+		# uma serra/lâmina e um cabo em cima
+		_offset(MeshKit.box(Vector3(0.52, 0.05, 0.11), Color(0.74, 0.74, 0.78)),
+			Vector3(-0.28, 1.03, 0.12)),
+		_offset(MeshKit.box(Vector3(0.09, 0.09, 0.36), Color(0.4, 0.28, 0.18)),
+			Vector3(0.44, 1.02, -0.1)),
+	]), Vector3(1.6, 1.06, 1.0), true, 0.0)
+
+	# Cofre: caixa de madeira com tampa e ferragens — lê-se como "guardar".
+	_add_struct("chest", _merge([
+		MeshKit.box(Vector3(0.94, 0.62, 0.66), Color(0.60, 0.42, 0.26)),
+		_offset(MeshKit.box(Vector3(0.98, 0.16, 0.70), Color(0.48, 0.33, 0.20)),
+			Vector3(0, 0.36, 0)),
+		_offset(MeshKit.box(Vector3(0.16, 0.20, 0.06), Color(0.78, 0.72, 0.42)),
+			Vector3(0, 0.22, 0.34)),
+	]), Vector3(1.0, 0.86, 0.72), true, 0.0)
+
+	# Cadeira: assento, costas e quatro pernas.
+	_add_struct("chair", _merge([
+		MeshKit.box(Vector3(0.52, 0.09, 0.50), Color(0.62, 0.45, 0.30)),
+		_offset(MeshKit.box(Vector3(0.52, 0.62, 0.09), Color(0.60, 0.43, 0.28)),
+			Vector3(0, 0.36, -0.21)),
+		_offset(MeshKit.box(Vector3(0.09, 0.46, 0.09), Color(0.48, 0.34, 0.22)),
+			Vector3(-0.21, -0.24, -0.2)),
+		_offset(MeshKit.box(Vector3(0.09, 0.46, 0.09), Color(0.48, 0.34, 0.22)),
+			Vector3(0.21, -0.24, -0.2)),
+		_offset(MeshKit.box(Vector3(0.09, 0.46, 0.09), Color(0.48, 0.34, 0.22)),
+			Vector3(-0.21, -0.24, 0.2)),
+		_offset(MeshKit.box(Vector3(0.09, 0.46, 0.09), Color(0.48, 0.34, 0.22)),
+			Vector3(0.21, -0.24, 0.2)),
+	]), Vector3(0.6, 1.0, 0.56), false, 0.0)
+
 	_add_struct("torch", _merge([
 		MeshKit.tapered(rng, 0.9, 0.06, 0.045, 5, 2, 0.0, false, Color(0.4, 0.28, 0.18)),
 		_offset(MeshKit.blob(rng, 0.14, 1, 0.2, Vector3.ONE, Color(1.0, 0.7, 0.3)), Vector3(0, 0.95, 0)),
@@ -369,6 +486,21 @@ static func _offset(mesh: ArrayMesh, off: Vector3) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.append_from(mesh, 0, Transform3D(Basis.IDENTITY, off))
+	return st.commit()
+
+
+## Como `_offset`, mas com rotação: uma lenha deitada e inclinada para dentro
+## não se consegue pôr com uma translação só.
+static func _placed_rot(mesh: ArrayMesh, off: Vector3, dir: Vector3) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var up := dir.normalized()
+	var right := Vector3(0, 1, 0).cross(up)
+	if right.length_squared() < 0.0001:
+		right = Vector3.RIGHT
+	right = right.normalized()
+	var fwd := up.cross(right).normalized()
+	st.append_from(mesh, 0, Transform3D(Basis(right, up, fwd), off))
 	return st.commit()
 
 

@@ -15,6 +15,7 @@ var survival: Survival
 var inv: Inventory
 var interaction: Interaction
 var night: NightDirector
+var wildlife: Wildlife
 var creature_root: Node3D
 var hud: Hud
 var menus: Menus
@@ -27,6 +28,10 @@ var _last_held_item := "__unset__"
 
 func _ready() -> void:
 	randomize()
+	# A sonda `shot` lê a geometria das instâncias: o espelho tem de estar ligado
+	# ANTES de o mundo existir (ver scripts/core/shot_meta.gd).
+	var probe_args := OS.get_cmdline_args() + OS.get_cmdline_user_args()
+	ShotMeta.mirror = probe_args.has("shot")
 	_build_world()
 	_build_player()
 	_build_systems()
@@ -172,15 +177,27 @@ func _pick_spawn() -> Vector3:
 func _build_player() -> void:
 	player = _sys("res://scenes/player.tscn", func(): return Player.new()) as Player
 	world.add_child(player)
-	player.global_position = _pick_spawn() + Vector3(0, 1.0, 0)
+	# Grupos: há sistemas que precisam do jogador/supervivência sem terem uma
+	# referência direta (ex.: a árvore que cai e magoa quem está debaixo dela).
+	if not player.is_in_group("player"):
+		player.add_to_group("player")
+	var spawn := _pick_spawn()
+	# Os chunks do mundo só nascem depois disto (em `world._update_chunks`), por
+	# isso a vegetação já sabe que ali não se planta nada.
+	world.set_spawn_clear(spawn)
+	player.global_position = spawn + Vector3(0, 1.0, 0)
 
 	survival = Survival.new()
 	player.add_child(survival)
+	if not survival.is_in_group("survival"):
+		survival.add_to_group("survival")
 
 
 func _build_systems() -> void:
 	inv = Inventory.new()
 	add_child(inv)
+
+	player.survival = survival
 
 	interaction = Interaction.new()
 	interaction.player = player
@@ -203,6 +220,14 @@ func _build_systems() -> void:
 	night.survival = survival
 	night.root = creature_root
 	add_child(night)
+
+	# caça diurna: os animais partilham o nó das criaturas (é tudo bicho em cena)
+	wildlife = Wildlife.new()
+	wildlife.player = player
+	wildlife.world = world
+	wildlife.inv = inv
+	wildlife.root = creature_root
+	add_child(wildlife)
 
 
 func _build_ambient() -> void:
@@ -231,6 +256,9 @@ func _build_ui() -> void:
 	menus.survival = survival
 	menus.player = player
 	add_child(menus)
+	# a interação abre a interface DA estação apontada (bancada, fogueira)
+	if interaction != null:
+		interaction.menus = menus
 
 	prologo = Prologo.new()
 	add_child(prologo)

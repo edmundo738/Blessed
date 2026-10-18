@@ -46,6 +46,8 @@ var _carve := PackedFloat32Array()
 var _water_level := PackedFloat32Array()
 var _water_kind := PackedInt32Array()  # 0 seco, 1 oceano, 2 rio, 3 lago
 var _water_dist := PackedFloat32Array()
+var _fresh_dist := PackedFloat32Array()
+var _filled := PackedFloat32Array()
 var _dig_delta := PackedFloat32Array()
 var _flow_dir := PackedInt32Array()
 var stations: Array = []
@@ -120,6 +122,10 @@ func _relief(x: float, z: float) -> float:
 	var mountain := 34.0 * exp(-(dm * dm) / (2.0 * 62.0 * 62.0))
 	var dl := Vector2(x - 85.0, z - 78.0).length()
 	var lake_dep := 5.5 * exp(-(dl * dl) / (2.0 * 30.0 * 30.0))
+	# Planalto da bacia: sem ele o centro fica abaixo do mar e vira laguna.
+	var lake_uplift := 6.0 * exp(-(dl * dl) / (2.0 * 45.0 * 45.0))
+	# Bordo da bacia: sem ele o bowl abre na encosta e nunca fecha lago.
+	var lake_rim := 3.2 * exp(-pow(dl - 31.0, 2.0) / (2.0 * 9.0 * 9.0))
 	# Vale principal: da montanha para a costa sul. E ele que torna a bacia
 	# convergente — sem vale, uma ilha radial so tem drenagem radial miuda.
 	var valley_x := -80.0 + (z + 70.0) * 0.42 + sin(z * 0.018) * 14.0
@@ -128,7 +134,14 @@ func _relief(x: float, z: float) -> float:
 	var valley := 4.2 * exp(-(valley_d * valley_d) / (2.0 * 26.0 * 26.0)) * sin(PI * clampf(valley_t, 0.02, 0.98))
 	var hills := _n_hills.get_noise_2d(x, z) * 3.2 * island_t
 	var detail := _n_detail.get_noise_2d(x, z) * 0.6
-	return land + mountain + hills + detail - lake_dep - valley
+	var h := land + mountain + hills + detail - lake_dep + lake_rim + lake_uplift - valley
+	# Cratera do lago: perfil radial que domina o ruido local. Sem isto as
+	# colinas abrem uma brecha no bordo e a bacia drena como ribeiro.
+	if dl < 48.0:
+		var crater := 6.8 + dl * dl * 0.0062
+		var blend := clampf((52.0 - dl) / 8.0, 0.0, 1.0)
+		h = lerpf(h, crater, blend * blend)
+	return h
 
 
 func _rebuild() -> void:
@@ -141,6 +154,8 @@ func _rebuild() -> void:
 	_water_level.resize(N * N)
 	_water_kind.resize(N * N)
 	_water_dist.resize(N * N)
+	_fresh_dist.resize(N * N)
+	_filled.resize(N * N)
 	_flow_dir.resize(N * N)
 	var filled := PackedFloat32Array()
 	filled.resize(N * N)
@@ -160,14 +175,26 @@ func _rebuild() -> void:
 			var alt := filled[k]
 			_temp[k] = clampf(0.80 - alt * 0.011 + _n_temp.get_noise_2d(p.x, p.y) * 0.10, 0.0, 1.0)
 			_rain[k] = clampf(0.52 + _n_moist.get_noise_2d(p.x, p.y) * 0.34
-					+ (-p.x / SIZE) * 0.30 + alt * 0.004, 0.05, 1.0)
-	# depression fill: depressoes interiores sobem ao vizinho mais baixo
-	for _pass in 24:
-		var changed := false
+					+ (-p.x / SIZE) * 0.55 + alt * 0.004, 0.05, 1.0)
+	# Depression fill por priority-flood (relaxacao a partir das bordas):
+	# o interior comeca em +infinito e baixa para max(relevo, melhor saida).
+	# Levantar so minimos locais um passo nunca enche uma bacia inteira.
+	for j in N:
+		for i in N:
+			var k := idx(i, j)
+			if i == 0 or j == 0 or i == N - 1 or j == N - 1 or filled[k] <= SEA:
+				pass
+			else:
+				filled[k] = 1e6
+	var _pf_pass := 0
+	var _pf_changed := true
+	while _pf_changed and _pf_pass < 400:
+		_pf_changed = false
+		_pf_pass += 1
 		for j in range(1, N - 1):
 			for i in range(1, N - 1):
 				var k := idx(i, j)
-				if filled[k] <= SEA:
+				if filled[k] <= SEA and (_base[k] - _dig_delta[k]) <= SEA:
 					continue
 				var mn := 1e9
 				for dj in [-1, 0, 1]:
@@ -175,11 +202,12 @@ func _rebuild() -> void:
 						if di == 0 and dj == 0:
 							continue
 						mn = minf(mn, filled[idx(i + di, j + dj)])
-				if filled[k] <= mn:
-					filled[k] = mn + 0.02
-					changed = true
-		if not changed:
-			break
+				var target: float = maxf(_base[k] - _dig_delta[k], mn)
+				if target < filled[k] - 0.001:
+					filled[k] = target
+					_pf_changed = true
+	for k in N * N:
+		_filled[k] = filled[k]
 	# D8: cada celula drena para o vizinho preenchido mais baixo
 	var order: Array[int] = []
 	order.resize(N * N)
@@ -195,8 +223,8 @@ func _rebuild() -> void:
 				for di in [-1, 0, 1]:
 					if di == 0 and dj == 0:
 						continue
-					var ni := i + di
-					var nj := j + dj
+					var ni: int = i + di
+					var nj: int = j + dj
 					if ni < 0 or nj < 0 or ni >= N or nj >= N:
 						continue
 					var nk := idx(ni, nj)
@@ -220,15 +248,17 @@ func _rebuild() -> void:
 			elif _accum[k] >= STREAM_MIN_ACCUM:
 				_carve[k] = clampf(0.45 + sqrt(_accum[k]) * 0.15, 0.5, 2.1)
 				_water_kind[k] = 2
-			elif _flow_dir[k] < 0:
+			elif filled[k] - h > 0.5:
+				# depressao preenchida = lago: o nivel e o do extravasamento
 				_water_kind[k] = 3
-				_water_level[k] = filled[k] + 0.30
+				_water_level[k] = filled[k]
 	for k in N * N:
 		_final[k] = (_base[k] - _dig_delta[k]) - _carve[k]
 		if _water_kind[k] == 2:
 			_water_level[k] = _final[k] + _carve[k] * 0.55
 	# distancia a agua (BFS 8-vizinhos) e humidade do solo
 	_bfs_water_distance()
+	_bfs_fresh_distance()
 	for k in N * N:
 		var near := clampf(1.0 - _water_dist[k] / 45.0, 0.0, 1.0)
 		_moist[k] = clampf(_rain[k] * 0.62 + near * 0.48, 0.0, 1.0)
@@ -252,14 +282,43 @@ func _bfs_water_distance() -> void:
 			for di in [-1, 0, 1]:
 				if di == 0 and dj == 0:
 					continue
-				var ni := i + di
-				var nj := j + dj
+				var ni: int = i + di
+				var nj: int = j + dj
 				if ni < 0 or nj < 0 or ni >= N or nj >= N:
 					continue
 				var nk := idx(ni, nj)
 				var nd := _water_dist[k] + (CELL * 1.4142 if di != 0 and dj != 0 else CELL)
 				if nd < _water_dist[nk]:
 					_water_dist[nk] = nd
+					queue.append(nk)
+
+
+func _bfs_fresh_distance() -> void:
+	var queue: Array[int] = []
+	for k in N * N:
+		if _water_kind[k] == 2 or _water_kind[k] == 3:
+			_fresh_dist[k] = 0.0
+			queue.append(k)
+		else:
+			_fresh_dist[k] = 1e9
+	var head := 0
+	while head < queue.size():
+		var k: int = queue[head]
+		head += 1
+		var i := k % N
+		var j := k / N
+		for dj in [-1, 0, 1]:
+			for di in [-1, 0, 1]:
+				if di == 0 and dj == 0:
+					continue
+				var ni: int = i + di
+				var nj: int = j + dj
+				if ni < 0 or nj < 0 or ni >= N or nj >= N:
+					continue
+				var nk := idx(ni, nj)
+				var nd := _fresh_dist[k] + (CELL * 1.4142 if di != 0 and dj != 0 else CELL)
+				if nd < _fresh_dist[nk]:
+					_fresh_dist[nk] = nd
 					queue.append(nk)
 
 
@@ -298,7 +357,7 @@ func biome_at(x: float, z: float) -> int:
 		return B_MARSH
 	if Vector2(x - 55.0, z + 55.0).length() < 42.0 and _moist[k] > 0.45:
 		return B_GROVE
-	if _rain[k] < 0.36 and _moist[k] < 0.38:
+	if _rain[k] < 0.40 and _water_dist[k] > 18.0:
 		return B_DRY
 	var patch := _n_patch_a.get_noise_2d(x, z)
 	if patch > 0.08 and _moist[k] > 0.42:
@@ -331,7 +390,7 @@ func species_density(x: float, z: float, species: String) -> float:
 		"pine":
 			return clampf(0.85 * pb * smoothstep(8.0, 22.0, h), 0.0, 1.0)
 		"willow":
-			return clampf(0.90 * exp(-wd / 16.0) * smoothstep(0.45, 0.70, moist), 0.0, 1.0)
+			return clampf(0.90 * exp(-_fresh_dist[k] / 16.0) * smoothstep(0.45, 0.70, moist), 0.0, 1.0)
 	return 0.0
 
 
@@ -360,6 +419,8 @@ func sample(x: float, z: float) -> Dictionary:
 		"water_level": wl,
 		"water_depth": (wl - h) if wl > DRY * 0.5 else 0.0,
 		"water_dist": _water_dist[k],
+		"fresh_dist": _fresh_dist[k],
+		"depression": _filled[k] - (_base[k] - _dig_delta[k]),
 		"biome": biome_at(x, z),
 	}
 
@@ -371,8 +432,8 @@ func dig(x: float, z: float, radius_m: float, depth_m: float) -> float:
 	var removed := 0.0
 	for dj in range(-r_cells, r_cells + 1):
 		for di in range(-r_cells, r_cells + 1):
-			var ni := c.x + di
-			var nj := c.y + dj
+			var ni: int = c.x + di
+			var nj: int = c.y + dj
 			if ni < 0 or nj < 0 or ni >= N or nj >= N:
 				continue
 			var p := grid_pos(ni, nj)

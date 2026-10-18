@@ -65,6 +65,12 @@ DEFAULT_EXCLUDE = (
     "export_presets.cfg",
     "export_credentials.cfg",
     "*.blend1",
+    # Fontes do artista: vivem no repositório para se poder editar, mas o jogo
+    # nunca as lê (usa content/models/runtime/**). Sem isto, o .pck levava mais
+    # 53 MB — o dobro do necessário — e o build web pagava-o no download.
+    "content/models/source",
+    "*.blend",
+    "*.psd",
     ".*.swp",
     ".DS_Store",
     "Thumbs.db",
@@ -89,7 +95,9 @@ def collect(root: str, excludes: tuple[str, ...]) -> list[tuple[str, str]]:
         keep = []
         for d in sorted(dirnames):
             rel_dir = os.path.relpath(os.path.join(dirpath, d), root).replace(os.sep, "/")
-            if not _excluded(d + "/", excludes) or any(
+            # rel_dir (com o caminho, não só o nome) para que um padrão como
+            # "content/models/source" possa excluir a pasta toda.
+            if not _excluded(rel_dir + "/", excludes) or any(
                 i.startswith(rel_dir + "/") for i in ALWAYS_INCLUDE
             ):
                 keep.append(d)
@@ -110,6 +118,15 @@ def collect(root: str, excludes: tuple[str, ...]) -> list[tuple[str, str]]:
 def _excluded(rel: str, excludes: tuple[str, ...]) -> bool:
     parts = rel.split("/")
     for pat in excludes:
+        # Padrão com "/" é um CAMINHO: casa com o próprio ou com o que está
+        # dentro dele ("content/models/source" exclui a pasta toda).
+        if "/" in pat:
+            base = pat.rstrip("/")
+            if rel.rstrip("/") == base or rel.startswith(base + "/") \
+                    or fnmatch.fnmatch(rel, pat) \
+                    or fnmatch.fnmatch(rel, base + "/*"):
+                return True
+            continue
         for part in parts:
             if fnmatch.fnmatch(part, pat):
                 return True

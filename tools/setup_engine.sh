@@ -2,7 +2,7 @@
 # Instala o template WEB do Godot 4.7.2 (os binários oficiais são grandes;
 # este pacote npm traz exatamente os 4 ficheiros de que precisamos).
 set -euo pipefail
-VERSION="${GODOT_WEB_VERSION:-4.7.2-643}"
+VERSION="${GODOT_WEB_VERSION:-4.7.2-664}"
 DIR="${BLESSED_ENGINE:-$HOME/.cache/blessed/engine}"
 mkdir -p "$DIR"
 TMP="$(mktemp -d)"

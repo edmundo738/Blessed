@@ -48,8 +48,14 @@ func _ready() -> void:
 	_check(river_cells > 20, "rede de rios existe (%d celulas)" % river_cells)
 	_check(downhill_ok, "fluxo D8 aponta para jusante")
 
-	# lago na bacia SE
-	_check(int(lab.sample(85.0, 78.0)["water_kind"]) == 3, "lago nasce na bacia")
+	# lago na bacia SE (procura na bacia, nao num pixel adivinhado)
+	var lake_cells := 0
+	for j in LabWorld.N:
+		for i in LabWorld.N:
+			var p := lab.grid_pos(i, j)
+			if p.x > 40.0 and p.y > 40.0 and int(lab.sample(p.x, p.y)["water_kind"]) == 3:
+				lake_cells += 1
+	_check(lake_cells > 3, "lago nasce na bacia (%d celulas)" % lake_cells)
 
 	# escavar: buraco fica, e abaixo da agua enche (efeito, nao texto)
 	var before := lab.height(30.0, 30.0)
@@ -80,9 +86,24 @@ func _ready() -> void:
 		_check(false, "amostras floresta/seco insuficientes f=%d s=%d" % [nf, nd])
 
 	# salgueiro cola-se a agua; sakura cola-se ao bosque
-	_check(lab.species_density(-40.0, -30.0, "willow")
-			>= lab.species_density(0.0, 100.0, "willow"),
-			"salgueiro prefere a margem")
+	var willow_near := 0.0
+	var willow_far := 0.0
+	var nn := 0
+	var fn := 0
+	for j in range(2, LabWorld.N - 2, 2):
+		for i in range(2, LabWorld.N - 2, 2):
+			var p := lab.grid_pos(i, j)
+			var sm := lab.sample(p.x, p.y)
+			if int(sm["water_kind"]) != 0:
+				continue
+			if float(sm["fresh_dist"]) < 12.0:
+				willow_near += lab.species_density(p.x, p.y, "willow")
+				nn += 1
+			elif float(sm["fresh_dist"]) > 60.0:
+				willow_far += lab.species_density(p.x, p.y, "willow")
+				fn += 1
+	_check(nn > 0 and fn > 0 and willow_near / nn > willow_far / fn,
+			"salgueiro prefere a margem de agua doce")
 	_check(lab.species_density(55.0, -55.0, "sakura") > 0.3,
 			"sakura concentra-se no bosque")
 
