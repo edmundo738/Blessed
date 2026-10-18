@@ -58,6 +58,11 @@ def main():
 	import glob
 	eng = engine_dir()
 	any_wasm = False
+	# `web/index.html` importa './godot.js' (nome fixo). O pacote npm do motor
+	# publica o template com o nome todo (`godot.web.template_release.….js`), por
+	# isso copia-se também para `godot.js` — sem isto a página arrancava e ficava
+	# presa em "a descarregar o mundo…" com um 404 no import.
+	template_js = ""
 	for p in sorted(glob.glob(os.path.join(eng, "*"))):
 		base = os.path.basename(p)
 		if base.endswith(".wasm"):
@@ -65,12 +70,19 @@ def main():
 			any_wasm = True
 		elif base.endswith(".js") and base != "godot.js":
 			shutil.copyfile(p, os.path.join(out, base))
+			if "worklet" not in base and not base.endswith(".symbols.js") \
+					and "godot" in base and template_js == "":
+				template_js = base
 		elif base == "godot.js":
 			shutil.copyfile(p, os.path.join(out, "godot.js"))
+			template_js = "godot.js"
 		else:
 			print("ignorado do motor: %s" % base)
 	if not any_wasm:
 		raise SystemExit("não há .wasm em %s — corre tools/setup_engine.sh" % eng)
+	if template_js != "" and template_js != "godot.js":
+		shutil.copyfile(os.path.join(out, template_js), os.path.join(out, "godot.js"))
+		print("motor também copiado para godot.js (o index.html importa esse nome)")
 	shutil.copyfile(os.path.join(ROOT, "web", "index.html"), os.path.join(out, "index.html"))
 
 	size = os.path.getsize(os.path.join(out, "blessed.pck"))

@@ -15,6 +15,15 @@ if ! command -v "$GODOT" >/dev/null 2>&1; then
 fi
 
 python3 tools/gen_class_cache.py . >/dev/null
+
+# Num clone limpo (ou num contentor) não existe `.godot/imported/`: sem essa
+# cache o motor não abre `.ctex`/`.scn` e o self-test falha em quase tudo por
+# uma razão que não é código. Importar primeiro torna o resultado fiável.
+if [ ! -d .godot/imported ]; then
+  echo "→ importar recursos (primeira corrida: não há cache do editor)"
+  "$GODOT" --headless --path . --import
+fi
+
 echo "→ self-test"
 "$GODOT" --headless --path . --quit-after 1200 -- selftest
 

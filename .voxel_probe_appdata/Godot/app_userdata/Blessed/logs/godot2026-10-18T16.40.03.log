@@ -1,0 +1,311 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+ERROR: Failed to read the root certificate store.
+   at: get_system_ca_certificates (platform/windows/os_windows.cpp:2582)
+[Mods] 1 mod(s): Exemplo — Ruínas Antigas | items=2 recipes=1 props=0
+[Db] fogo: 5.0 h por carga, +1.4 h por madeira
+[Db] data-driven: biomas=12 | terrain=19 chaves | quality=sim | espécies=15 | receitas=23
+[Db] sono: cama=1.00 chão=0.30 | acordar às 6.8h
+WORLD WFC habitats=24x24 solved attempts=1 contradictions=0
+WORLD TERRAIN backend=Smooth SDF / Transvoxel | LOD=4 | caves=karst prototype
+BLESSED pronto. seed=20260109
+BUILD dev
+RENDERER forward_plus | OS Windows
+── SELF-TEST BLESSED ─────────────────────────────
+  OK   mundo existe
+  OK   backend voxel suave acompanha a capacidade da build  (voxel=true esperado=true)
+  OK   WFC produz uma gramática de habitats válida e mantém o prado de início  (solved=true tentativas=1)
+  OK   céu nativo com ciclo dia/noite
+  OK   três panoramas estilizados carregados
+  OK   modo de diagnóstico consegue ocultar o céu
+  OK   modo de diagnóstico repõe o céu
+  OK   poeira ambiental usa sprite Kenney
+  OK   pirilampos usam sprite Kenney
+  OK   impacto combina lascas 3D com brilho 2D reutilizável  (GPU, draw_passes=2)
+  OK   Compatibility tem emissor CPU com os mesmos dois passes
+  OK   terreno tem altura  (h(0,0)=5.15)
+  OK   aldeia existe
+  OK   jogador começa em 1.ª pessoa
+  OK   avatar do jogador é sprite billboard
+  OK   substituição Camp to Me desligada
+  OK   mãos da 1.ª pessoa têm modelo pronto
+  OK   item inicial tem malha para a 1.ª pessoa
+  OK   machado importado fica visível na mão
+  OK   picareta importada fica visível na mão
+  OK   HUD mostra ícones nos espaços rápidos
+  OK   temas diurno e noturno são loops
+  OK   fase noturna seleciona o tema certo
+WARNING: A aguardar a colisão voxel da zona inicial antes de ativar o jogador
+   at: push_warning (core/variant/variant_utility.cpp:1033)
+   GDScript backtrace (most recent call first):
+       [0] _wait_for_spawn_collision (res://scripts/main.gd:223)
+WORLD spawn grounded on voxel collision
+  OK   chunks construídos  (n=46)
+  OK   nós colhíveis espalhados  (n=1854)
+  OK   bagas removidas do ciclo de jogo
+  OK   instâncias de vegetação  (n=13935)
+  OK   relva decorativa removida do cenário  (nós de relva=0)
+  OK   GLB Blender tree_oak tem mesh e escala válida  (10331 vértices, 2 superfícies, Y 6.80 m)
+  OK   GLB Blender tree_birch tem mesh e escala válida  (8959 vértices, 2 superfícies, Y 7.10 m)
+  OK   GLB Blender tree_pine tem mesh e escala válida  (2504 vértices, 2 superfícies, Y 8.40 m)
+  OK   GLB Blender tree_sakura tem mesh e escala válida  (15511 vértices, 2 superfícies, Y 5.80 m)
+  OK   GLB Blender tree_willow tem mesh e escala válida  (6086 vértices, 2 superfícies, Y 7.40 m)
+  OK   GLB Blender plant_bush tem mesh e escala válida  (2618 vértices, 2 superfícies, Y 0.95 m)
+  OK   GLB Blender plant_berry_bush tem mesh e escala válida  (4054 vértices, 3 superfícies, Y 1.05 m)
+  OK   GLB Blender plant_mushroom tem mesh e escala válida  (555 vértices, 1 superfícies, Y 0.50 m)
+  OK   GLB Blender rock_cluster tem mesh e escala válida  (249 vértices, 1 superfícies, Y 1.23 m)
+  OK   GLB Blender grass_clump tem mesh e escala válida  (153 vértices, 1 superfícies, Y 0.68 m)
+  OK   GLB Blender fern_clump tem mesh e escala válida  (243 vértices, 1 superfícies, Y 0.40 m)
+  OK   GLB Blender flower_clump tem mesh e escala válida  (590 vértices, 2 superfícies, Y 0.72 m)
+  OK   GLB Blender reed_clump tem mesh e escala válida  (666 vértices, 1 superfícies, Y 1.12 m)
+  OK   GLB Blender seaweed_cluster tem mesh e escala válida  (340 vértices, 5 superfícies, Y 1.34 m)
+  OK   GLB Blender clover_clump tem mesh e escala válida  (267 vértices, 1 superfícies, Y 0.40 m)
+  OK   GLB Blender pickup_berry tem mesh e escala válida  (1220 vértices, 3 superfícies, Y 0.44 m)
+  OK   GLB Blender pickup_leaf tem mesh e escala válida  (170 vértices, 2 superfícies, Y 0.42 m)
+  OK   GLB Blender pickup_log tem mesh e escala válida  (306 vértices, 3 superfícies, Y 0.88 m)
+  OK   GLB Blender tool_axe tem mesh e escala válida  (2878 vértices, 5 superfícies, Y 0.82 m)
+  OK   GLB Blender tool_pickaxe tem mesh e escala válida  (2764 vértices, 5 superfícies, Y 0.88 m)
+  OK   LOD Blender tree_oak importam e reduzem geometria  (base/1/2: 10331/7343/3520 vértices)
+  OK   LOD Blender tree_birch importam e reduzem geometria  (base/1/2: 8959/6497/3154 vértices)
+  OK   LOD Blender tree_pine importam e reduzem geometria  (base/1/2: 2504/1991/915 vértices)
+  OK   LOD Blender tree_sakura importam e reduzem geometria  (base/1/2: 15511/11276/5457 vértices)
+  OK   LOD Blender tree_willow importam e reduzem geometria  (base/1/2: 6086/4216/1924 vértices)
+  OK   LOD Blender rock_cluster importam e reduzem geometria  (base/1/2: 249/164/86 vértices)
+  OK   LOD Blender plant_bush importam e reduzem geometria  (base/1/2: 2618/1647/789 vértices)
+  OK   LOD Blender plant_berry_bush importam e reduzem geometria  (base/1/2: 4054/2130/1021 vértices)
+  OK   LOD Blender plant_mushroom importam e reduzem geometria  (base/1/2: 555/351/192 vértices)
+  OK   chunks usam árvores Blender com vento nas folhas  (71 instâncias; 71 com shader de folhas)
+  OK   mais de 3 biomas  (n=10)
+  OK   Db: biomas carregados  (n=12)
+  OK   Db: ordem dos biomas bate certo  (forest=2)
+  OK   Db: cor do bioma vem do JSON  (g=0.38)
+  OK   Db: terrain peak_height  (=235)
+  OK   Db: quality preset 2
+  OK   Db: species oak
+  OK   Db→species: densidade da floresta  (=2.60)
+  OK   Game.hour existe
+  OK   Game.settings tem quality
+  OK   inventário soma  (wood=20)
+  OK   inventário remove
+  OK   inventário recusa sem stock
+  OK   inventário tem limite  (sobrou=4580)
+  OK   craft de tocha  (tochas=2)
+  OK   craft sem materiais é recusado
+  OK   craft com mochila cheia e recusado (B-02)  (devia ter sido recusado)
+  OK   recurso colhido fica indisponivel
+  OK   estado de colheita guarda-se
+  OK   madeira volta apos ~14 dias  (devia regenerar)
+  OK   fogueira foi para a mochila
+  OK   item na mão é colocável  (campfire)
+  OK   modo construir ativo
+  OK   colocar estrutura  (1 -> 2)
+  OK   colocar sem material é recusado  (reason=denied)
+  OK   fogueira acesa dá luz
+  OK   estação de bancada disponível
+  OK   árvore exige impactos e perde resistência por golpe
+  OK   árvore cai e fica como obstáculo colhível  (troncos restantes=2)
+  OK   madeira só sai do tronco quando o jogador a retira  (wood pickup=0; mochila=0)
+  OK   F retira um toro e cria pickup com física
+  OK   árvore caída usa material sólido de tronco  (material=():<ShaderMaterial#-9223371912636266206>)
+  OK   nó colhido fica marcado
+  OK   colisão da árvore em pé é removida ao cair
+  OK   árvore abatida entra no estado de respawn
+  OK   rocha colhida deixa de bloquear o jogador
+  OK   jogo novo começa sem objetivo imposto
+  OK   comer repõe fome  (hunger=45.0)
+  OK   beber repõe sede  (thirst=55.0)
+  OK   dano baixa vida  (health=70.0)
+  OK   fome baixa abranda
+  OK   noite detetada
+  OK   luz do dia a zero à noite
+  OK   a noite traz criaturas  (n=1)
+  OK   criatura noturna é sprite billboard
+  OK   dia detetado  (daylight=1.00)
+  OK   ruínas sem habitantes humanos (por design)
+  OK   PT e EN diferentes  (Cortar / Chop)
+  OK   formatação funciona  (Dia 3)
+  OK   comando inexistente é recusado
+  OK   guardar
+  OK   save tem o inventário  (stone=7)
+WORLD WFC habitats=24x24 solved attempts=1 contradictions=0
+WORLD TERRAIN backend=Smooth SDF / Transvoxel | LOD=4 | caves=karst prototype
+  OK   carregar
+  OK   load repõe inventário  (stone=7)
+  OK   load repõe a hora  (hour=9.50)
+  OK   load restaura o tronco abatido e colhível  (troncos=1)
+  OK   Transvoxel é dono do chão sem malha de altura duplicada  (heightfields=0)
+  OK   água e passe isolado das nuvens controlam a transparência
+  OK   água é opaca e de face dupla (sem blend que lave a cor)
+  OK   faces exteriores visíveis (toon_foliage.gdshader)
+  OK   água sem grelha de bandas (sem floor no fragment)
+  OK   água não depende da textura de profundidade
+  OK   mapa de entrada completo
+  OK   andar tem W e seta
+  OK   usar é o rato esquerdo
+  OK   traço curious vê mais longe  (5.67 vs 4.20 m)
+  OK   traço hands trabalha mais depressa  (x1.45 vs x1.00)
+  OK   traço brave sente menos medo  (0.300 vs 0.500)
+  OK   nenhuma malha fica sem material  (0 sem material () de 0)
+  OK   vista de depuração existe
+  OK   F9 troca para materiais básicos  (o terreno tinha material do jogo: false)
+  OK   F9 devolve os materiais do jogo
+  OK   F1 constrói a cena de diagnóstico  (106 objectos)
+  OK   menu da mochila abre com slots e ícones
+  OK   bancada tem menu próprio
+  OK   apontar ao tronco apanha a árvore  (t=2.78)
+  OK   apontar à copa também apanha a mesma árvore  (t=2.24)
+  OK   apontar para o lado não apanha a árvore  (t=inf)
+  OK   fora de alcance não há alvo
+  OK   a pedra fica no alvo a olhar de perto
+  OK   pedra sem picareta não perde vida nenhuma  (hp=5.0)
+  OK   o HUD diz que falta a picareta  (Sem {0}, isto não cede.)
+  OK   picareta equipada na barra
+  OK   com picareta a pedra perde vida por golpe  (hp 5.0 -> 2.6)
+  OK   o machado abate a árvore em bem menos golpes que as mãos  (mãos=18 golpes, machado=3)
+  OK   o machado primitivo abate a árvore em bem menos golpes que as mãos  (mãos=18, primitivo=6)
+  OK   a lasca corta melhor que as mãos, mas é a pior ferramenta  (mãos=18, lasca=10, primitivo=6)
+  OK   a picareta PRIMITIVA é a primeira ferramenta que pica pedra  (poder={ "mine": 1.0 })
+  OK   as ferramentas de pedra são da bancada e mais fortes que as primitivas
+  OK   a mão desperdiça e a ferramenta de pedra aproveita  (mão=0.70 tier1=1.00 tier2=1.35)
+  OK   as receitas do JSON e as de reserva dizem o mesmo
+  OK   a rocha dura existe e responde à ferramenta melhor
+  OK   a pedra exige picareta (e as mãos não a picam)
+  OK   a pedra solta dá pedra sem ferramenta (porta de entrada)
+  OK   as ferramentas a sério saem da bancada; a bancada sai da Criação
+  OK   o improviso (Criação) dá ferramenta com pedra e ramo, sem estação
+  OK   as receitas vêm de data/recipes.json (edita-se sem tocar em código)
+  OK   acender fogueira exige isqueiro primitivo
+  OK   cortar gasta energia  (90.5 -> 89.9)
+  OK   receita de bancada é recusada longe de uma bancada  (reason=no_station)
+  OK   bancada colocada é reconhecida como estação
+  OK   com bancada perto, o machado é feito  (reason=- player=(116.0, 7.645308, 9.829298) bench=(114.0, 9.062728, 9.829298) dist=2.45 stations=["workbench"])
+  OK   o machado novo entra na mochila
+  OK   comer com o rato direito funciona  (fome=58)
+  OK   lançar a linha à água  (estado=1)
+  OK   o peixe acaba por morder
+  OK   puxar a tempo dá peixe  (fish_raw=1)
+  OK   fogueira sem isqueiro não acende  (reason=no_fire_kit)
+  OK   com isqueiro primitivo a fogueira acende
+  OK   a fogueira acesa é estação de cozinha
+  OK   acesa, a fogueira tem combustível medido em horas de jogo  (fuel=5.00 h)
+  OK   alimentar o fogo gasta madeira e dá horas  (madeira 12→11 fuel 5.0→6.4)
+  OK   sem madeira a fogueira não é alimentada (e diz porquê)  (reason=no_wood)
+  OK   sem combustível a fogueira apaga-se (luz e chamas saem)  (lit=false)
+  OK   a fogueira que se apagou sai do calor do mundo
+  OK   a chama tem camadas (uma camada só é um cone)  (alturas=[1.0, 0.7])
+  OK   o shader da chama permite camadas (slim/width) e não é um cone fixo  (flame_speed, flame_energy, slim, width)
+  OK   acender a fogueira dá luz com tremer (não é uma lâmpada fixa)
+  OK   água do rio tem risco e a fervida não
+  OK   ferver água é uma receita da fogueira  (reason=-)
+  OK   há mar ao alcance da costa  (ponto=(-23.32586, -0.2, 23.5517))
+  OK   no mar a garrafa enche-se de água SALGADA  (water_salt=1)
+  OK   ferver não transforma água do mar em potável  ({ "water": 1.0 })
+  OK   beber água do mar NÃO fere: dá Desidratação  (dehydrated=45s hp 100->100)
+  OK   a desidratação cobra-se em sede (e a água doce cura)  (0.455/s vs 0.175/s)
+  OK   o cofre guarda o que tens na mão  (mochila=0 cofre=16)
+  OK   com a mão vazia o cofre devolve o que lá está  (mochila=16)
+SLEEP trace begin place=chair short=true paused=false entry=
+SLEEP trace pose_down complete place=chair
+SLEEP trace fade_in complete place=chair
+SLEEP trace fade_out complete place=chair
+SLEEP trace pose_up complete place=chair
+  OK   a cadeira é um cochilo (recupera, mas não passa a noite)  (energia 45.8, hora 3.6)
+  OK   a sequência do cochilo fecha antes do próximo sono  (sleeping=false enabled=true hour=3.6)
+  OK   com fome e sede o corpo tem menos fôlego  (cheio=100 vazio=40)
+  OK   esfomeado, o fôlego volta muito mais devagar  (cheio=4.0/s vazio=1.0/s)
+  OK   bater com fome rende menos do que bater alimentado  (0.80 vs 1.00)
+  OK   um dia de esforço faz a noite render mais  (parado=+40 duro=+54)
+  OK   o esforço fica registado no que o sono devolve
+  OK   trabalhar exausto rende menos (a energia não é decorativa)  (0.70 vs 1.00)
+  OK   o aviso de cansaço é uma sensação, não uma instrução  (As pálpebras pesam.)
+  OK   a carne crua é um risco e a cozinhada não  (cru=0.40 cozido=0.00)
+  OK   nenhuma mensagem entrega a solução ao jogador
+  OK   o véu da HUD sente fome, sede, cansaço, frio e enjoo
+  OK   com as barras em baixo o ecrã escurece de verdade  ([0.88888888888889, 0.88888888888889, 0.88888888888889])
+  OK   o véu escurece em vez de clarear (nada de neblina)
+  OK   de barriga cheia o ecrã limpa
+  OK   o corpo treme quando está a falhar (câmara e mãos)  (fresco=0.00 a_cair=0.94)
+  OK   há som de estômago e de respiração (avisos que não se leem)
+  OK   comida de risco dá enjoo (a factura vem depois, não no clique)  (illness=0.75 hp=100.0)
+  OK   o enjoo chega ao ecrã (verde a respirar)  (sick=0.75)
+  OK   comer devolve o que aconteceu (para o jogo poder dizer)  (hunger 50→100)
+  OK   a qualidade do sono vem dos dados (cama > chão)  (cama=1.00 chão=0.30)
+  OK   a cama rende mais do que o chão na mesma noite  (chão=+24 cama=+79 (8.8 h))
+  OK   dormir custa fome e sede (não é um salto grátis)  (fome -29.9 sede -37.0)
+  OK   dormir acorda de manhã (e não a meio da noite)  (hora=6.8)
+SLEEP trace begin place=bed short=false paused=false entry=bed
+  OK   dormir é uma sequência (o jogador deita-se e fica preso nela)  (bed=bed focus=bed result={ "handled": true, "ok": true })
+SLEEP trace pose_down complete place=bed
+SLEEP trace fade_in complete place=bed
+SLEEP trace fade_out complete place=bed
+SLEEP trace pose_up complete place=bed
+  OK   a sequência de dormir termina e devolve o controlo  (12 s de limite)
+  OK   o corpo fica deitado no leito (não dorme a flutuar)  (distância=0.55 m pos=(118.0, 8.075307, 9.829298) cama=(118.0, 7.525307, 9.829298) bed=bed focus=bed eventos=["bed"] sleeping=false threat=0.00)
+  OK   o sinal de dormir diz onde e com que qualidade  (local=["bed"] energia=100)
+SLEEP trace begin place=ground short=false paused=false entry=
+  OK   com uma criatura a rondar não se dorme
+  OK   o tronco do abate não traz a copa atrás  (tronco=567 vertices, árvore=10331)
+  OK   a árvore caída é dona da própria rotação (sem sync_to_physics)
+  OK   árvore abatida fica deitada no chão  (rotação=1.53 rad, settled=true)
+  OK   o tronco caído assenta à altura do seu raio  (y=9.30)
+  OK   há caça no mundo durante o dia  (2 animais)
+  OK   golpear caça tira-lhe vida  (5.2 -> 4.5)
+  OK   a caça foge quando é ferida
+  OK   caça abatida larga carne no chão  (0 -> 2 carne)
+  OK   a carne tem cadeia até ao guisado (cru -> assado -> guisado)
+  OK   o menu sabe listar as receitas que faltam desbloquear  (sem estação=13, com bancada=4)
+  OK   todas as receitas falam de itens e estações que existem
+  OK   todos os nós de colheita dão itens que existem
+  OK   cada estação de craft tem uma estrutura colocável
+  OK   rio raso atravessa-se a pé (não fica preso a nadar)  (y=8.37)
+  OK   água funda põe o jogador a nadar  (profundidade=3.10 m)
+  OK   submerso, o corpo sobe sozinho (não se afoga parado)  (velocidade vertical=1.68)
+  OK   na tona fica neutro (nem afunda nem dispara)  (velocidade vertical=-0.00)
+  OK   a criatura nada até à superfície em vez de se afundar  (subiu 1.64 m (fundo 4.27, tona 7.37, agora 6.31))
+  OK   cada família de item tem o seu próprio modelo no chão  ({ "wood": "135|0.21,0.46,0.21", "pickaxe": "108|0.34,0.50,0.10", "fish_cooked": "276|0.58,0.23,0.21", "workbench": "108|0.42,0.31,0.26", "torch": "276|0.19,0.49,0.20", "stone": "240|0.75,0.33,0.57" })
+  OK   o item no chão vem ter com o jogador (íman)  (distância 2.09 -> 0.89)
+  OK   item largado na água sobe à tona (não se perde no fundo)  (4.57 -> 7.28 (tona 7.37))
+  OK   os ícones das ferramentas novas estão desenhados
+  OK   os textos do sono e da água existem no idioma ativo
+  OK   o mundo tem uma rede de drenagem (rios calculados do relevo)  (segmentos=3215 células=576 lagos=48 { "relief": 472, "route": 83, "lakes": 87, "trace": 137, "carve": 63 })
+  OK   a hidrologia cabe no orçamento de arranque  (0 ms)
+  OK   nasce um rio do relevo (não de uma senóide escrita à mão)  (em (96, 310))
+  OK   há pelo menos um lago numa depressão do terreno  (em (114, -78))
+  OK   o chão desceu para abrir o leito do rio  (escavado=0.52 m)
+  OK   a coluna de água é a do nível menos o chão  (nível=13.09 chão=12.34 prof=0.75)
+  OK   water_info continua a responder à assinatura antiga
+  OK   o rio é doce e o mar é salgado (não se confundem)
+  OK   a corrente tem direção e velocidade  (fluxo=1.00 vel=1.02)
+  OK   o jogador sente a corrente da água onde está  (vel=1.02 fluxo=1.00)
+  OK   a garrafa enche-se de água DOCE no rio  (doce=1 salgada=0)
+WORLD WFC habitats=24x24 solved attempts=1 contradictions=0
+  OK   a rede é determinística para a mesma semente  (segmentos=3215/3215)
+  [dia 1] área: 683 nós em 18 chunks
+  OK   DIA 1 · o jogador começa de mãos vazias  (stone=0 wood=0 fiber=0)
+  OK   DIA 1 · mãos apanham fibra e graveto no arbusto  (fiber=4 stick=3)
+  OK   DIA 1 · mãos apanham pedra solta (a porta da pedra)  (stone=8)
+  [dia 1] tree_sakura: hp 6.0 -> 0.0 em 16 golpes (mão: fiber)
+  [dia 1] árvore tree_sakura: caiu=true troncos=2
+  [dia 1] tree_oak: hp 6.0 -> 0.0 em 18 golpes (mão: fiber)
+  [dia 1] árvore tree_oak: caiu=true troncos=3
+  OK   DIA 1 · a árvore cai à mão e o tronco dá madeira  (wood=4)
+  OK   DIA 1 · a lasca de pedra faz-se na mão (Criação)
+  OK   DIA 1 · a picareta primitiva faz-se à mão
+  OK   DIA 1 · a picareta primitiva quebra a rocha e dá pedra  (rocha=true stone=3)
+  OK   DIA 1 · a bancada faz-se na Criação e leva-se na mão
+  OK   DIA 1 · a bancada é um objecto pousado no chão
+  OK   DIA 1 · F na bancada abre o painel dela (e não a apaga)  (filtro=workbench)
+  OK   DIA 1 · a bancada faz a picareta de pedra
+  OK   DIA 1 · a rocha dura recusa a picareta primitiva e cede à de pedra  (recusa=true cede=true)
+  [dia 1] tree_oak: hp 6.0 -> 0.0 em 18 golpes (mão: pickaxe)
+  [dia 1] árvore tree_oak: caiu=true troncos=3
+  OK   DIA 1 · a fogueira faz-se na Criação
+  OK   DIA 1 · a fogueira é um objecto no mundo (ainda apagada)
+  OK   DIA 1 · acender exige isqueiro (e o isqueiro faz-se à mão)
+  OK   DIA 1 · com isqueiro a fogueira acende, dá luz e vira estação
+  OK   DIA 1 · a garrafa improvisada faz-se na Criação
+  FALHA DIA 1 · a garrafa nasce vazia e enche-se na água  (agua=true water=0)
+  FALHA DIA 1 · a fogueira ferve a água (deixa de ser crua)
+  FALHA DIA 1 · beber água tratada mata a sede sem risco  (thirst=40 health=100)
+  OK   DIA 1 · cozinhar transforma a carne (cru ≠ cozinhado)
+  OK   DIA 1 · comer a carne assada repõe a fome  (hunger=80)

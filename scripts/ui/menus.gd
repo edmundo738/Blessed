@@ -93,8 +93,20 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 # ══════════════════════════════════════════════════════════════════════════
+## Interface DA estação: só as receitas dela. É isto que faz da bancada um
+## objeto do mundo em vez de uma secção escondida no inventário.
+var station_filter := ""
+
+
+func open_station(id: String) -> void:
+	station_filter = id
+	open("craft")
+
+
 func open(which: String) -> void:
 	current = which
+	if which != "craft":
+		station_filter = ""
 	panel_root.visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	Game.paused = true
@@ -104,6 +116,7 @@ func open(which: String) -> void:
 
 
 func close() -> void:
+	station_filter = ""
 	if current == "dialogue" and dialogue_npc != null:
 		Bus.dialogue_ended.emit(str(dialogue_npc.id))
 	current = ""
@@ -295,8 +308,10 @@ func _use_item(id: String, slot_index: int) -> void:
 			Bus.say("msg.drink_flask", 2.0)
 	elif str(def.get("kind", "")) == "food":
 		if inv.remove(id, 1):
-			survival.eat(float(def.get("food", 0)), float(def.get("drink", 0)),
-				float(def.get("risk", 0)))
+			var ate: Dictionary = survival.eat(float(def.get("food", 0)),
+				float(def.get("drink", 0)), float(def.get("risk", 0)))
+			Bus.ui_message.emit(Loc.t("msg.food_sick" if bool(ate.get("sick", false))
+				else "msg.ate", {"item": Db.item_name(id)}), 3.0)
 	else:
 		inv.equip_slot(slot_index)
 		Bus.ui_message.emit(Loc.t("msg.equipped", [Db.item_name(id)]), 1.8)
@@ -305,48 +320,98 @@ func _use_item(id: String, slot_index: int) -> void:
 
 # ── bancada ───────────────────────────────────────────────────────────────
 func _build_craft() -> void:
-	_title.text = Loc.t("tab.crafting")
 	var stations: Array = interaction.nearby_stations() if interaction != null else []
-	if stations.is_empty():
-		_label(Loc.t("menu.craft_handmade"), 12, Color(0.78, 0.82, 0.75, 0.78))
-	for r in Db.recipes_for(stations):
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 8)
-		_content.add_child(row)
-		var icon := ItemIcon.new()
-		icon.custom_minimum_size = Vector2(34, 40)
-		icon.size = Vector2(34, 40)
-		icon.set_item(str(r["result"]))
-		row.add_child(icon)
-		var details := VBoxContainer.new()
-		details.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(details)
-		var title := Label.new()
-		title.text = "%s  × %d" % [Db.item_name(str(r["result"])), int(r.get("qty", 1))]
-		title.add_theme_font_size_override("font_size", 13)
-		details.add_child(title)
-		var needs_txt := []
-		for k in r["needs"]:
-			var have := inv.count(str(k))
-			var need := int(r["needs"][k])
-			needs_txt.append("%s %d/%d" % [Db.item_name(str(k)), mini(have, need), need])
-		var ingredients := Label.new()
-		ingredients.text = "  ·  ".join(needs_txt)
-		ingredients.add_theme_font_size_override("font_size", 10)
-		ingredients.add_theme_color_override("font_color", Color(0.76, 0.79, 0.74, 0.84))
-		details.add_child(ingredients)
-		var ok := inv.can_craft(r)
-		var b := Button.new()
-		b.text = Loc.t("ui.craft")
-		b.custom_minimum_size = Vector2(92, 38)
-		b.focus_mode = Control.FOCUS_NONE
-		b.disabled = not ok
-		b.pressed.connect(_craft.bind(str(r["id"])))
-		row.add_child(b)
-		var separator := HSeparator.new()
-		_content.add_child(separator)
+	if station_filter != "":
+		_build_station(stations)
+		return
+	_title.text = Loc.t("tab.crafting")
+	# Agrupado por degrau, porque o degrau é a informação que interessa:
+	# o que se improvisa agora, o que precisa de bancada, o que precisa de fogo.
+	for st in ["", "workbench", "campfire"]:
+		var lista := []
+		for r in Db.recipes_for(stations):
+			if str(r.get("station", "")) == st:
+				lista.append(r)
+		if lista.is_empty():
+			continue
+		_label(Db.station_label(st), 12, Color(0.82, 0.86, 0.78, 0.85))
+		for r in lista:
+			_craft_row(r)
+	# Degraus que ainda não estão ao alcance: dizer o que falta é melhor do que
+	# esconder a receita (era o que fazia o jogador pensar que o craft acabou).
+	var locked: Array = Db.locked_recipes(stations)
+	if not locked.is_empty():
+		_label("")
+		_label(Loc.t("menu.craft_locked"), 12, Color(0.8, 0.72, 0.5, 0.8))
+		var by_station := {}
+		for r in locked:
+			var st := str(r.get("station", ""))
+			if not by_station.has(st):
+				by_station[st] = []
+			by_station[st].append(Db.item_name(str(r["result"])))
+		for st in by_station:
+			_label("%s: %s" % [Db.station_label(st), ", ".join(by_station[st])], 11,
+				Color(0.72, 0.76, 0.7, 0.72))
 	_label("")
 	_button(Loc.t("settings.back"), func(): open("pause"))
+
+
+## Painel de uma estação: o título é o nome do objeto que está à frente do
+## jogador e a lista é só o que ali se faz. Nada de receitas da mão no meio.
+func _build_station(stations: Array) -> void:
+	_title.text = "▲ " + Db.station_label(station_filter)
+	if not (station_filter in stations):
+		_label(Loc.t("menu.station_gone"), 11, Color(0.8, 0.6, 0.5, 0.9))
+		_button(Loc.t("settings.back"), func(): close())
+		return
+	var feitas := 0
+	for r in Db.recipes_for(stations):
+		if str(r.get("station", "")) != station_filter:
+			continue
+		_craft_row(r)
+		feitas += 1
+	if feitas == 0:
+		_label(Loc.t("menu.station_empty"), 11, Color(0.78, 0.82, 0.75, 0.78))
+	_label("")
+	_button(Loc.t("settings.back"), func(): close())
+
+
+## Uma linha de receita: ícone, nome, ingredientes com o que falta, botão.
+func _craft_row(r: Dictionary) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	_content.add_child(row)
+	var icon := ItemIcon.new()
+	icon.custom_minimum_size = Vector2(34, 40)
+	icon.size = Vector2(34, 40)
+	icon.set_item(str(r["result"]))
+	row.add_child(icon)
+	var details := VBoxContainer.new()
+	details.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(details)
+	var title := Label.new()
+	title.text = "%s  × %d" % [Db.item_name(str(r["result"])), int(r.get("qty", 1))]
+	title.add_theme_font_size_override("font_size", 13)
+	details.add_child(title)
+	var needs_txt := []
+	for k in r["needs"]:
+		var have := inv.count(str(k))
+		var need := int(r["needs"][k])
+		needs_txt.append("%s %d/%d" % [Db.item_name(str(k)), mini(have, need), need])
+	var ingredients := Label.new()
+	ingredients.text = "  ·  ".join(needs_txt)
+	ingredients.add_theme_font_size_override("font_size", 10)
+	ingredients.add_theme_color_override("font_color", Color(0.76, 0.79, 0.74, 0.84))
+	details.add_child(ingredients)
+	var b := Button.new()
+	b.text = Loc.t("ui.craft")
+	b.custom_minimum_size = Vector2(92, 38)
+	b.focus_mode = Control.FOCUS_NONE
+	b.disabled = not inv.can_craft(r)
+	b.pressed.connect(_craft.bind(str(r["id"])))
+	row.add_child(b)
+	var separator := HSeparator.new()
+	_content.add_child(separator)
 
 
 func _craft(id: String) -> void:

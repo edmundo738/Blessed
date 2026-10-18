@@ -1,0 +1,203 @@
+{
+	"counters": {
+		"craft_torch": 1,
+		"harvest_tree_birch": 1,
+		"item_wood": 1,
+		"light_campfire": 2,
+		"place_campfire": 1
+	},
+	"day": 1,
+	"facts": {},
+	"hour": 9.5,
+	"objective_current": "",
+	"objectives_done": [],
+	"profile": {
+		"body": "f",
+		"name": "Teste",
+		"soul": "hands"
+	},
+	"relationships": {},
+	"seed": 20260109,
+	"systems": {
+		"Inventory": {
+			"hotbar": 3,
+			"slots": [
+				{
+					"id": "stone",
+					"qty": 7
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				},
+				{
+					"id": "",
+					"qty": 0
+				}
+			]
+		},
+		"Player": {
+			"pitch": 0.0,
+			"pos": [
+				116.0,
+				9.29864311218262,
+				9.82929801940918
+			],
+			"stamina": 100.0,
+			"third_person": false,
+			"view_mode_version": 2,
+			"yaw": 0.0
+		},
+		"Structures": {
+			"items": [
+				{
+					"fuel": 5.0,
+					"id": "campfire",
+					"lit": true,
+					"pos": [
+						97.1999969482422,
+						8.88543891906738,
+						11.0292978286743
+					],
+					"rot": 0.0
+				},
+				{
+					"fuel": 0.0,
+					"id": "campfire",
+					"lit": false,
+					"pos": [
+						116.0,
+						9.32297229766846,
+						7.0
+					],
+					"rot": 3.14159265358979
+				}
+			]
+		},
+		"Survival": {
+			"alive": true,
+			"blessing": 66.5531917,
+			"dehydrated_t": 0.0,
+			"energy": 91.422340415,
+			"health": 70.0,
+			"hunger": 45.0,
+			"illness": 0.0,
+			"sanity": 100.0,
+			"thirst": 55.0,
+			"warmth": 100.0
+		},
+		"World": {
+			"felled_trees": {
+				"1130|91|19|birch": {
+					"direction": -1.0,
+					"height": 5.88365346193314,
+					"position": [
+						113.00691986084,
+						9.07048606872559,
+						1.93100345134735
+					],
+					"remaining_logs": 1,
+					"rotation_y": 2.61862945556641,
+					"scale": [
+						1.19384610652924,
+						1.30747854709625,
+						1.19384610652924
+					],
+					"species": "birch",
+					"trunk_radius": 0.243544591090861,
+					"y_offset": 0.0
+				}
+			},
+			"harvest_state": {
+				"1130|91|19|birch": 4370.957447,
+				"120|50|120|oak": 8570.957447
+			},
+			"seed": 20260109
+		}
+	},
+	"version": 1
+}

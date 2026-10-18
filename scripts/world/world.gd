@@ -10,7 +10,13 @@ extends Node3D
 
 var terrain: Terrain
 var species: SpeciesKit
+var ecology: Ecosystem
 var mats: Materials
+var voxel_terrain: Node
+var voxel_material: ShaderMaterial
+var _voxel_generator: Resource
+var _voxel_viewers: Array[Node] = []
+var use_voxel_terrain := false
 
 var chunks: Dictionary = {}          # Vector2i -> Chunk
 var _rm := RenderingServer.get_current_rendering_method()  # forward_plus | mobile | gl_compatibility
@@ -48,11 +54,13 @@ func _ready() -> void:
 	name = "World"
 	terrain = Terrain.new(Game.world_seed)
 	species = SpeciesKit.new(Game.world_seed)
+	ecology = Ecosystem.new(Game.world_seed)
 	mats = Materials.new()
 	mats.set_wind(wind)
 	_build_environment()
 	_build_sky()
 	_build_water()
+	_build_voxel_terrain()
 	Game.register_saver(self)
 	Bus.settings_changed.connect(_apply_settings)
 	_apply_settings()
@@ -133,6 +141,130 @@ func _build_water() -> void:
 	add_child(water)
 
 
+## O addon nativo é opcional por plataforma. No Windows, o campo SDF e o
+## Transvoxel substituem a malha de altura; Web e plataformas sem extensão
+## continuam a usar o backend antigo sem carregar classes inexistentes.
+func _build_voxel_terrain() -> void:
+	use_voxel_terrain = false
+	voxel_terrain = null
+	_voxel_generator = null
+	if not ClassDB.class_exists("VoxelLodTerrain") \
+			or not ClassDB.class_exists("VoxelMesherTransvoxel") \
+			or not ClassDB.class_exists("VoxelViewer"):
+		return
+	var generator_script := load("res://scripts/world/voxel_generator.gd")
+	if generator_script == null:
+		push_warning("Voxel Tools está disponível, mas o gerador SDF não carregou; usando terreno compatível")
+		return
+	var voxel_shader := load("res://shaders/voxel_toon_terrain.gdshader") as Shader
+	if voxel_shader == null:
+		push_warning("Shader de terreno voxel não carregou; usando terreno compatível")
+		return
+	_voxel_generator = generator_script.new()
+	_voxel_generator.call("configure", terrain)
+	var mesher := ClassDB.instantiate("VoxelMesherTransvoxel") as Resource
+	var terrain_node := ClassDB.instantiate("VoxelLodTerrain") as Node
+	if mesher == null or terrain_node == null:
+		push_warning("Voxel Tools não conseguiu criar o mesher Transvoxel; usando terreno compatível")
+		return
+	mesher.set("texturing_mode", 1) # TEXTURES_MIXEL4_S4: 4 pesos de bioma por vértice
+	mesher.set("transitions_enabled", true)
+	voxel_material = _make_voxel_material(voxel_shader)
+	terrain_node.name = "SmoothVoxelTerrain"
+	terrain_node.set("generator", _voxel_generator)
+	terrain_node.set("mesher", mesher)
+	terrain_node.set("material", voxel_material)
+	_terrain_node_set(terrain_node, "mesh_block_size", 16)
+	_terrain_node_set(terrain_node, "view_distance", int(view_distance))
+	_terrain_node_set(terrain_node, "lod_count", 4)
+	_terrain_node_set(terrain_node, "lod_distance", 48.0)
+	_terrain_node_set(terrain_node, "generate_collisions", true)
+	_terrain_node_set(terrain_node, "collision_lod_count", 2)
+	_terrain_node_set(terrain_node, "collision_layer", 1)
+	_terrain_node_set(terrain_node, "collision_mask", 1)
+	_terrain_node_set(terrain_node, "threaded_update_enabled", true)
+	# O addon exige um shader de dither próprio para LOD fade. O shader actual
+	# trata as costuras Transvoxel, então mantemos o fade desligado até integrar
+	# esse segundo caminho correctamente.
+	_terrain_node_set(terrain_node, "lod_fade_duration", 0.0)
+	add_child(terrain_node)
+	voxel_terrain = terrain_node
+	use_voxel_terrain = true
+	print("WORLD TERRAIN backend=Smooth SDF / Transvoxel | LOD=4 | caves=karst prototype")
+
+
+func _terrain_node_set(node: Object, property_name: String, value: Variant) -> void:
+	if node == null:
+		return
+	for property: Dictionary in node.get_property_list():
+		if str(property.get("name", "")) == property_name:
+			node.set(property_name, value)
+			return
+
+
+func _make_voxel_material(voxel_shader: Shader) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = voxel_shader
+	var palette := PackedColorArray()
+	for i in Terrain.BIOME_COUNT:
+		palette.append(Db.biome_color(i, Terrain.BIOME_COLOR[i]))
+	material.set_shader_parameter("u_biome_palette", palette)
+	material.set_shader_parameter("u_snowline", Db.terrain_num("snowline_base", 150.0))
+	return material
+
+
+func attach_voxel_viewer(owner: Node3D) -> Node:
+	if not use_voxel_terrain or owner == null:
+		return null
+	var viewer := ClassDB.instantiate("VoxelViewer") as Node3D
+	if viewer == null:
+		return null
+	viewer.name = "VoxelViewer"
+	viewer.set("requires_visuals", true)
+	viewer.set("requires_collisions", true)
+	viewer.set("view_distance", int(view_distance))
+	owner.add_child(viewer)
+	_voxel_viewers.append(viewer)
+	return viewer
+
+
+## O jogador não pode receber gravidade antes de o chunk LOD0 e a colisão
+## do spawn terem sido construídos. O gerador de altura conhece o chão antes
+## de o VoxelLodTerrain acabar o trabalho; tratá-los como simultâneos fazia o
+## corpo cair através do mundo no arranque.
+func voxel_collision_ready_at(p: Vector3) -> bool:
+	if not use_voxel_terrain:
+		return true
+	if not is_instance_valid(voxel_terrain) or not voxel_terrain.has_method("is_area_meshed"):
+		return false
+	var area := AABB(p + Vector3(-2.0, -4.0, -2.0), Vector3(4.0, 8.0, 4.0))
+	return bool(voxel_terrain.call("is_area_meshed", area, 0))
+
+
+func _rebuild_voxel_backend() -> void:
+	if not use_voxel_terrain:
+		return
+	var viewer_owners: Array[Node3D] = []
+	for viewer: Node in _voxel_viewers:
+		if not is_instance_valid(viewer):
+			continue
+		var owner := viewer.get_parent() as Node3D
+		if owner != null:
+			viewer_owners.append(owner)
+			owner.remove_child(viewer)
+		viewer.free()
+	_voxel_viewers.clear()
+	if is_instance_valid(voxel_terrain):
+		remove_child(voxel_terrain)
+		voxel_terrain.free()
+	voxel_terrain = null
+	use_voxel_terrain = false
+	_build_voxel_terrain()
+	for owner: Node3D in viewer_owners:
+		if is_instance_valid(owner):
+			attach_voxel_viewer(owner)
+
+
 ## O céu e a luz seguem a hora do jogo.
 func update_time(hour: float, daylight: float, phase: String) -> void:
 	var dir := Game.sun_direction()
@@ -187,12 +319,38 @@ func set_underwater(value: bool) -> void:
 # ══════════════════════════════════════════════════════════════════════════
 #  CHUNKS
 # ══════════════════════════════════════════════════════════════════════════
+## Onde o jogador nasce (definido por main.gd ANTES de os chunks existirem) e o
+## raio que fica limpo de vegetação à volta dele.
+##
+## PORQUE: nascer dentro de um tronco é nascer preso — a colisão da árvore fecha
+## o jogador na própria malha, e a primeira coisa que se vê é o interior de um
+## caqui. Antes a escolha do ponto só evitava água, inclinação e fogueiras, e o
+## mato era espalhado sem saber de nada.
+const SPAWN_CLEAR_RADIUS := 4.5
+var spawn_clear := Vector3(0.0, -16384.0, 0.0)
+
+
+func set_spawn_clear(p: Vector3) -> void:
+	spawn_clear = p
+
+
+func is_clear_of_spawn(x: float, z: float) -> bool:
+	if spawn_clear.y < -16000.0:
+		return true
+	var dx := x - spawn_clear.x
+	var dz := z - spawn_clear.z
+	return dx * dx + dz * dz > SPAWN_CLEAR_RADIUS * SPAWN_CLEAR_RADIUS
+
+
 func set_target(p: Vector3) -> void:
 	_target = p
 
 
 func radius() -> int:
-	return clampi(int(ceil(view_distance / Chunk.SIZE)), 1, 7)
+	# O VoxelLodTerrain assume o horizonte; chunks secundários concentram
+	# relva, água e objetos na zona jogável para não duplicar a carga da malha.
+	var chunk_distance := minf(view_distance, 144.0) if use_voxel_terrain else view_distance
+	return clampi(int(ceil(chunk_distance / Chunk.SIZE)), 1, 7)
 
 
 func _process(_delta: float) -> void:
@@ -256,13 +414,16 @@ func _take_chunk(key: Vector2i, lod: int) -> Chunk:
 	var ch: Chunk
 	if _pool.is_empty():
 		ch = Chunk.new()
-		ch.terrain = terrain
-		ch.species = species
-		ch.mats = mats
-		ch.world = self
 		add_child(ch)
 	else:
 		ch = _pool.pop_back()
+	# Chunks reciclados também precisam receber o gerador/sistemas da semente
+	# actual. Sem isto, carregar uma partida podia misturar terreno de duas seeds.
+	ch.terrain = terrain
+	ch.species = species
+	ch.ecology = ecology
+	ch.mats = mats
+	ch.world = self
 	ch.name = "Chunk_%d_%d" % [key.x, key.y]
 	ch.cx = key.x
 	ch.cz = key.y
@@ -319,10 +480,14 @@ func fell_tree(n: Dictionary) -> void:
 	var tree_id := str(n.get("species", ""))
 	if not species.trees.has(tree_id):
 		return
+	var tree_spec: SpeciesKit.Species = species.trees[tree_id]
 	var key := harvest_key(n["pos"] as Vector3, tree_id)
 	var base: Transform3D = n.get("base_transform", Transform3D.IDENTITY)
 	var pos: Vector3 = n["pos"]
 	var scale := base.basis.get_scale()
+	var fell_height := float(n.get("height", tree_spec.height))
+	if not tree_spec.trunk_lods.is_empty():
+		fell_height = tree_spec.trunk_lods[0].get_aabb().size.y * absf(scale.y)
 	var yields: Dictionary = Db.HARVEST.get(str(n.get("kind", "")), {}).get("yields", {})
 	var logs := maxi(int(yields.get("wood", 1)), 1)
 	var direction := 1.0 if posmod(roundi(pos.x), 2) == 0 else -1.0
@@ -332,7 +497,7 @@ func fell_tree(n: Dictionary) -> void:
 		"rotation_y": base.basis.get_euler().y,
 		"scale": [scale.x, scale.y, scale.z],
 		"y_offset": base.origin.y - pos.y,
-		"height": float(n.get("height", 6.0)),
+		"height": fell_height,
 		"trunk_radius": maxf(float(n.get("collider_radius", 0.42)) * 0.34, 0.16),
 		"remaining_logs": logs,
 		"direction": direction,
@@ -354,7 +519,13 @@ func _spawn_felled_tree(key: String, data: Dictionary) -> void:
 	var scale := Vector3(float(raw_scale[0]), float(raw_scale[1]), float(raw_scale[2]))
 	var base := Transform3D(Basis(Vector3.UP, float(data.get("rotation_y", 0.0)))
 		.scaled(scale), Vector3(0.0, float(data.get("y_offset", 0.0)), 0.0))
-	var local_mat: Material = null if spec.materials_authored else mats.foliage
+	# Material do abate: NADA de `mats.foliage` (translúcido, sem resposta à luz e
+	# com vento) num tronco caído. `mats.structure` é o material sólido e toon —
+	# o tronco passa a receber luz e sombra como qualquer objeto do mundo.
+	# Árvores abatidas usam a malha separada do tronco (procedural), por isso
+	# recebem material sólido de madeira mesmo quando a árvore em pé é importada.
+	var local_mat: Material = mats.structure if not spec.trunk_lods.is_empty() \
+		else (null if spec.materials_authored else mats.structure)
 	var node := FELLED_TREE_SCENE.instantiate() as Node3D
 	if node == null:
 		return
@@ -362,11 +533,18 @@ func _spawn_felled_tree(key: String, data: Dictionary) -> void:
 	node.position = to_local(pos) + Vector3(float(data.get("fall_offset_x", 0.0)), 0.0, 0.0)
 	node.rotation.z = float(data.get("fall_rotation", 0.0))
 	add_child(node)
-	node.call("configure", spec.lods[0], local_mat, base, float(data.get("height", spec.height)),
+	var felled_mesh: ArrayMesh = spec.lods[0]
+	if not spec.trunk_lods.is_empty():
+		felled_mesh = spec.trunk_lods[0]
+	node.call("configure", felled_mesh, local_mat, base, float(data.get("height", spec.height)),
 		float(data.get("trunk_radius", 0.22)), int(data.get("remaining_logs", 1)),
 		self, key, tree_id, float(data.get("direction", 1.0)))
 	_felled_tree_nodes[key] = node
-	if not bool(data.get("settled", false)):
+	if bool(data.get("settled", false)):
+		# veio de um save: já está deitada, assentar e pronto
+		node.call("apply_settled", float(data.get("fall_rotation", 0.0)),
+			float(data.get("fall_offset_x", 0.0)))
+	else:
 		node.call("begin_fall")
 
 
@@ -397,6 +575,11 @@ func ground_height(x: float, z: float) -> float:
 
 func water_surface_height(x: float, z: float) -> float:
 	return terrain.water_surface_height(x, z)
+
+
+## A amostra completa (corrente, salinidade, tipo) para o jogador e os objetos.
+func water_sample(x: float, z: float) -> Dictionary:
+	return terrain.water_sample(x, z) if terrain != null else {}
 
 
 func is_in_water(p: Vector3) -> bool:
@@ -463,6 +646,11 @@ func _apply_quality() -> void:
 func _apply_settings() -> void:
 	view_distance = clampf(float(Game.settings["view_distance"]), 60.0, 240.0)
 	shadows_enabled = int(Game.settings["shadows"]) > 0
+	if is_instance_valid(voxel_terrain):
+		_terrain_node_set(voxel_terrain, "view_distance", int(view_distance))
+	for viewer: Node in _voxel_viewers:
+		if is_instance_valid(viewer):
+			viewer.set("view_distance", int(view_distance))
 	if sun:
 		sun.shadow_enabled = shadows_enabled
 		sun.directional_shadow_max_distance = [60.0, 120.0, 200.0][clampi(int(Game.settings["shadows"]), 0, 2)]
@@ -509,6 +697,8 @@ func load_data(_d: Dictionary) -> void:
 	# Sem isto, o terreno continuava a ser gerado com a semente anterior ao carregar (dessincronização).
 	terrain = Terrain.new(Game.world_seed)
 	species = SpeciesKit.new(Game.world_seed)
+	ecology = Ecosystem.new(Game.world_seed)
+	_rebuild_voxel_backend()
 	Bus.world_reseeded.emit()
 	for key in chunks.keys():
 		(chunks[key] as Chunk).release()
