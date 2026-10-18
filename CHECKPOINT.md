@@ -111,6 +111,19 @@ jogo responde, e fá-lo em todo o lado de uma vez.
 - **`tools/render_feel.py`** porta o shader para Python, para o efeito ser
   provado com imagem em vez de afirmação. PNG: `docs/shots/04_corpo_a_falhar.png`.
 
+## Etapa 2 — laboratório em 3D + modo deus (2026-10-18)
+
+- LabWorld (vindo do main/PR #9) ganhou corpo: `LabMesh` (mesh suave +
+  colisão por pedaços de 50 m), `LabScene` em `scenes/lab.tscn` com água,
+  vegetação por afinidade, estações-plataforma e o Player real a nascer.
+- Modo deus (`LabDev`): voar (F), cavar (LMB), aterrar/reconstruir (RMB),
+  partir (E), painel F1 com TODOS os itens, repor mundo. O mundo
+  destrói-se e reconstrói-se pelos deltas do `dig()`/`fill()`.
+- **Verificação: LABSCENE_PASS 12/12, LABTEST_PASS 14/14, selftest
+  245 ok / 0 falhas / 30 saltadas.** PNG: `docs/shots/09_lab_3d.png`.
+- Pack de teste local: `Blessed_Lab_Etapa2_pack.zip` (só ficheiros da
+  etapa; extrair por cima da pasta Blessed e abrir `scenes/lab.tscn`).
+
 ## Marco mais recente — o SONO e o FOGO passam a ser sistemas (2026-10-17, tarde)
 
 **Verificação: 215 ok, 0 falhas, 31 saltadas (SELFTEST_PASS)**, incluindo o
