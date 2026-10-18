@@ -19,6 +19,10 @@ var seed_value := 1337
 
 var _chunks: Dictionary = {}  # Vector2i -> {mesh: MeshInstance3D, body: StaticBody3D, shape: CollisionShape3D}
 var _water_inst: MeshInstance3D
+var _grass: Dictionary = {}  # Vector2i -> MultiMeshInstance3D
+var _grass_growth: Dictionary = {}  # Vector2i -> 0..1 (recrescimento)
+var _grass_root: Node3D
+var _blade_mesh: ArrayMesh
 var _props_root: Node3D
 var _stations_root: Node3D
 var _underwater := false
@@ -86,6 +90,7 @@ func _ready() -> void:
 	_build_environment()
 	_build_terrain()
 	_build_water()
+	_build_grass_all()
 	_build_props()
 	_build_stations()
 	_spawn_player()
@@ -163,6 +168,8 @@ func _rebuild_chunk(ci: int, cj: int) -> void:
 	var shape := ConcavePolygonShape3D.new()
 	shape.set_faces(data["faces"])
 	(entry["shape"] as CollisionShape3D).shape = shape
+	if _grass_root != null:
+		_build_grass_chunk(ci, cj)
 
 
 ## Reconstrói só os pedaços tocados por (x,z,raio) + a água inteira
@@ -177,6 +184,7 @@ func rebuild_area(x: float, z: float, radius_m: float) -> void:
 	var cj1 := clampi(int(floor((z + radius_m + half) / chunk_m)), 0, LabMesh.chunk_count() - 1)
 	for cj in range(cj0, cj1 + 1):
 		for ci in range(ci0, ci1 + 1):
+			_grass_growth[Vector2i(ci, cj)] = 0.15  # relva perturbada: recresce
 			_rebuild_chunk(ci, cj)
 	_build_water()
 	reseat_props(x, z, radius_m + 10.0)
@@ -201,6 +209,169 @@ func _build_water() -> void:
 	_water_inst.material_override = mat
 	_water_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_water_inst)
+
+
+# ── relva: MultiMesh por pedaço, gerada dos campos (nunca Node por lâmina) ─
+# A relva e DERIVADA da superficie atual: ao construir cada pedaço de 50 m,
+# amostram-se os pontos e decide-se densidade por humidade/bioma/declive e
+# material. Escavar muda os campos -> o rebuild local faz a relva sumir onde
+# ficou terra exposta/molhado/rocha, e o recrescimento (_grass_growth
+# 0->1 em ~24 s) traz-la de volta onde voltou a ser prado. Custo por frame
+# zero: so se reconstrói o pedaço tocado (e os que estão a recrescer, em
+# degraus quantizados para não reconstruir todos os frames).
+const GRASS_PER_CELL := 6
+const GRASS_GROW_SECONDS := 24.0
+
+
+func _build_grass_all() -> void:
+	if _grass_root != null and is_instance_valid(_grass_root):
+		_grass_root.queue_free()
+	_grass_root = Node3D.new()
+	_grass_root.name = "LabGrass"
+	add_child(_grass_root)
+	_grass.clear()
+	var cc := LabMesh.chunk_count()
+	for cj in cc:
+		for ci in cc:
+			_grass_growth[Vector2i(ci, cj)] = 1.0
+			_build_grass_chunk(ci, cj)
+
+
+func _make_blade_mesh() -> ArrayMesh:
+	if _blade_mesh != null:
+		return _blade_mesh
+	var verts := PackedVector3Array([
+		Vector3(-0.14, 0.0, 0.0), Vector3(0.14, 0.0, 0.0), Vector3(0.0, 0.85, 0.0),
+		Vector3(0.0, 0.0, -0.14), Vector3(0.0, 0.0, 0.14), Vector3(0.0, 0.85, 0.0)])
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	for v in verts:
+		normals.append(Vector3.UP)
+		colors.append(Color(0.30, 0.48, 0.20) if v.y < 0.1 else Color(0.55, 0.78, 0.34))
+	var idx := PackedInt32Array([0, 1, 2, 3, 4, 5])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_COLOR] = colors
+	arrays[Mesh.ARRAY_INDEX] = idx
+	_blade_mesh = ArrayMesh.new()
+	_blade_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return _blade_mesh
+
+
+static func _hash01(a: int, b: int, c: int) -> float:
+	var h := int(posmod(a * 374761393 + b * 668265263 + c * 2147483647 + 1337 * 97, 100000))
+	return float(h) / 100000.0
+
+
+## Densidade 0..1 da relva num ponto, lida da superficie ATUAL.
+## Zero onde: agua, areia, rocha, declive forte, ou terra ja escavada
+## (camada exposta nao tem relva — le-se o estrato).
+func grass_density(x: float, z: float) -> float:
+	var s := lab.sample(x, z)
+	if int(s["water_kind"]) != 0 or float(s["height"]) < 0.5:
+		return 0.0
+	var mat := int(s["material"])
+	if mat == LabWorld.M_SAND or mat == LabWorld.M_ROCK:
+		return 0.0
+	if float(s["slope"]) > 0.38:
+		return 0.0
+	if float(s["depth_dug"]) > 0.10:
+		return 0.0
+	var biome_factor := 0.55
+	match int(s["biome"]):
+		LabWorld.B_MEADOW:
+			biome_factor = 1.0
+		LabWorld.B_FOREST:
+			biome_factor = 0.70
+		LabWorld.B_GROVE:
+			biome_factor = 0.85
+		LabWorld.B_MARSH:
+			biome_factor = 0.90
+		LabWorld.B_DRY:
+			biome_factor = 0.30
+		LabWorld.B_BEACH, LabWorld.B_ROCK:
+			biome_factor = 0.0
+	return clampf((0.25 + float(s["moisture"]) * 0.85) * biome_factor, 0.0, 1.0)
+
+
+func _build_grass_chunk(ci: int, cj: int) -> void:
+	if _grass_root == null:
+		return
+	var key := Vector2i(ci, cj)
+	var growth := float(_grass_growth.get(key, 1.0))
+	var transforms: Array[Transform3D] = []
+	var colors: Array[Color] = []
+	var seg := LabMesh.CHUNK_CELLS
+	for gj in range(cj * seg, cj * seg + seg):
+		for gi in range(ci * seg, ci * seg + seg):
+			for k in GRASS_PER_CELL:
+				var ox := _hash01(gi, gj, k * 3 + 1)
+				var oz := _hash01(gi, gj, k * 3 + 2)
+				var p := lab.grid_pos(gi, gj) + Vector2(ox - 0.5, oz - 0.5) * LabWorld.CELL * 0.9
+				var d := grass_density(p.x, p.y) * growth
+				if _hash01(gi, gj, k * 3 + 3) > d:
+					continue
+				var h := lab.height(p.x, p.y)
+				var scale := 0.7 + _hash01(gi, gj, k + 40) * 0.7
+				var basis := Basis(Vector3.UP, _hash01(gi, gj, k + 80) * TAU).scaled(Vector3.ONE * scale)
+				transforms.append(Transform3D(basis, Vector3(p.x, h - 0.03, p.y)))
+				colors.append(Color(0.85 + ox * 0.3, 0.9 + oz * 0.2, 0.8))
+	var mmi := _grass.get(key) as MultiMeshInstance3D
+	if mmi == null:
+		mmi = MultiMeshInstance3D.new()
+		mmi.name = "LabGrass_%d_%d" % [ci, cj]
+		var mat := StandardMaterial3D.new()
+		mat.vertex_color_use_as_albedo = true
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mat.roughness = 1.0
+		mmi.material_override = mat
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mmi.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+		_grass_root.add_child(mmi)
+		_grass[key] = mmi
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = _make_blade_mesh()
+	mm.instance_count = transforms.size()
+	for i in transforms.size():
+		mm.set_instance_transform(i, transforms[i])
+		mm.set_instance_color(i, colors[i])
+	mmi.multimesh = mm
+	# AABB explicita: sem ela o Godot descarta o pedaco com o AABB da
+	# lamina original (~1 m) e a relva some ao mover a camara.
+	mmi.custom_aabb = AABB(
+		Vector3(ci * 50.0 - 200.0, -6.0, cj * 50.0 - 200.0),
+		Vector3(56.0, 48.0, 56.0))
+
+
+func grass_count(ci: int, cj: int) -> int:
+	var mmi := _grass.get(Vector2i(ci, cj)) as MultiMeshInstance3D
+	if mmi == null or mmi.multimesh == null:
+		return 0
+	return mmi.multimesh.instance_count
+
+
+## Tempo de recrescimento: pedacos perturbados voltam 0->1 em degraus de
+## 1/4 (reconstruir no maximo 4x por pedaco durante o crescimento).
+func advance_growth(seconds: float) -> void:
+	if lab == null:
+		return
+	for key in _grass_growth.keys():
+		var g := float(_grass_growth[key])
+		if g >= 1.0:
+			continue
+		var step_before := int(g * 4.0)
+		g = minf(1.0, g + seconds / GRASS_GROW_SECONDS)
+		_grass_growth[key] = g
+		if int(g * 4.0) != step_before or g >= 1.0:
+			_build_grass_chunk((key as Vector2i).x, (key as Vector2i).y)
+
+
+func _process(delta: float) -> void:
+	advance_growth(delta)
 
 
 # ── objectos assentam ou caem: nada flutua ─────────────────────────────────
@@ -438,6 +609,8 @@ func respawn_player() -> void:
 ## Destroi e reconstrói o mundo inteiro (nova LabWorld, mesma seed).
 func reset_world() -> void:
 	lab = LabWorld.new(seed_value)
+	for key in _grass_growth.keys():
+		_grass_growth[key] = 1.0
 	var cc := LabMesh.chunk_count()
 	for cj in cc:
 		for ci in cc:

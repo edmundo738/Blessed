@@ -130,6 +130,35 @@ func _ready() -> void:
 		_check(tree_body.has_meta("lab_felled"),
 				"escavar debaixo da árvore: ela CAI (não flutua)")
 
+	# relva: existe como MultiMesh, some ao escavar e recresce ao aterrar
+	var total_grass := 0
+	for key in scene._grass.keys():
+		total_grass += scene.grass_count((key as Vector2i).x, (key as Vector2i).y)
+	_check(total_grass > 1500, "relva MultiMesh cobre a ilha (%d lâminas)" % total_grass)
+	var meadow := Vector2.INF
+	for j in range(4, LabWorld.N - 4):
+		for i in range(4, LabWorld.N - 4):
+			var p := scene.lab.grid_pos(i, j)
+			if scene.grass_density(p.x, p.y) > 0.6:
+				meadow = p
+				break
+		if meadow != Vector2.INF:
+			break
+	_check(meadow != Vector2.INF, "existe prado denso para testar a relva")
+	if meadow != Vector2.INF:
+		var gci := clampi(int(floor((meadow.x + 200.0) / 50.0)), 0, 7)
+		var gcj := clampi(int(floor((meadow.y + 200.0) / 50.0)), 0, 7)
+		var g_before := scene.grass_count(gci, gcj)
+		for n in 5:
+			scene.tool_dig("shovel", meadow.x, meadow.y)
+		var g_dug := scene.grass_count(gci, gcj)
+		_check(g_dug < g_before, "escavar faz a relva sumir no pedaço (%d -> %d)" % [g_before, g_dug])
+		for n in 5:
+			scene.tool_dig("shovel", meadow.x, meadow.y, true)
+		scene.advance_growth(30.0)
+		var g_back := scene.grass_count(gci, gcj)
+		_check(g_back > g_dug, "aterrar + tempo: a relva recresce (%d -> %d)" % [g_dug, g_back])
+
 	# grelha para o PNG da etapa (render por software a partir dos dados reais)
 	var bytes := PackedByteArray()
 	bytes.resize(LabWorld.N * LabWorld.N * 2)

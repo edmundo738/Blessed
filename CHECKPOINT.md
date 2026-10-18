@@ -393,3 +393,14 @@ céu e testes estão no marco mais recente no topo e em `docs/AUDIT_2026-10-14.m
 - HUD dev compacto: barra de ferramentas (roda/1-3), material sob a mira.
 - **Verificação: LABSCENE_PASS 20/20, LABTEST_PASS 18/18, selftest
   245 ok / 0 falhas / 30 saltadas.** PNG: `docs/shots/09_lab_3d.png`.
+
+## Relva que reage à escavação (2026-10-18)
+
+- `LabScene.grass_density()` lê a superfície atual: zero em água/areia/
+  rocha/declive>0,38/`depth_dug>0,1`; prados densos com humidade.
+- MultiMesh por pedaço (6 candidatas/célula, ~3517 lâminas), AABB explícita
+  por pedaço, sem Node por lâmina, custo zero por frame fora do rebuild.
+- Escavar/aterrar reconstrói só o pedaço; pedaço perturbado recresce
+  0,15→1 em ~24 s em degraus de ¼ (`advance_growth`).
+- **Verificação: LABSCENE_PASS 24/24, LABTEST_PASS 18/18, selftest
+  245 ok / 0 falhas / 30 saltadas.** PNG: `docs/shots/09_lab_3d.png`.

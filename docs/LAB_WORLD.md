@@ -116,13 +116,17 @@ mesmo em areia, terra ou rocha. A matemática agora é uma só:
 - Prova: LABSCENE_PASS 20/20 (mão não parte rocha, picareta rende stone,
   árvore cai ao escavar por baixo), LABTEST_PASS 18/18, selftest 245 ok.
 
-### E a relva, neste desenho?
+### A relva (implementada, 2026-10-18)
 
-A relva NÃO será um Node por lâmina: será MultiMesh por pedaço, gerada
-dos mesmos campos (`species_density`-like: humidade/declive/bioma da
-superfície ATUAL). Interação com a escavação, pela mesma regra dos props:
-ao cavar/aterrar, só o pedaço tocado regenera as suas instâncias —
-lâminas onde `depth_dug > 0,1` ou a nova superfície ficou molhada/íngreme
-desaparecem (ficou terra exposta, lê-se a camada), e a relva volta a
-crescer por humidade ao longo de dias de jogo nos pontos que voltaram a
-ser prado. Custo: zero por frame, só rebuild local — idêntico ao terreno.
+MultiMesh por pedaço de 50 m (6 lâminas-cruz candidatas por célula,
+~3 500 instâncias na ilha) — nunca um Node por lâmina. A densidade lê a
+superfície ATUAL (`LabScene.grass_density`): zero em água, areia, rocha,
+declive > 0,38 ou onde `depth_dug > 0,1` (camada exposta não tem relva);
+nos prados cresce com a humidade e o bioma. Interação com a escavação,
+pela mesma regra dos props: ao cavar/aterrar só o pedaço tocado se
+reconstrói, por isso a relva some do buraco e da terra revirada; o pedaço
+fica "perturbado" (`_grass_growth = 0,15`) e recresce 0→1 em ~24 s, em
+degraus de ¼ para reconstruir no máximo 4× durante o crescimento.
+Prova (labscene 21–24): a ilha tem relva, escavar faz o pedaço perder
+lâminas, aterrar + tempo faz-las voltar. Custo por frame: zero fora dos
+pedaços a recrescer.
