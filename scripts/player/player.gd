@@ -73,6 +73,8 @@ var stamina := 100.0
 var survival: Node
 var surface := "grass"
 var enabled := true
+## Modo deus (só laboratório/dev): voar sem gravidade nem natação.
+var dev_fly := false
 
 ## chamado pelo Survival
 var speed_multiplier := 1.0
@@ -159,6 +161,10 @@ func _physics_process(delta: float) -> void:
 		return
 	_smooth_look(delta)
 	mantle_cooldown = maxf(0.0, mantle_cooldown - delta)
+	if dev_fly:
+		_move_fly()
+		move_and_slide()
+		return
 	_swim_check()
 	var wish := _wish_direction()
 	if swimming:
@@ -284,6 +290,22 @@ func _smooth_look(delta: float) -> void:
 
 
 # ── direção pedida ────────────────────────────────────────────────────────
+## Voo do modo deus: direto, sem gravidade, sem bob. Espaço sobe, Ctrl desce.
+func _move_fly() -> void:
+	var wish := _wish_direction()
+	var dir := (transform.basis * Vector3(wish.x, 0.0, wish.z))
+	dir.y = 0.0
+	if dir.length_squared() > 0.0001:
+		dir = dir.normalized()
+	var speed := 18.0 if Input.is_action_pressed("sprint") else 9.0
+	var vert := 0.0
+	if Input.is_action_pressed("jump"):
+		vert += 1.0
+	if Input.is_action_pressed("crouch"):
+		vert -= 1.0
+	velocity = dir * speed + Vector3.UP * vert * speed * 0.8
+
+
 ## Direção pedida, em espaço LOCAL do jogador.
 ##
 ## Convenção Godot: a câmara e o jogador olham para **-Z**. Por isso

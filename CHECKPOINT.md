@@ -6,6 +6,19 @@
 > O histórico de auditoria abaixo preserva resultados antigos; quando diferirem, prevalecem
 > este marco mais recente e `docs/AUDIT_2026-10-14.md`.
 
+## Etapa 2 — laboratório em 3D + modo deus (2026-10-18)
+
+- LabWorld (vindo do main/PR #9) ganhou corpo: `LabMesh` (mesh suave +
+  colisão por pedaços de 50 m), `LabScene` em `scenes/lab.tscn` com água,
+  vegetação por afinidade, estações-plataforma e o Player real a nascer.
+- Modo deus (`LabDev`): voar (F), cavar (LMB), aterrar/reconstruir (RMB),
+  partir (E), painel F1 com TODOS os itens, repor mundo. O mundo
+  destrói-se e reconstrói-se pelos deltas do `dig()`/`fill()`.
+- **Verificação: LABSCENE_PASS 12/12, LABTEST_PASS 14/14, selftest
+  245 ok / 0 falhas / 30 saltadas.** PNG: `docs/shots/09_lab_3d.png`.
+- Pack de teste local: `Blessed_Lab_Etapa2_pack.zip` (só ficheiros da
+  etapa; extrair por cima da pasta Blessed e abrir `scenes/lab.tscn`).
+
 ## Reconstrução — Etapa 0+1: auditoria + LabWorld (2026-10-18)
 
 Direção nova (documento-mestre do dono): não presumir que o código atual está

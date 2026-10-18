@@ -57,3 +57,24 @@ recolha, escavação, craft, construção, geração — pequenos, finitos, jog�
 3. Escavação jogável (pá, solo como item, aterro) provada na estação de escavação.
 4. Construção com fundação adaptativa/snap/suporte provada na clareira.
 5. Só depois: migrar cada sistema provado para o mundo grande, um de cada vez.
+
+
+## Etapa 2 — visualização, spawn e modo deus (2026-10-18)
+
+- `scripts/world/lab_mesh.gd`: mesh suave por pedaços de 50 m (normais por
+  gradiente, cor por bioma/humidade/declive) + faces côncavas de colisão;
+  `rebuild_area()` reconstrói só os pedaços tocados ao cavar.
+- `scripts/lab/lab_scene.gd` (`scenes/lab.tscn`): ilha em 3D, água por
+  células, árvores/pedras reais por afinidade, 8 estações como plataformas
+  coloridas (nomes só em modo dev), Player real a nascer em terra firme.
+- `scripts/lab/lab_dev.gd`: modo deus — F voar, LMB cavar, RMB
+  aterrar/reconstruir, E partir árvore/pedra (drops reais via Db.HARVEST),
+  F1 painel com dar/spawnar TODOS os itens, repor mundo, renascer.
+  Partículas de poeira no ponto da escavação (feedback do material).
+- `Player.dev_fly`: voo sem gravidade (ferramenta dev, fora do gameplay).
+- Item novo `soil`: cavar largar solo; aterrar é o seu par.
+- Prova: `tests/labscene.gd` — LABSCENE_PASS 12/12 (mesh 7744 vértices,
+  colisão por raycast, spawn assenta, cavar baixa, aterrar reconstrói,
+  voo ativo) + LABTEST_PASS 14/14 + selftest 245 ok/0 falhas.
+- Como testar local: extrair o pack da etapa por cima da pasta Blessed,
+  abrir `scenes/lab.tscn`, F5. Primeiro teste sugerido: cavar.

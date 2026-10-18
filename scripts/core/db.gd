@@ -18,6 +18,9 @@ const ITEMS := {
 	"fiber":        {"kind": "resource", "stack": 40, "icon": "fiber"},
 	"leaf":         {"kind": "resource", "stack": 60, "icon": "leaf"},
 	"stick":        {"kind": "resource", "stack": 40, "icon": "stick"},
+	# Solo escavado (laboratório): cavar tem de dar qualquer coisa à mão,
+	# e aterrar consome-o — é o material da destruição/reconstrução.
+	"soil":         {"kind": "resource", "stack": 40, "icon": "soil"},
 	# ── comida ──────────────────────────────────────────────────────────────
 	"mushroom":     {"kind": "food", "stack": 20, "icon": "mushroom",
 					 "food": 18, "drink": 0, "risk": 0.25},

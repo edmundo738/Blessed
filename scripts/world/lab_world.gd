@@ -448,6 +448,31 @@ func dig(x: float, z: float, radius_m: float, depth_m: float) -> float:
 	return removed
 
 
+## Reconstrói: o inverso de dig(). O mundo destrói-se e volta a erguer-se
+## pelos mesmos deltas — aterrar pode fechar um buraco ou levantar uma
+## barragem (e a água recompõe-se sozinha na mesma passagem).
+func fill(x: float, z: float, radius_m: float, depth_m: float) -> float:
+	var c := _cell_of(x, z)
+	var r_cells := int(ceil(radius_m / CELL))
+	var added := 0.0
+	for dj in range(-r_cells, r_cells + 1):
+		for di in range(-r_cells, r_cells + 1):
+			var ni: int = c.x + di
+			var nj: int = c.y + dj
+			if ni < 0 or nj < 0 or ni >= N or nj >= N:
+				continue
+			var p := grid_pos(ni, nj)
+			var d := Vector2(p.x - x, p.y - z).length()
+			if d > radius_m:
+				continue
+			var fall := 1.0 - (d / maxf(radius_m, 0.01)) * 0.55
+			var amt := depth_m * fall
+			_dig_delta[idx(ni, nj)] = clampf(_dig_delta[idx(ni, nj)] - amt, -4.0, 40.0)
+			added += amt * CELL * CELL
+	_rebuild()
+	return added
+
+
 func buildable(x: float, z: float) -> Dictionary:
 	var s := sample(x, z)
 	var sl: float = s["slope"]
