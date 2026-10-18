@@ -21,6 +21,9 @@ const ITEMS := {
 	# Solo escavado (laboratório): cavar tem de dar qualquer coisa à mão,
 	# e aterrar consome-o — é o material da destruição/reconstrução.
 	"soil":         {"kind": "resource", "stack": 40, "icon": "soil"},
+	# Areia escavada (margem/leito): material proprio, nao "solo generico" —
+	# a escavacao identifica o material e cada um rende o seu item.
+	"sand":         {"kind": "resource", "stack": 40, "icon": "sand"},
 	# ── comida ──────────────────────────────────────────────────────────────
 	"mushroom":     {"kind": "food", "stack": 20, "icon": "mushroom",
 					 "food": 18, "drink": 0, "risk": 0.25},
@@ -61,6 +64,10 @@ const ITEMS := {
 					 "tier": 2, "tool": "axe"},
 	"pickaxe":      {"kind": "tool", "stack": 1, "icon": "pickaxe", "power": {"mine": 2.4},
 					 "tier": 2, "tool": "pickaxe"},
+	# Pa: a ferramenta do solo mole — raio largo e ritmo rapido em areia e
+	# terra, inutil contra rocha (ai manda a picareta, curta e lenta).
+	"shovel":       {"kind": "tool", "stack": 1, "icon": "shovel", "power": {"dig": 2.0},
+					 "tier": 2, "tool": "shovel"},
 	# Isqueiro primitivo: acender uma fogueira não pode ser um botão mágico.
 	"fire_kit":     {"kind": "tool", "stack": 1, "icon": "fire_kit",
 					 "power": {"fire": 1.0}, "tier": 1, "tool": "fire"},
@@ -116,6 +123,7 @@ const RECIPES := [
 	{"id": "campfire", "result": "campfire", "qty": 1, "needs": {"stone": 4, "stick": 3, "wood": 2}},
 	{"id": "stone_axe", "result": "axe", "qty": 1, "needs": {"stick": 2, "stone": 3, "fiber": 1}, "station": "workbench"},
 	{"id": "stone_pickaxe", "result": "pickaxe", "qty": 1, "needs": {"stick": 2, "stone": 4, "fiber": 1}, "station": "workbench"},
+	{"id": "stone_shovel", "result": "shovel", "qty": 1, "needs": {"stick": 2, "stone": 2, "fiber": 1}, "station": "workbench"},
 	{"id": "bottle", "result": "bottle", "qty": 1, "needs": {"fiber": 4, "wood": 1}},
 	{"id": "primitive_axe", "result": "primitive_axe", "qty": 1, "needs": {"stick": 2, "stone": 2, "fiber": 2}},
 	{"id": "primitive_pickaxe", "result": "primitive_pickaxe", "qty": 1, "needs": {"stick": 2, "stone": 3, "fiber": 2}},

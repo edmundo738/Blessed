@@ -17,6 +17,19 @@ const CELL := 5.0
 const N := 81  # SIZE / CELL + 1
 const SEA := 0.0
 const DRY := -100000.0
+
+# ── camadas geologicas (materiais de escavacao) ────────────────────────────
+# O material NAO e sorteado: deriva da posicao (margem/leito = areia,
+# afloramento inclinado/alto = rocha) e da PROFUNDIDADE escavada abaixo da
+# superficie original (topsoil -> subsolo -> rocha). E o mesmo principio das
+# durezas por profundidade do Astroneer e dos niveis 1-3 do Deep Rock:
+# quanto mais fundo, mais duro — a ferramenta certa le-se do chao, nao de
+# um menu.
+const M_SAND := 0
+const M_DIRT := 1
+const M_ROCK := 2
+const LAYER_TOP := 0.7    # m de solo solto (mao/pá rapida)
+const LAYER_ROCK := 2.3   # m escavados ate bater no substrato rochoso
 const STREAM_MIN_ACCUM := 48.0
 
 const B_OCEAN := 0
@@ -336,6 +349,62 @@ func height(x: float, z: float) -> float:
 	return lerpf(lerpf(a, b, tx), lerpf(c, d, tx), tz)
 
 
+## Superficie ORIGINAL (antes de qualquer escavacao): base - carve.
+## A diferenca para height() diz a que profundidade da camada ja fomos.
+func original_height(x: float, z: float) -> float:
+	var fx := clampf((x + SIZE * 0.5) / CELL, 0.0, float(N - 2))
+	var fz := clampf((z + SIZE * 0.5) / CELL, 0.0, float(N - 2))
+	var i := int(fx)
+	var j := int(fz)
+	var tx := fx - float(i)
+	var tz := fz - float(j)
+	var a := _base[idx(i, j)] - _carve[idx(i, j)]
+	var b := _base[idx(i + 1, j)] - _carve[idx(i + 1, j)]
+	var c := _base[idx(i, j + 1)] - _carve[idx(i, j + 1)]
+	var d := _base[idx(i + 1, j + 1)] - _carve[idx(i + 1, j + 1)]
+	return lerpf(lerpf(a, b, tx), lerpf(c, d, tx), tz)
+
+
+## Metros ja escavados neste ponto (>0 = abaixo do original; <0 = aterro).
+func depth_dug(x: float, z: float) -> float:
+	return original_height(x, z) - height(x, z)
+
+
+## Material a superficie neste ponto — a "lookup table" partilhada por
+## ferramentas, rendimentos, cor das camadas expostas e HUD dev.
+## Ordem causal: afloramento -> profundidade -> margem/leito -> solo.
+func material_at(x: float, z: float) -> int:
+	var c := _cell_of(x, z)
+	var k := idx(c.x, c.y)
+	var h := height(x, z)
+	if slope(x, z) > 0.55 or biome_at(x, z) == B_ROCK:
+		return M_ROCK
+	if depth_dug(x, z) > LAYER_ROCK:
+		return M_ROCK
+	var wl := _water_level[k]
+	if wl > DRY * 0.5 and h < wl + 0.7:
+		return M_SAND
+	if h < 0.9:
+		return M_SAND
+	return M_DIRT
+
+
+static func material_name(m: int) -> String:
+	return ["Areia", "Terra", "Rocha"][clampi(m, 0, 2)]
+
+
+## Dureza 1..3 (golpes relativos): areia 1, terra solta 1, terra
+## compacta (abaixo do topsoil) 2, rocha 3.
+func material_hardness(x: float, z: float) -> int:
+	match material_at(x, z):
+		M_SAND:
+			return 1
+		M_ROCK:
+			return 3
+		_:
+			return 2 if depth_dug(x, z) > LAYER_TOP else 1
+
+
 func slope(x: float, z: float) -> float:
 	var e := 2.0
 	var dx := height(x + e, z) - height(x - e, z)
@@ -422,6 +491,8 @@ func sample(x: float, z: float) -> Dictionary:
 		"fresh_dist": _fresh_dist[k],
 		"depression": _filled[k] - (_base[k] - _dig_delta[k]),
 		"biome": biome_at(x, z),
+		"material": material_at(x, z),
+		"depth_dug": depth_dug(x, z),
 	}
 
 
@@ -440,9 +511,12 @@ func dig(x: float, z: float, radius_m: float, depth_m: float) -> float:
 			var d := Vector2(p.x - x, p.y - z).length()
 			if d > radius_m:
 				continue
-			var fall := 1.0 - (d / maxf(radius_m, 0.01)) * 0.55
+			# Perfil co-seno: 1 no centro -> 0 na borda com tangente
+			# horizontal nos dois extremos. Sem degrau na orla, a cratera
+			# nao deixa "serrilhado" nem degraus onde a agua encosta.
+			var fall := 0.5 + 0.5 * cos(PI * clampf(d / maxf(radius_m, 0.01), 0.0, 1.0))
 			var amt := depth_m * fall
-			_dig_delta[idx(ni, nj)] += amt
+			_dig_delta[idx(ni, nj)] = clampf(_dig_delta[idx(ni, nj)] + amt, -4.0, 40.0)
 			removed += amt * CELL * CELL
 	_rebuild()
 	return removed
@@ -465,7 +539,7 @@ func fill(x: float, z: float, radius_m: float, depth_m: float) -> float:
 			var d := Vector2(p.x - x, p.y - z).length()
 			if d > radius_m:
 				continue
-			var fall := 1.0 - (d / maxf(radius_m, 0.01)) * 0.55
+			var fall := 0.5 + 0.5 * cos(PI * clampf(d / maxf(radius_m, 0.01), 0.0, 1.0))
 			var amt := depth_m * fall
 			_dig_delta[idx(ni, nj)] = clampf(_dig_delta[idx(ni, nj)] - amt, -4.0, 40.0)
 			added += amt * CELL * CELL

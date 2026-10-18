@@ -31,14 +31,13 @@ def check_winding():
         if _cross_y(corner[t[0]], corner[t[1]], corner[t[2]]) > 0:
             sys.exit("render_lab3d: winding do TERRENO virada — a face de "
                      "cima seria cullada no Godot (PNG recusado)")
-    wcorner = {0: (0, 0), 1: (1, 0), 2: (0, 1), 3: (1, 1)}
-    w = re.search(r"idx\.append_array\(\[base, base \+ (\d), base \+ (\d), "
-                  r"base, base \+ (\d), base \+ (\d)\]\)", src)
-    if not w:
-        sys.exit("render_lab3d: nao encontrei a ordem de indices da agua")
-    nums = [int(g) for g in w.groups()]
-    for t in [(0, nums[0], nums[1]), (0, nums[2], nums[3])]:
-        if _cross_y(wcorner[t[0]], wcorner[t[1]], wcorner[t[2]]) > 0:
+    # agua: triangulos de entrada do recorte de costa (_clip_water_tri),
+    # cuja ordem o recorte preserva — a,b,d / a,d,c sobre a grelha.
+    calls = re.findall(r"_clip_water_tri\(pts, \[([a-d]), ([a-d]), ([a-d])\]", src)
+    if len(calls) < 2:
+        sys.exit("render_lab3d: nao encontrei os triangulos da agua")
+    for t in calls[:2]:
+        if _cross_y(corner[t[0]], corner[t[1]], corner[t[2]]) > 0:
             sys.exit("render_lab3d: winding da AGUA virada — a face de "
                      "cima seria cullada no Godot (PNG recusado)")
     print("winding ok: faces de cima sao frontais (terreno + agua)")

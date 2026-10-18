@@ -115,6 +115,29 @@ func _ready() -> void:
 	# estacoes do laboratorio existem nos dados
 	_check(lab.stations.size() >= 8, "8 estacoes de mecanicas nos dados")
 
+	# materiais por camadas: leito do oceano = areia; escavar fundo num
+	# ponto de terra atravessa o solo e bate na rocha (substrato).
+	_check(lab.material_at(190.0, 190.0) == LabWorld.M_SAND,
+			"material: leito/margem identifica AREIA")
+	var dirt_at := Vector2.ZERO
+	var found_dirt := false
+	for j in range(4, LabWorld.N - 4):
+		for i in range(4, LabWorld.N - 4):
+			var p := lab.grid_pos(i, j)
+			if lab.material_at(p.x, p.y) == LabWorld.M_DIRT and lab.height(p.x, p.y) > 2.0:
+				dirt_at = p
+				found_dirt = true
+				break
+		if found_dirt:
+			break
+	_check(found_dirt, "material: existe TERRA identificavel (%s)" % dirt_at)
+	if found_dirt:
+		lab.dig(dirt_at.x, dirt_at.y, 2.0, 2.6)
+		_check(lab.material_at(dirt_at.x, dirt_at.y) == LabWorld.M_ROCK,
+				"camadas: escavar >%.1f m expoe ROCHA" % LabWorld.LAYER_ROCK)
+		_check(lab.material_hardness(dirt_at.x, dirt_at.y) == 3,
+				"camadas: rocha tem dureza 3")
+
 	if _fails.is_empty():
 		print("LABTEST_PASS ", _count, " verificacoes")
 		get_tree().quit(0)

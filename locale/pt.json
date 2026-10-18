@@ -223,6 +223,8 @@
 
   "item.wood": "Madeira",
   "item.soil": "Solo",
+  "item.sand": "Areia",
+  "item.shovel": "Pá",
   "item.stone": "Pedra",
   "item.flint": "Sílex",
   "item.fiber": "Fibra",

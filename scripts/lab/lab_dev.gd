@@ -14,6 +14,11 @@ var _status: Label
 var _fly_btn: Button
 var _labels_on := false
 var _dig_timer := 0.0
+var tool := "hand"
+var _tool_slots: Dictionary = {}
+var _mat_label: Label
+var _aim_timer := 0.0
+var _denial_timer := 0.0
 
 
 func setup(p_scene: LabScene) -> void:
@@ -24,12 +29,22 @@ func _ready() -> void:
 	layer = 20
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	_status = Label.new()
-	_status.position = Vector2(12, 10)
-	_status.add_theme_font_size_override("font_size", 15)
-	_status.text = "LAB DEV — LMB cavar · RMB aterrar/reconstruir · F voar · F1 painel · E partir"
+	_status.position = Vector2(10, 8)
+	_status.add_theme_font_size_override("font_size", 12)
+	_status.add_theme_color_override("font_color", Color(1, 1, 1, 0.75))
 	add_child(_status)
+	# mira: um ponto discreto no centro — o material le-se do chao, a mira
+	# so diz onde a ferramenta vai bater.
+	var cross := Label.new()
+	cross.text = "·"
+	cross.add_theme_font_size_override("font_size", 22)
+	cross.set_anchors_preset(Control.PRESET_CENTER)
+	cross.position = Vector2(-2, -14)
+	add_child(cross)
+	_build_toolbar()
 	_build_panel()
 	_update_status()
+	_update_tool_ui()
 
 
 func _build_panel() -> void:
@@ -55,6 +70,65 @@ func _build_panel() -> void:
 	vbox.add_child(_inv_label)
 	_panel.visible = false
 	add_child(_panel)
+
+
+## Barra de ferramentas compacta (fundo-centro): 3 slots + material sob a
+## mira. Pequena de proposito — o laboratorio le-se no mundo, nao no HUD.
+func _build_toolbar() -> void:
+	var bar := PanelContainer.new()
+	bar.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	bar.position = Vector2(-170, -58)
+	bar.custom_minimum_size = Vector2(340, 0)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.05, 0.07, 0.10, 0.62)
+	sb.corner_radius_top_left = 8
+	sb.corner_radius_top_right = 8
+	sb.corner_radius_bottom_left = 8
+	sb.corner_radius_bottom_right = 8
+	sb.content_margin_left = 10
+	sb.content_margin_right = 10
+	sb.content_margin_top = 6
+	sb.content_margin_bottom = 6
+	bar.add_theme_stylebox_override("panel", sb)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 3)
+	bar.add_child(v)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_child(row)
+	for i in LabScene.TOOL_ORDER.size():
+		var t := LabScene.TOOL_ORDER[i]
+		var b := Button.new()
+		b.text = "%d %s" % [i + 1, str(LabScene.TOOLS[t]["label"])]
+		b.add_theme_font_size_override("font_size", 12)
+		b.pressed.connect(func() -> void: _set_tool(t))
+		row.add_child(b)
+		_tool_slots[t] = b
+	_mat_label = Label.new()
+	_mat_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_mat_label.add_theme_font_size_override("font_size", 11)
+	_mat_label.add_theme_color_override("font_color", Color(1, 1, 1, 0.8))
+	_mat_label.text = "—"
+	v.add_child(_mat_label)
+	add_child(bar)
+
+
+func _set_tool(t: String) -> void:
+	tool = t
+	_update_tool_ui()
+
+
+func _cycle_tool(dir: int) -> void:
+	var i := LabScene.TOOL_ORDER.find(tool)
+	i = posmod(i + dir, LabScene.TOOL_ORDER.size())
+	_set_tool(LabScene.TOOL_ORDER[i])
+
+
+func _update_tool_ui() -> void:
+	for t in _tool_slots.keys():
+		var b := _tool_slots[t] as Button
+		b.modulate = Color(1.25, 1.15, 0.75) if t == tool else Color(0.75, 0.75, 0.8)
 
 
 func _add_button(parent: Container, text: String, fn: Callable) -> Button:
@@ -107,10 +181,8 @@ func _refresh_inv() -> void:
 
 
 func _update_status() -> void:
-	if scene != null and scene.player != null and scene.player.dev_fly:
-		_status.text = "LAB DEV [VOAR] — LMB cavar · RMB aterrar · F andar · F1 painel"
-	else:
-		_status.text = "LAB DEV — LMB cavar · RMB aterrar/reconstruir · F voar · F1 painel · E partir"
+	var fly := scene != null and scene.player != null and scene.player.dev_fly
+	_status.text = "LAB DEV%s · LMB escavar · RMB aterrar · roda/1-3 ferramenta · F voar · F1 painel" % (" [VOAR]" if fly else "")
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -125,22 +197,57 @@ func _unhandled_input(event: InputEvent) -> void:
 				_toggle_fly()
 			KEY_E:
 				_strike_prop()
+			KEY_1:
+				_set_tool("hand")
+			KEY_2:
+				_set_tool("shovel")
+			KEY_3:
+				_set_tool("pickaxe")
 	if event is InputEventMouseButton and event.pressed and _panel.visible == false:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_cycle_tool(1)
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_cycle_tool(-1)
 		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 func _process(delta: float) -> void:
 	_dig_timer -= delta
+	_aim_timer -= delta
+	if _denial_timer > 0.0:
+		_denial_timer -= delta
+		if _denial_timer <= 0.0:
+			_update_tool_ui()
 	if _panel.visible or scene == null or scene.player == null:
 		return
 	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		return
+	if _aim_timer <= 0.0:
+		_aim_timer = 0.12
+		_update_aim_label()
 	var digging := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 	var filling := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
 	if (digging or filling) and _dig_timer <= 0.0:
-		_dig_timer = 0.16
+		_dig_timer = float(LabScene.TOOLS[tool]["interval"])
 		_apply_tool(filling)
+
+
+## Material sob a mira (leitura dev): nome + dureza + se a ferramenta
+## atual entra. No jogo isto sera efeito (som/poeira/recuo), nao texto.
+func _update_aim_label() -> void:
+	if _mat_label == null:
+		return
+	var hit := _ray_hit(36.0)
+	if hit.is_empty():
+		_mat_label.text = "—"
+		return
+	var at: Vector3 = hit.get("position", Vector3.ZERO)
+	var mat := scene.lab.material_at(at.x, at.z)
+	var ok := LabScene.tool_can(tool, mat, scene.lab.depth_dug(at.x, at.z))
+	_mat_label.text = "%s · dureza %d · %s" % [
+		LabWorld.material_name(mat), scene.lab.material_hardness(at.x, at.z),
+		"a %s entra" % str(LabScene.TOOLS[tool]["label"]) if ok else "a %s NÃO entra" % str(LabScene.TOOLS[tool]["label"])]
 
 
 func _ray_hit(max_dist: float) -> Dictionary:
@@ -167,15 +274,30 @@ func _apply_tool(fill: bool) -> void:
 		return
 	var at: Vector3 = hit.get("position", Vector3.ZERO)
 	var before := scene.lab.height(at.x, at.z)
-	if fill:
-		scene.lab.fill(at.x, at.z, 4.5, 0.9)
-	else:
-		var soil: float = scene.lab.dig(at.x, at.z, 4.5, 0.9)
-		if soil > 12.0:
-			DroppedItem.spawn(scene, "soil", 1, at + Vector3(0, 1.0, 0), scene.inv, scene.player)
-	scene.rebuild_area(at.x, at.z, 9.0)
-	_dust(at, fill)
-	print("LABDIG ", "fill" if fill else "dig", " em ", at, " altura ", before, " -> ", scene.lab.height(at.x, at.z))
+	var res: Dictionary = scene.tool_dig(tool, at.x, at.z, fill)
+	if not bool(res.get("ok", false)):
+		_denial(at, int(res.get("material", LabWorld.M_DIRT)))
+		return
+	var removed := float(res.get("removed", 0.0))
+	if not fill and removed > 3.0:
+		DroppedItem.spawn(scene, str(res.get("yield_item", "soil")), 1,
+				at + Vector3(0, 1.0, 0), scene.inv, scene.player)
+	_dust(at, fill, int(res.get("material", LabWorld.M_DIRT)))
+	print("LABDIG ", tool, " ", "fill" if fill else "dig", " em ", at,
+			" altura ", before, " -> ", scene.lab.height(at.x, at.z),
+			" material ", res.get("material"))
+
+
+## Ferramenta errada = EFEITO, nao sermão: slot pisca vermelho, poeira
+## cinzenta seca (nada cedeu) e um "tink" visual na barra. A leitura
+## textual vive só na etiqueta dev da mira.
+func _denial(at: Vector3, mat: int) -> void:
+	_denial_timer = 0.45
+	var b := _tool_slots.get(tool) as Button
+	if b != null:
+		b.modulate = Color(1.6, 0.45, 0.4)
+	_dust(at, false, mat, true)
+	print("LABDENY ", tool, " em ", LabWorld.material_name(mat))
 
 
 func _strike_prop() -> void:
@@ -200,12 +322,12 @@ func _strike_prop() -> void:
 	print("LABHARVEST ", kind, " -> ", yields)
 
 
-func _dust(at: Vector3, fill: bool) -> void:
+func _dust(at: Vector3, fill: bool, mat: int = LabWorld.M_DIRT, denied: bool = false) -> void:
 	var p := CPUParticles3D.new()
-	p.amount = 26
+	p.amount = 10 if denied else 26
 	p.one_shot = true
 	p.explosiveness = 0.92
-	p.lifetime = 0.65
+	p.lifetime = 0.4 if denied else 0.65
 	p.direction = Vector3(0, 1, 0)
 	p.spread = 42.0
 	p.initial_velocity_min = 1.6
@@ -213,7 +335,14 @@ func _dust(at: Vector3, fill: bool) -> void:
 	p.gravity = Vector3(0, -5.5, 0)
 	p.scale_amount_min = 0.05
 	p.scale_amount_max = 0.14
-	p.color = Color(0.55, 0.42, 0.28) if not fill else Color(0.62, 0.52, 0.36)
+	# a poeira DENUNCIA o material: areia palida, terra castanha, rocha cinzenta
+	if denied:
+		p.color = Color(0.62, 0.62, 0.64)
+	elif fill:
+		p.color = Color(0.62, 0.52, 0.36)
+	else:
+		p.color = [Color(0.85, 0.74, 0.50), Color(0.52, 0.39, 0.24),
+				Color(0.58, 0.58, 0.62)][clampi(mat, 0, 2)]
 	scene.add_child(p)
 	p.global_position = at + Vector3(0, 0.25, 0)
 	p.emitting = true

@@ -375,3 +375,21 @@ céu e testes estão no marco mais recente no topo e em `docs/AUDIT_2026-10-14.m
 - **UNKNOWN / NOT TESTED:** build web, execução interativa, aparência visual em Forward+ e
   Compatibility, desempenho e audição da mistura musical. O teste headless não comprova
   esses resultados.
+
+## Escavação por camadas + ferramentas (2026-10-18, pós-teste do dono)
+
+- Raio de escavação reduzido (4,5 m → mão 1,5 / pá 2,3 / picareta 1,3 m),
+  perfil co-seno sem degrau na orla.
+- Materiais geológicos (`LabWorld.material_at`): areia (margem/leito),
+  terra, rocha (afloramento ou >2,3 m escavados); dureza 1–3; rendimento
+  areia→sand, terra→soil, rocha→stone. Itens novos: `sand`, `shovel`
+  (+ receita `stone_shovel` em Db e data/recipes.json, locales).
+- Ferramentas com regras: mão não parte rocha nem terra compacta; pá
+  inútil na rocha; picareta é a única na rocha. Negação por efeito.
+- Água refeita: mesma grelha do terreno + recorte pelo campo assinado
+  (nível−altura) — costa soldada, sem serrilhado/triângulos órfãos.
+- Nada flutua: `reseat_props` assenta props/estações; árvore sem ≥1 m de
+  chão cai com física e vira drops da espécie.
+- HUD dev compacto: barra de ferramentas (roda/1-3), material sob a mira.
+- **Verificação: LABSCENE_PASS 20/20, LABTEST_PASS 18/18, selftest
+  245 ok / 0 falhas / 30 saltadas.** PNG: `docs/shots/09_lab_3d.png`.

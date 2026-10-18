@@ -102,6 +102,17 @@
       "station": "workbench"
     },
     {
+      "id": "stone_shovel",
+      "result": "shovel",
+      "qty": 1,
+      "needs": {
+        "stick": 2,
+        "stone": 2,
+        "fiber": 1
+      },
+      "station": "workbench"
+    },
+    {
       "id": "bottle",
       "result": "bottle",
       "qty": 1,

@@ -29,6 +29,50 @@ const SPECIES_KIND := {
 	"oak": "tree_oak", "birch": "tree_birch", "sakura": "tree_sakura",
 	"pine": "tree_pine", "willow": "tree_willow",
 }
+# ── ferramentas de escavacao ───────────────────────────────────────────────
+# A diferenca entre ferramentas NAO e so velocidade: e raio x profundidade
+# x ritmo x MATERIAL que cada uma consegue atacar (desenho classico:
+# Deep Rock hardness 1-3 / Astroneer dureza por profundidade).
+#   mao ..... raio curto, superficial, so areia e topsoil solto
+#   pa ...... raio largo, ritmo rapido, terra/areia — inutil na rocha
+#   picareta  raio curto, ritmo lento, e a unica que parte rocha
+const TOOLS := {
+	"hand": {"label": "Mão", "radius": 1.5, "depth": 0.20, "interval": 0.22},
+	"shovel": {"label": "Pá", "radius": 2.3, "depth": 0.38, "interval": 0.14},
+	"pickaxe": {"label": "Picareta", "radius": 1.3, "depth": 0.30, "interval": 0.28},
+}
+const TOOL_ORDER: Array[String] = ["hand", "shovel", "pickaxe"]
+const YIELD_ITEM := {0: "sand", 1: "soil", 2: "stone"}  # M_SAND/M_DIRT/M_ROCK
+
+
+static func tool_can(tool: String, mat: int, dug_depth: float) -> bool:
+	if mat == LabWorld.M_ROCK:
+		return tool == "pickaxe"
+	if mat == LabWorld.M_DIRT and dug_depth > LabWorld.LAYER_TOP:
+		return tool != "hand"  # terra compacta: mao nao entra
+	return true
+
+
+## Escavar/aterrar COM ferramenta num ponto do mundo. Devolve o que
+## aconteceu (material, volume, rendimento) para HUD/drops/testes lerem.
+## Quem chama nao decide regras: a identificacao do material vive aqui.
+func tool_dig(tool: String, x: float, z: float, fill_mode: bool = false) -> Dictionary:
+	var prof: Dictionary = TOOLS.get(tool, TOOLS["hand"])
+	var mat := lab.material_at(x, z)
+	if fill_mode:
+		if tool == "pickaxe":
+			return {"ok": false, "material": mat, "reason": "fill_pickaxe"}
+		var added: float = lab.fill(x, z, float(prof["radius"]), float(prof["depth"]))
+		rebuild_area(x, z, float(prof["radius"]) + 6.0)
+		return {"ok": true, "material": mat, "removed": -added, "yield_item": ""}
+	if not tool_can(tool, mat, lab.depth_dug(x, z)):
+		return {"ok": false, "material": mat, "reason": "tool"}
+	var removed: float = lab.dig(x, z, float(prof["radius"]), float(prof["depth"]))
+	rebuild_area(x, z, float(prof["radius"]) + 6.0)
+	return {"ok": true, "material": mat, "removed": removed,
+			"yield_item": str(YIELD_ITEM.get(mat, "soil"))}
+
+
 const SPECIES_COLOR := {
 	"oak": Color(0.16, 0.42, 0.20), "birch": Color(0.45, 0.62, 0.35),
 	"sakura": Color(0.92, 0.62, 0.72), "pine": Color(0.10, 0.32, 0.24),
@@ -135,6 +179,7 @@ func rebuild_area(x: float, z: float, radius_m: float) -> void:
 		for ci in range(ci0, ci1 + 1):
 			_rebuild_chunk(ci, cj)
 	_build_water()
+	reseat_props(x, z, radius_m + 10.0)
 
 
 func _build_water() -> void:
@@ -156,6 +201,66 @@ func _build_water() -> void:
 	_water_inst.material_override = mat
 	_water_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_water_inst)
+
+
+# ── objectos assentam ou caem: nada flutua ─────────────────────────────────
+# Depois de qualquer deformacao local, cada prop na area compara o chao
+# onde nasceu (meta lab_ground_y) com o chao novo:
+#   desceu pouco  -> assenta (y acompanha a malha)
+#   arvore perdeu >= 1 m de chao -> CAI (rotacao fisica a volta da base)
+#   e vira drops da especie; pedra apenas assenta/rola para o novo fundo.
+# So os props da area tocada sao visitados — custo proporcional ao buraco.
+func reseat_props(x: float, z: float, radius_m: float) -> void:
+	if _props_root != null:
+		for node in _props_root.get_children():
+			var body := node as Node3D
+			if body == null or body.has_meta("lab_felled"):
+				continue
+			var dx := body.global_position.x - x
+			var dz := body.global_position.z - z
+			if dx * dx + dz * dz > radius_m * radius_m:
+				continue
+			var new_h := lab.height(body.global_position.x, body.global_position.z)
+			var ground := float(body.get_meta("lab_ground_y", new_h))
+			var kind := str(body.get_meta("lab_kind", ""))
+			if kind.begins_with("tree") and ground - new_h >= 1.0:
+				_fell_tree(body)
+				continue
+			body.position.y = new_h + (0.3 if kind == "rock" else 0.0)
+			body.set_meta("lab_ground_y", new_h)
+	if _stations_root != null:
+		for node in _stations_root.get_children():
+			var n3 := node as Node3D
+			if n3 == null or not n3.has_meta("lab_station_off"):
+				continue
+			var dx := n3.global_position.x - x
+			var dz := n3.global_position.z - z
+			if dx * dx + dz * dz > radius_m * radius_m:
+				continue
+			n3.position.y = lab.height(n3.global_position.x, n3.global_position.z) \
+					+ float(n3.get_meta("lab_station_off"))
+
+
+## A arvore cai: rotacao com ease-in (acelera como peso real) a volta da
+## base, e no fim vira os drops da sua especie — o tronco colhivel do
+## bosque (H3) nasce desta mesma queda no mundo grande.
+func _fell_tree(body: Node3D) -> void:
+	body.set_meta("lab_felled", true)
+	var kind := str(body.get_meta("lab_kind", ""))
+	var at := body.global_position + Vector3(0, 0.8, 0)
+	var yields: Dictionary = Db.HARVEST.get(kind, {}).get("yields", {})
+	# direcao de queda determinista pela posicao (sem sorteio solto)
+	var dir := 1.0 if int(body.global_position.x * 3.0 + body.global_position.z) % 2 == 0 else -1.0
+	var tween := create_tween()
+	tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tween.tween_property(body, "rotation:z", dir * 1.52, 0.85)
+	tween.tween_callback(func() -> void:
+		if is_instance_valid(body):
+			body.queue_free())
+	if inv != null:
+		for id in yields.keys():
+			DroppedItem.spawn(self, str(id), int(yields[id]), at, inv, player)
+	print("LABFELL ", kind, " em ", body.global_position, " -> ", yields)
 
 
 # ── vegetação e pedras: nós reais, colhíveis pelo raycast do LabDev ───────
@@ -200,6 +305,7 @@ func _add_tree(x: float, z: float, species: String) -> void:
 	body.collision_mask = 0
 	body.set_meta("lab_species", species)
 	body.set_meta("lab_kind", SPECIES_KIND[species])
+	body.set_meta("lab_ground_y", h)
 	var shape := CollisionShape3D.new()
 	var cyl := CylinderShape3D.new()
 	cyl.radius = 0.42
@@ -241,6 +347,7 @@ func _add_rock(x: float, z: float) -> void:
 	body.collision_mask = 0
 	body.set_meta("lab_species", "rock")
 	body.set_meta("lab_kind", "rock")
+	body.set_meta("lab_ground_y", h)
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
 	box.size = Vector3(1.4, 1.1, 1.2)
@@ -281,6 +388,7 @@ func _build_stations() -> void:
 		mat.albedo_color = palette[n % palette.size()]
 		disc.material_override = mat
 		disc.name = "Station_" + str(st.get("id", n))
+		disc.set_meta("lab_station_off", 0.10)
 		_stations_root.add_child(disc)
 		var label := Label3D.new()
 		label.name = "StationLabel"
@@ -291,6 +399,7 @@ func _build_stations() -> void:
 		label.modulate = Color(1, 1, 1, 0.95)
 		label.visible = false
 		label.set_meta("lab_dev_label", true)
+		label.set_meta("lab_station_off", 3.4)
 		_stations_root.add_child(label)
 		n += 1
 

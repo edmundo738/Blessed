@@ -105,24 +105,38 @@ static func _color_at(lab: LabWorld, x: float, z: float, h: float) -> Color:
 	var sl: float = s["slope"]
 	if sl > 0.45:
 		c = c.lerp(BIOME_COLORS[5], clampf((sl - 0.45) / 0.5, 0.0, 0.75))
+	# CAMADAS EXPOSTAS: onde ja se escavou, a parede do buraco le-se por
+	# estratos (a mesma profundidade que decide o material/ferramenta):
+	# topsoil escuro -> subsolo ocre -> rocha cinzenta.
+	var dug := lab.depth_dug(x, z)
+	if dug > 0.12:
+		var layer := Color(0.40, 0.30, 0.19)
+		if dug > LabWorld.LAYER_ROCK:
+			layer = Color(0.44, 0.44, 0.47)
+		elif dug > LabWorld.LAYER_TOP:
+			layer = Color(0.56, 0.43, 0.27)
+		c = c.lerp(layer, clampf((dug - 0.12) / 0.5, 0.0, 0.9))
 	# humidade escurece o solo: o campo ve-se sem legenda
 	c = c.lerp(c * 0.72, float(s["moisture"]) * 0.35)
 	return c
 
 
+## Agua: malha sobre OS MESMOS pontos de grelha do terreno, com os
+## triangulos RECORTADOS pelo campo assinado (nivel - altura), como o
+## mundo principal faz em chunk.gd (_add_clipped_water_triangle).
+## A versao anterior emitia um quadrado plano por celula: na costa, o
+## quadrado ou cobria terra seca ou deixava triangulos orfaos serrilhados.
+## Com o recorte, a linha de costa nasce onde nivel == altura ao longo da
+## aresta — terra e agua partilham a mesma amostragem e soldam.
 static func build_water(lab: LabWorld) -> Dictionary:
-	var verts := PackedVector3Array()
-	var normals := PackedVector3Array()
-	var colors := PackedColorArray()
-	var idx := PackedInt32Array()
-	var half := LabWorld.CELL * 0.5
-	var base := 0
-	for j in LabWorld.N:
-		for i in LabWorld.N:
+	var n := LabWorld.N
+	var pts: Array[Dictionary] = []
+	pts.resize(n * n)
+	for j in n:
+		for i in n:
 			var p := lab.grid_pos(i, j)
 			var s := lab.sample(p.x, p.y)
-			if int(s["water_kind"]) == 0:
-				continue
+			var h: float = s["height"]
 			var wl: float = s["water_level"]
 			var kind := int(s["water_kind"])
 			var c := Color(0.15, 0.45, 0.75, 0.82)
@@ -130,22 +144,72 @@ static func build_water(lab: LabWorld) -> Dictionary:
 				c = Color(0.25, 0.65, 0.85, 0.82)
 			elif kind == 3:
 				c = Color(0.20, 0.55, 0.70, 0.82)
-			var corners := [
-				Vector3(p.x - half, wl, p.y - half), Vector3(p.x + half, wl, p.y - half),
-				Vector3(p.x - half, wl, p.y + half), Vector3(p.x + half, wl, p.y + half)]
-			for v in corners:
-				verts.append(v)
-				normals.append(Vector3.UP)
-				colors.append(c)
-			# Mesma convencao do terreno: cantos 0=(-,-) 1=(+,-) 2=(-,+)
-			# 3=(+,+); frente (de cima) = [0,1,3 / 0,3,2]. A ordem anterior
-			# so era visivel por baixo.
-			idx.append_array([base, base + 1, base + 3, base, base + 3, base + 2])
-			base += 4
+			var signed := -1.0
+			var level := h - 1.0
+			if wl > -50000.0:
+				signed = wl - h
+				level = wl
+			pts[j * n + i] = {"xz": p, "level": level, "signed": signed, "col": c}
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	var idx := PackedInt32Array()
+	for j in n - 1:
+		for i in n - 1:
+			var a := j * n + i
+			var b := a + 1
+			var c := a + n
+			var d := a + n + 1
+			_clip_water_tri(pts, [a, b, d], verts, normals, colors, idx)
+			_clip_water_tri(pts, [a, d, c], verts, normals, colors, idx)
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
 	arrays[Mesh.ARRAY_NORMAL] = normals
 	arrays[Mesh.ARRAY_COLOR] = colors
 	arrays[Mesh.ARRAY_INDEX] = idx
-	return {"arrays": arrays, "quads": base / 4}
+	return {"arrays": arrays, "quads": idx.size() / 6}
+
+
+static func _water_vert(pts: Array, k: int) -> Dictionary:
+	var p: Dictionary = pts[k]
+	var xz: Vector2 = p["xz"]
+	return {"pos": Vector3(xz.x, float(p["level"]), xz.y),
+			"signed": float(p["signed"]), "col": p["col"]}
+
+
+## Recorta um triangulo pelo semiplano molhado (signed > 0), interpolando
+## posicao/nivel/cor nas arestas que cruzam a costa. Preserva a winding
+## de entrada (a,b,d / a,d,c — frontal de cima, convencao do repo).
+static func _clip_water_tri(pts: Array, tri: Array, verts: PackedVector3Array,
+		normals: PackedVector3Array, colors: PackedColorArray,
+		idx: PackedInt32Array) -> void:
+	var poly: Array[Dictionary] = []
+	for k in tri:
+		poly.append(_water_vert(pts, int(k)))
+	var clipped: Array[Dictionary] = []
+	for t in 3:
+		var cur: Dictionary = poly[t]
+		var nxt: Dictionary = poly[(t + 1) % 3]
+		var cur_in := float(cur["signed"]) > 0.0
+		var nxt_in := float(nxt["signed"]) > 0.0
+		if cur_in:
+			clipped.append(cur)
+		if cur_in != nxt_in:
+			var sa := float(cur["signed"])
+			var sb := float(nxt["signed"])
+			var f := sa / (sa - sb)
+			clipped.append({
+				"pos": (cur["pos"] as Vector3).lerp(nxt["pos"], f),
+				"signed": 0.0,
+				"col": (cur["col"] as Color).lerp(nxt["col"], f),
+			})
+	if clipped.size() < 3:
+		return
+	var base := verts.size()
+	for v in clipped:
+		verts.append(v["pos"])
+		normals.append(Vector3.UP)
+		colors.append(v["col"])
+	for t in range(1, clipped.size() - 1):
+		idx.append_array([base, base + t, base + t + 1])

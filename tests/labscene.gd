@@ -85,6 +85,51 @@ func _ready() -> void:
 	scene.player._move_fly()
 	_check(scene.player.velocity.length() >= 0.0 and scene.player.dev_fly, "modo deus: voo ativo")
 
+	# ferramentas: raios REDUZIDOS face ao pincel antigo de 4.5 m
+	_check(float(LabScene.TOOLS["shovel"]["radius"]) <= 2.5
+			and float(LabScene.TOOLS["hand"]["radius"]) <= 1.6
+			and float(LabScene.TOOLS["pickaxe"]["radius"]) <= 1.4,
+			"ferramentas: raios pequenos (mão/pá/picareta)")
+
+	# regras de material: a mão NÃO escava rocha; a picareta sim
+	var rock_at := Vector2.INF
+	for j in range(4, LabWorld.N - 4):
+		for i in range(4, LabWorld.N - 4):
+			var p := scene.lab.grid_pos(i, j)
+			if scene.lab.material_at(p.x, p.y) == LabWorld.M_ROCK:
+				rock_at = p
+				break
+		if rock_at != Vector2.INF:
+			break
+	_check(rock_at != Vector2.INF, "existe afloramento de ROCHA para testar ferramentas")
+	if rock_at != Vector2.INF:
+		var h_rock := scene.lab.height(rock_at.x, rock_at.y)
+		var denied: Dictionary = scene.tool_dig("hand", rock_at.x, rock_at.y)
+		_check(not bool(denied["ok"]) and absf(scene.lab.height(rock_at.x, rock_at.y) - h_rock) < 0.01,
+				"mão NÃO parte rocha (sem picareta, sem escavar)")
+		var mined: Dictionary = scene.tool_dig("pickaxe", rock_at.x, rock_at.y)
+		_check(bool(mined["ok"]) and scene.lab.height(rock_at.x, rock_at.y) < h_rock - 0.05
+				and str(mined["yield_item"]) == "stone",
+				"picareta parte rocha e rende stone")
+
+	# objetos nao flutuam: escavar debaixo de uma arvore faz-la cair
+	var tree_body: Node3D = null
+	for child in scene.get_node("LabProps").get_children():
+		var b := child as Node3D
+		if b != null and str(b.get_meta("lab_kind", "")).begins_with("tree"):
+			tree_body = b
+			break
+	_check(tree_body != null, "existe árvore para o teste de queda")
+	if tree_body != null:
+		var tp := tree_body.global_position
+		for n in 4:
+			scene.lab.dig(tp.x, tp.z, 2.0, 1.2)
+			scene.rebuild_area(tp.x, tp.z, 8.0)
+			if tree_body.has_meta("lab_felled"):
+				break
+		_check(tree_body.has_meta("lab_felled"),
+				"escavar debaixo da árvore: ela CAI (não flutua)")
+
 	# grelha para o PNG da etapa (render por software a partir dos dados reais)
 	var bytes := PackedByteArray()
 	bytes.resize(LabWorld.N * LabWorld.N * 2)
