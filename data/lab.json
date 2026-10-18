@@ -1,0 +1,28 @@
+{
+  "_comment": "Laboratorio de mecanicas: mundo finito 400x400 m rodeado de oceano. Novos sistemas provam-se aqui, por estacoes, antes de entrarem no mundo grande. Nada disto substitui data/terrain.json — vive ao lado.",
+  "size_m": 400.0,
+  "cell_m": 5.0,
+  "sea_level": 0.0,
+  "seed": 1337,
+  "mountain": { "x": -80.0, "z": -70.0, "height": 34.0, "radius": 62.0 },
+  "lake_basin": { "x": 85.0, "z": 78.0, "depth": 5.5, "radius": 30.0 },
+  "grove": { "x": 55.0, "z": -55.0, "radius": 42.0 },
+  "stream_min_accum": 14.0,
+  "stations": [
+    { "id": "spawn_meadow", "label": "Nascer / prado", "x": 10.0, "z": 10.0, "tests": "andar, recolher plantas" },
+    { "id": "grove_3species", "label": "Bosque 3 especies", "x": 55.0, "z": -55.0, "tests": "carvalho/betula/sakura agrupam; cortar -> tronco da mesma especie -> madeira -> craft" },
+    { "id": "quarry", "label": "Pedreira", "x": -30.0, "z": 45.0, "tests": "pedra com picareta -> stone/flint -> craft" },
+    { "id": "dig_pit", "label": "Zona de escavacao", "x": 30.0, "z": 30.0, "tests": "cavar -> solo sai, buraco fica, abaixo do nivel da agua enche" },
+    { "id": "build_pad", "label": "Clareira de construcao", "x": -5.0, "z": -20.0, "tests": "fundacao em declive, snap, suporte, preview" },
+    { "id": "riverbank", "label": "Margem do rio", "x": -40.0, "z": -30.0, "tests": "rio desce da montanha, corrente, beber/encher, salgueiro na margem" },
+    { "id": "lake", "label": "Lago", "x": 85.0, "z": 78.0, "tests": "bacia com entrada, agua parada, lama na margem" },
+    { "id": "beach", "label": "Praia / oceano", "x": 150.0, "z": 0.0, "tests": "ilha dentro do mar, areia onde a costa e suave, agua salgada nao se bebe" }
+  ],
+  "loops": [
+    "recolha: arvore->madeira->machado/mesa->construcao; pedra->picareta->minerio",
+    "escavacao: cavar->solo->aterro/barragem muda agua local",
+    "craft: recursos das estacoes fecham receitas existentes em Db sem texto de solucao",
+    "construcao: fundacao adapta-se ao declive em vez de 'cannot place here'",
+    "geracao: montanha->chuva->D8->rio/lago->solo humido->especies por afinidade"
+  ]
+}
