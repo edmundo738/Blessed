@@ -6,7 +6,28 @@
 > O histórico de auditoria abaixo preserva resultados antigos; quando diferirem, prevalecem
 > este marco mais recente e `docs/AUDIT_2026-10-14.md`.
 
-## Marco mais recente — água, luz local e relva (2026-10-15)
+## Reconstrução — Etapa 0+1: auditoria + LabWorld (2026-10-18)
+
+Direção nova (documento-mestre do dono): não presumir que o código atual está
+certo; reconstruir o núcleo do mundo por etapas, sem apagar o gameplay que joga.
+- **Etapa 0:** `docs/CURRENT_ARCHITECTURE.md`, `docs/CURRENT_DEPENDENCIES.md`,
+  `docs/WORLD_RECONSTRUCTION_AUDIT.md` — Terrain faz tudo, água é rio-seno/costa-seno,
+  vegetação é scatter, construção não tem sistema, chão não se escava.
+- **Etapa 1:** `scripts/world/lab_world.gd` (`LabWorld`) + `data/lab.json` +
+  `tests/labtest.gd` + `tools/lab_preview.py` + `docs/LAB_WORLD.md`.
+  Laboratório finito 400×400 m rodeado de oceano: relevo→clima→D8→rios que
+  escavam o leito/lagos→humidade→bioma→espécies por afinidade; `dig()` grava
+  deltas e recompõe a água. 8 estações de mecânicas (recolha, escavação, craft,
+  construção) declaradas em dados. Mundo grande intacto.
+- **Verificação:** mapa de campos em `docs/shots/08_lab_world.png` (ilha, rio
+  pelo vale, lago, biomas, estações). `labtest` corre com `-- labtest` no Godot;
+  neste sandbox não há binário do motor (release bloqueada), por isso a corrida
+  GDScript fica por confirmar no CI/local — declarado, não fingido.
+- **Seguinte:** render 3D do laboratório + nascer nele; depois colher/cortar com
+  tronco da mesma espécie, escavação jogável e construção com fundação — uma
+  mecânica de cada vez, provada na estação antes de ir para o mundo grande.
+
+## Marco anterior — água, luz local e relva (2026-10-15)
 
 - Água usa shader opaco de dupla face, ondas/espuma estilizadas e paleta diferente
   debaixo da superfície; o tipo mar/rio agora é passado ao shader corretamente.
