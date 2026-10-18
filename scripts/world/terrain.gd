@@ -66,11 +66,6 @@ var n_hills: FastNoiseLite
 var n_mesa: FastNoiseLite
 var n_dune: FastNoiseLite
 var n_crag: FastNoiseLite
-## Campos que ligam composição da rocha, relevo e drenagem.
-var geology: Geology
-## WFC dispõe as ênfases ecológicas em regiões coerentes. O resultado nunca
-## substitui altitude, clima, costa ou água; apenas inclina os pesos existentes.
-var region_grammar: RegionGrammar
 ## O sistema de água (BHFS). Construído no `_init`, depois do relevo existir.
 var water: Water
 var _coast_axis := Vector2.RIGHT
@@ -102,14 +97,10 @@ func _init(p_seed: int = 1) -> void:
 	n_dune = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.011, 2, 0.5, 2.0, p_seed + 15)
 	n_crag = _noise(FastNoiseLite.TYPE_SIMPLEX, 0.0085, 3, 0.5, 2.1, p_seed + 16)
 	n_crag.fractal_type = FastNoiseLite.FRACTAL_RIDGED
-	geology = Geology.new(p_seed)
-	# A hidrologia nasce apenas do relevo bruto e da geologia, nunca do WFC.
-	# Depois de pronta, a gramática regional pode usar os rios reais como dados,
-	# sem mover os cursos nem deixar biomas redefinirem a costa.
+	# A água vem depois do relevo: a rede de drenagem é calculada uma vez e o
+	# resto do mundo (chunks, jogador, colisões) consulta-a por interpolação.
 	water = Water.new()
 	water.build(self, village_center())
-	region_grammar = RegionGrammar.new()
-	region_grammar.build(self, village_center())
 
 
 func _noise(t: FastNoiseLite.NoiseType, freq: float, oct: int, gain: float,
@@ -181,8 +172,8 @@ func relief(x: float, z: float) -> float:
 		h = lerpf(h, village_height(), w * 0.9)
 
 	# Costa de arranque garantida: um mar amplo nasce perto da aldeia e ocupa
-	# todo o lado a jusante da costa. A linha varia por escala para formar baías
-	# e promontórios, sem criar bolsões de mar no interior.
+	# todo o lado a jusante da costa. O ruído só quebra a linha da costa; não
+	# decide onde há água, por isso o mar não vira bolsões soltos.
 	var coords := _starter_coords(x, z)
 	var along := coords.x
 	var across := coords.y
@@ -215,10 +206,7 @@ func _starter_coords(x: float, z: float) -> Vector2:
 
 
 func _coastline(across: float) -> float:
-	var bay := n_mask.get_noise_2d(across, float(seed_value) * 83.7) * 48.0
-	var headland := n_warp.get_noise_2d(across + 201.0, float(seed_value) * 17.3) * 15.0
-	return 142.0 + bay + headland \
-		+ sin(across * 0.0052 + float(seed_value) * 0.013) * 24.0 \
+	return 142.0 + sin(across * 0.0052 + float(seed_value) * 0.013) * 24.0 \
 		+ sin(across * 0.013 + float(seed_value) * 0.027) * 9.0
 
 
@@ -252,40 +240,6 @@ func water_sample(x: float, z: float) -> Dictionary:
 		if not s.is_empty():
 			return s
 	return {}
-
-
-## Escoamento superficial: chuva maior em zonas húmidas, parte infiltra em
-## calcário/fraturas. A hidrologia usa este peso ao acumular células de drenagem.
-func runoff_factor(x: float, z: float) -> float:
-	var wetness := climate(x, z).y
-	var permeability := geology.permeability_at(x, z) if geology != null else 0.35
-	return clampf(0.86 + wetness * 0.14 - permeability * 0.18, 0.55, 1.0)
-
-
-## Consulta unificada para sistemas que precisam de contexto completo. É uma
-## API de gameplay/editor; a geração de vértices continua a usar amostras
-## escalares para evitar alocar dicionários em milhares de pontos.
-func environment_at(x: float, z: float) -> Dictionary:
-	var h := height(x, z)
-	var sl := slope(x, z)
-	var climate_value := climate(x, z)
-	var weights := PackedFloat32Array()
-	weights.resize(BIOME_COUNT)
-	biome_weights_s(x, z, h, sl, weights)
-	var water_value := water_sample(x, z)
-	var geology_value := geology.sample(x, z) if geology != null else {}
-	return {
-		"position": Vector3(x, h, z),
-		"height": h,
-		"slope": sl,
-		"climate": {"temperature": climate_value.x, "moisture": climate_value.y},
-		"biome_weights": weights,
-		"dominant_biome": dominant_s(x, z, h, sl),
-		"water": water_value,
-		"geology": geology_value,
-		"region": region_grammar.dominant_at(x, z) if region_grammar != null else "neutral",
-		"is_water": not water_value.is_empty(),
-	}
 
 
 func water_info(x: float, z: float) -> Vector2:
@@ -356,16 +310,11 @@ func _land(x: float, z: float, detail: bool = true) -> float:
 
 	var c := n_continent.get_noise_2d(px, pz)
 	var er := clampf(n_erosion.get_noise_2d(px, pz) * 0.5 + 0.5, 0.0, 1.0)
-	var rock_strength := geology.hardness_at(px, pz) if geology != null else 0.5
-	var strata := geology.strata_at(px, pz) if geology != null else 0.5
 	# o arranque é sempre uma planície temperada e amigável (a aldeia fica aqui)
 	var vc := village_center()
 	var spawn := 1.0 - _smooth(160.0, 700.0, Vector2(x, z).distance_to(vc))
 	c = lerpf(c, maxf(c, 0.20), spawn)
 	er = lerpf(er, maxf(er, 0.78), spawn)
-	# Rocha resistente preserva cristas; sedimentos erodem para formas mais
-	# largas. A diferença é contínua para não criar limites entre províncias.
-	er = clampf(er - (rock_strength - 0.5) * 0.14, 0.0, 1.0)
 
 	var cl := climate(x, z)
 	var hot_dry := _smooth(0.58, 0.78, cl.x) * (1.0 - _smooth(0.30, 0.50, cl.y)) * (1.0 - spawn)
@@ -380,8 +329,7 @@ func _land(x: float, z: float, detail: bool = true) -> float:
 	var m := _smooth(0.04, 0.50, c) * pow(1.0 - er, 1.15)
 	if m > 0.001:
 		var ridge := clampf(n_mountain.get_noise_2d(px, pz) * 1.2 + 0.12, 0.0, 1.0)
-		var peak := pow(ridge, 1.9) * Db.terrain_num("peak_height", 235.0) \
-			* lerpf(0.78, 1.22, rock_strength) * m * m
+		var peak := pow(ridge, 1.9) * Db.terrain_num("peak_height", 235.0) * m * m
 		# rochedos: ridged de alta frequência, só onde já é alto (dá agulhas e degraus)
 		var hi := _smooth(30.0, 120.0, peak)
 		if hi > 0.0 and detail:
@@ -390,10 +338,8 @@ func _land(x: float, z: float, detail: bool = true) -> float:
 
 	# 4) mesas / planaltos (badlands): sobe e quantiza em patamares
 	var mesa_w := _smooth(0.50, 0.72, n_mesa.get_noise_2d(px, pz) * 0.5 + 0.5) * hot_dry * _smooth(0.0, 0.25, c)
-	# Badlands preserva melhor os estratos sedimentares do que o granito exposto.
-	mesa_w *= lerpf(1.10, 0.76, _smooth(0.40, 0.90, rock_strength)) * lerpf(0.88, 1.12, strata)
 	if mesa_w > 0.001:
-		var step_h := Db.terrain_num("mesa_step", 12.0) * lerpf(0.86, 1.14, strata)
+		var step_h := Db.terrain_num("mesa_step", 12.0)
 		var hh := (h + 10.0 * mesa_w) / step_h
 		var f := floorf(hh)
 		var sharp := _smooth(0.30, 0.55, hh - f)
@@ -469,8 +415,7 @@ func biome_weights(x: float, z: float, h: float, out: PackedFloat32Array) -> voi
 
 ## Variante que recebe o declive já calculado — os chunks têm a grelha de alturas
 ## à mão e assim poupam 4 chamadas a `height()` por vértice.
-func biome_weights_s(x: float, z: float, h: float, sl: float, out: PackedFloat32Array,
-		region_out: PackedFloat32Array = PackedFloat32Array()) -> void:
+func biome_weights_s(x: float, z: float, h: float, sl: float, out: PackedFloat32Array) -> void:
 	var cl := climate(x, z)
 	var above := h - SEA_LEVEL
 	# a altitude arrefece (≈ -0.0030 por metro): cumes frios, vales quentes
@@ -490,9 +435,6 @@ func biome_weights_s(x: float, z: float, h: float, sl: float, out: PackedFloat32
 		bank_sand = _smooth(0.10, 0.70, cut) * (1.0 - _smooth(0.62, 0.80, m))
 		if water.is_marsh(x, z):
 			marsh = 1.0
-	var rock_exposure := 0.0
-	if geology != null:
-		rock_exposure = geology.exposure_at(x, z, h, sl)
 
 	for i in BIOME_COUNT:
 		out[i] = 0.0
@@ -501,9 +443,7 @@ func biome_weights_s(x: float, z: float, h: float, sl: float, out: PackedFloat32
 	var snowline := Db.terrain_num("snowline_base", 150.0) - cl.x * Db.terrain_num("snowline_temp_scale", 70.0)
 	out[B_SAND] = (1.0 - _smooth(-0.3, 1.8, above)) + bank_sand * 0.85
 	out[B_SNOW] = _smooth(snowline, snowline + 36.0, h) * 1.4 + _smooth(0.20, 0.04, t) * 0.8
-	out[B_ROCK] = _smooth(0.34, 0.66, sl) * 1.15 \
-		+ _smooth(Db.terrain_num("rock_altitude_min", 85.0), Db.terrain_num("rock_altitude_max", 135.0), h) * 0.42 \
-		+ rock_exposure * 0.72
+	out[B_ROCK] = _smooth(0.34, 0.66, sl) * 1.5 + _smooth(Db.terrain_num("rock_altitude_min", 85.0), Db.terrain_num("rock_altitude_max", 135.0), h) * 0.55
 
 	# clima (Whittaker)
 	var lowland := 1.0 - _smooth(1.0, 3.0, above)
@@ -517,20 +457,6 @@ func biome_weights_s(x: float, z: float, h: float, sl: float, out: PackedFloat32
 	out[B_GROVE] = _smooth(0.20, 0.42, grove_n) * _smooth(0.48, 0.68, m) * (1.0 - _smooth(30.0, 90.0, h)) * 1.6
 	out[B_FOREST] = _smooth(0.56, 0.76, m) * _smooth(0.28, 0.56, t) * (1.0 - _smooth(60.0, 115.0, h)) * 1.8
 	out[B_MEADOW] = 1.0 - 0.72 * _smooth(0.58, 0.84, t) * (1.0 - _smooth(0.30, 0.52, m))
-	# WFC dá continuidade a manchas de habitat sem desenhar quadrados no chão.
-	# Como só multiplica pesos que já passaram os filtros de clima/altura/declive,
-	# um módulo de deserto não cria areia em água nem floresta em crista nua.
-	if region_grammar != null:
-		region_grammar.sample_into(x, z, region_out)
-		out[B_MEADOW] *= lerpf(0.94, 1.24, maxf(region_out[RegionGrammar.MEADOW], region_out[RegionGrammar.NEUTRAL] * 0.25))
-		out[B_FOREST] *= lerpf(0.82, 1.38, region_out[RegionGrammar.FOREST])
-		out[B_MARSH] *= lerpf(0.78, 1.45, region_out[RegionGrammar.WETLAND])
-		out[B_MUD] *= lerpf(0.88, 1.26, region_out[RegionGrammar.WETLAND])
-		out[B_SAVANNA] *= lerpf(0.82, 1.38, region_out[RegionGrammar.SAVANNA])
-		out[B_DESERT] *= lerpf(0.78, 1.42, region_out[RegionGrammar.DESERT])
-		out[B_BADLANDS] *= lerpf(0.78, 1.38, region_out[RegionGrammar.BADLANDS])
-		out[B_ROCK] *= lerpf(0.92, 1.22, region_out[RegionGrammar.HIGHLAND])
-		out[B_SNOW] *= lerpf(0.92, 1.18, region_out[RegionGrammar.HIGHLAND])
 
 	var total := 0.0
 	for i in BIOME_COUNT:
@@ -549,18 +475,13 @@ func ground_color(x: float, z: float, h: float, buf: PackedFloat32Array) -> Colo
 	return ground_color_s(x, z, h, slope(x, z), buf)
 
 
-func ground_color_s(x: float, z: float, h: float, sl: float, buf: PackedFloat32Array,
-		region_out: PackedFloat32Array = PackedFloat32Array()) -> Color:
-	biome_weights_s(x, z, h, sl, buf, region_out)
+func ground_color_s(x: float, z: float, h: float, sl: float, buf: PackedFloat32Array) -> Color:
+	biome_weights_s(x, z, h, sl, buf)
 	var c := Color(0, 0, 0)
 	for i in BIOME_COUNT:
 		if buf[i] <= 0.001:
 			continue
 		c += Db.biome_color(i, BIOME_COLOR[i]) * buf[i]
-	# O cinzento genérico do bioma rochoso ganha a paleta da formação local;
-	# as cores são amostradas no mundo para continuarem sem costura entre chunks.
-	if geology != null and buf[B_ROCK] > 0.025:
-		c = c.lerp(geology.surface_color(x, z), clampf(buf[B_ROCK] * 0.46, 0.0, 0.46))
 	# variação local para não parecer plástico
 	var t := n_tint.get_noise_2d(x, z) * 0.07
 	var under := clampf(h - SEA_LEVEL, -2.0, 2.0) * 0.02

@@ -6,6 +6,42 @@
 > O histórico de auditoria abaixo preserva resultados antigos; quando diferirem, prevalecem
 > este marco mais recente e `docs/AUDIT_2026-10-14.md`.
 
+## Etapa 2 — laboratório em 3D + modo deus (2026-10-18)
+
+- LabWorld (vindo do main/PR #9) ganhou corpo: `LabMesh` (mesh suave +
+  colisão por pedaços de 50 m), `LabScene` em `scenes/lab.tscn` com água,
+  vegetação por afinidade, estações-plataforma e o Player real a nascer.
+- Modo deus (`LabDev`): voar (F), cavar (LMB), aterrar/reconstruir (RMB),
+  partir (E), painel F1 com TODOS os itens, repor mundo. O mundo
+  destrói-se e reconstrói-se pelos deltas do `dig()`/`fill()`.
+- **Verificação: LABSCENE_PASS 12/12, LABTEST_PASS 14/14, selftest
+  245 ok / 0 falhas / 30 saltadas.** PNG: `docs/shots/09_lab_3d.png`.
+- Pack de teste local: `Blessed_Lab_Etapa2_pack.zip` (só ficheiros da
+  etapa; extrair por cima da pasta Blessed e abrir `scenes/lab.tscn`).
+
+## Reconstrução — Etapa 0+1: auditoria + LabWorld (2026-10-18)
+
+Direção nova (documento-mestre do dono): não presumir que o código atual está
+certo; reconstruir o núcleo do mundo por etapas, sem apagar o gameplay que joga.
+- **Etapa 0:** `docs/CURRENT_ARCHITECTURE.md`, `docs/CURRENT_DEPENDENCIES.md`,
+  `docs/WORLD_RECONSTRUCTION_AUDIT.md` — Terrain faz tudo, água é rio-seno/costa-seno,
+  vegetação é scatter, construção não tem sistema, chão não se escava.
+- **Etapa 1:** `scripts/world/lab_world.gd` (`LabWorld`) + `data/lab.json` +
+  `tests/labtest.gd` + `tools/lab_preview.py` + `docs/LAB_WORLD.md`.
+  Laboratório finito 400×400 m rodeado de oceano: relevo→clima→D8→rios que
+  escavam o leito/lagos→humidade→bioma→espécies por afinidade; `dig()` grava
+  deltas e recompõe a água. 8 estações de mecânicas (recolha, escavação, craft,
+  construção) declaradas em dados. Mundo grande intacto.
+- **Verificação:** **LABTEST_PASS 14/14** (`-- labtest`, harness wasm) e
+  selftest principal intacto após merge com o `main`: **242 ok, 0 falhas**.
+  Mapa de campos em `docs/shots/08_lab_world.png` (ilha, rio pelo vale, lago,
+  biomas, estações). Apanhados e corrigidos pelo labtest: fill de depressões
+  tinha de ser priority-flood, e salgueiro não pode colar-se ao oceano
+  (distância a água doce separada da distância ao mar).
+- **Seguinte:** render 3D do laboratório + nascer nele; depois colher/cortar com
+  tronco da mesma espécie, escavação jogável e construção com fundação — uma
+  mecânica de cada vez, provada na estação antes de ir para o mundo grande.
+
 ## Etapa C (em curso) — a água nasce do mundo, e o mundo obedece-lhe
 
 **Verificação: 242 ok, 0 falhas, 30 saltadas (SELFTEST_PASS). 75 s.**
@@ -110,19 +146,6 @@ jogo responde, e fá-lo em todo o lado de uma vez.
   combustível e a chama fica mais nervosa. Deixa de ser binário.
 - **`tools/render_feel.py`** porta o shader para Python, para o efeito ser
   provado com imagem em vez de afirmação. PNG: `docs/shots/04_corpo_a_falhar.png`.
-
-## Etapa 2 — laboratório em 3D + modo deus (2026-10-18)
-
-- LabWorld (vindo do main/PR #9) ganhou corpo: `LabMesh` (mesh suave +
-  colisão por pedaços de 50 m), `LabScene` em `scenes/lab.tscn` com água,
-  vegetação por afinidade, estações-plataforma e o Player real a nascer.
-- Modo deus (`LabDev`): voar (F), cavar (LMB), aterrar/reconstruir (RMB),
-  partir (E), painel F1 com TODOS os itens, repor mundo. O mundo
-  destrói-se e reconstrói-se pelos deltas do `dig()`/`fill()`.
-- **Verificação: LABSCENE_PASS 12/12, LABTEST_PASS 14/14, selftest
-  245 ok / 0 falhas / 30 saltadas.** PNG: `docs/shots/09_lab_3d.png`.
-- Pack de teste local: `Blessed_Lab_Etapa2_pack.zip` (só ficheiros da
-  etapa; extrair por cima da pasta Blessed e abrir `scenes/lab.tscn`).
 
 ## Marco mais recente — o SONO e o FOGO passam a ser sistemas (2026-10-17, tarde)
 

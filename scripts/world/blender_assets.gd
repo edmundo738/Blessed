@@ -59,11 +59,7 @@ static func lods_for(asset_id: String) -> Array[ArrayMesh]:
 		return result
 	result.append(base)
 	for level in range(1, 3):
-		var lod_id := "%s_lod%d" % [asset_id, level]
-		# LODs são opcionais: vários modelos só têm o mesh-base. Não chamar
-		# Assets.mesh para um caminho inexistente evita erros de carregamento por
-		# cada espécie; o LOD mantém a mesma malha até haver variante real.
-		var mesh := mesh_for(lod_id) if has_asset(lod_id) else null
+		var mesh := mesh_for("%s_lod%d" % [asset_id, level])
 		result.append(mesh if mesh != null else base)
 	return result
 

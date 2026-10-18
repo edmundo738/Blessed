@@ -252,7 +252,7 @@ func _add_fire_vfx(entry: Dictionary, st: SpeciesKit.Structure) -> void:
 	if quality > 0:
 		var smoke := CPUParticles3D.new()
 		smoke.name = "Smoke"
-		smoke.amount = [7, 12][quality - 1]
+		smoke.amount = [0, 7, 12][quality]
 		smoke.lifetime = 2.0
 		smoke.preprocess = 1.2
 		smoke.local_coords = true
@@ -274,7 +274,7 @@ func _add_fire_vfx(entry: Dictionary, st: SpeciesKit.Structure) -> void:
 
 		var embers := CPUParticles3D.new()
 		embers.name = "Embers"
-		embers.amount = [5, 9][quality - 1]
+		embers.amount = [0, 5, 9][quality]
 		embers.lifetime = 0.85
 		embers.preprocess = 0.25
 		embers.local_coords = true

@@ -29,7 +29,6 @@ var built := false
 
 var terrain: Terrain
 var species: SpeciesKit
-var ecology: Ecosystem
 var mats: Materials
 var water_root: Node3D
 
@@ -83,7 +82,6 @@ func _build_ground(o: Vector2, with_collision: bool) -> void:
 	var n := res + 1
 	var heights := PackedFloat32Array()
 	heights.resize(n * n)
-	var voxel_ground := world != null and bool(world.get("use_voxel_terrain"))
 
 	# 1) alturas (a única parte cara)
 	for j in n:
@@ -93,14 +91,10 @@ func _build_ground(o: Vector2, with_collision: bool) -> void:
 			heights[j * n + i] = terrain.height(x, z)
 
 	# 2) malha com cor de vértice por bioma
-	var st: SurfaceTool
-	if not voxel_ground:
-		st = SurfaceTool.new()
-		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var buf := PackedFloat32Array()
 	buf.resize(Terrain.BIOME_COUNT)
-	var region_buf := PackedFloat32Array()
-	region_buf.resize(RegionGrammar.TYPE_COUNT)
 	var normals := PackedVector3Array()
 	normals.resize(n * n)
 	var grass_cover := PackedFloat32Array()
@@ -127,35 +121,32 @@ func _build_ground(o: Vector2, with_collision: bool) -> void:
 			var h := heights[j * n + i]
 			var sl := clampf(Vector2(normals[j * n + i].x, normals[j * n + i].z).length()
 				/ maxf(normals[j * n + i].y, 0.001) * 0.55, 0.0, 1.0)
-			if not voxel_ground:
-				st.set_normal(normals[j * n + i])
-			var gc := terrain.ground_color_s(x, z, h, sl, buf, region_buf)
+			st.set_normal(normals[j * n + i])
+			var gc := terrain.ground_color_s(x, z, h, sl, buf)
 			grass_cover[j * n + i] = terrain.grass_coverage_s(h, sl, buf)
 			grass_dryness[j * n + i] = terrain.grass_dryness(buf)
 			grass_tint[j * n + i] = Terrain.grass_tint_of(gc, grass_dryness[j * n + i])
 			# classes de material para o shader do terreno (ver toon_terrain.gdshader)
-			if not voxel_ground:
-				gc.a = clampf(buf[Terrain.B_SNOW], 0.0, 1.0)
-				st.set_color(gc)
-				st.set_uv(Vector2(
-					buf[Terrain.B_MEADOW] + buf[Terrain.B_FOREST] + buf[Terrain.B_GROVE]
-						+ buf[Terrain.B_SAVANNA] * 0.8 + buf[Terrain.B_MARSH] * 0.6,
-					buf[Terrain.B_DIRT] + buf[Terrain.B_MUD] + buf[Terrain.B_MARSH] * 0.4
-						+ buf[Terrain.B_SAVANNA] * 0.2))
-				st.set_uv2(Vector2(
-					buf[Terrain.B_SAND] + buf[Terrain.B_DESERT],
-					buf[Terrain.B_BADLANDS]))
-				st.add_vertex(Vector3(x, h, z))
+			gc.a = clampf(buf[Terrain.B_SNOW], 0.0, 1.0)
+			st.set_color(gc)
+			st.set_uv(Vector2(
+				buf[Terrain.B_MEADOW] + buf[Terrain.B_FOREST] + buf[Terrain.B_GROVE]
+					+ buf[Terrain.B_SAVANNA] * 0.8 + buf[Terrain.B_MARSH] * 0.6,
+				buf[Terrain.B_DIRT] + buf[Terrain.B_MUD] + buf[Terrain.B_MARSH] * 0.4
+					+ buf[Terrain.B_SAVANNA] * 0.2))
+			st.set_uv2(Vector2(
+				buf[Terrain.B_SAND] + buf[Terrain.B_DESERT],
+				buf[Terrain.B_BADLANDS]))
+			st.add_vertex(Vector3(x, h, z))
 
-	if not voxel_ground:
-		for j in res:
-			for i in res:
-				var a := j * n + i
-				var b := j * n + i + 1
-				var c := (j + 1) * n + i + 1
-				var d := (j + 1) * n + i
-				st.add_index(a); st.add_index(b); st.add_index(c)
-				st.add_index(a); st.add_index(c); st.add_index(d)
+	for j in res:
+		for i in res:
+			var a := j * n + i
+			var b := j * n + i + 1
+			var c := (j + 1) * n + i + 1
+			var d := (j + 1) * n + i
+			st.add_index(a); st.add_index(b); st.add_index(c)
+			st.add_index(a); st.add_index(c); st.add_index(d)
 
 	# 3) SEM SAIA.
 	#    A saia (parede vertical à volta do chunk) foi removida. Medida com
@@ -167,14 +158,13 @@ func _build_ground(o: Vector2, with_collision: bool) -> void:
 	#    de a franja desaparecer é não a desenhar. As costuras entre LODs ficam
 	#    tapadas pelo próprio overlap das grelhas vizinhas (passo partilhado).
 
-	if not voxel_ground:
-		var mesh := st.commit()
-		mesh.surface_set_material(0, mats.terrain)
-		_mesh_inst = MeshInstance3D.new()
-		_mesh_inst.mesh = mesh
-		_mesh_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-		_mesh_inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-		add_child(_mesh_inst)
+	var mesh := st.commit()
+	mesh.surface_set_material(0, mats.terrain)
+	_mesh_inst = MeshInstance3D.new()
+	_mesh_inst.mesh = mesh
+	_mesh_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	_mesh_inst.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	add_child(_mesh_inst)
 	if lod < 3:
 		# O número de níveis cai com a distância; a altura do volume e a máscara
 		# são as mesmas em todos os LODs, por isso não há salto na fronteira.
@@ -186,19 +176,18 @@ func _build_ground(o: Vector2, with_collision: bool) -> void:
 			grass_tint)
 
 	if with_collision:
+		var shape := HeightMapShape3D.new()
+		shape.map_width = n
+		shape.map_depth = n
+		shape.map_data = heights
 		_body = StaticBody3D.new()
 		_body.position = Vector3(o.x + SIZE * 0.5, 0.0, o.y + SIZE * 0.5)
 		_body.collision_layer = 1
-		if not voxel_ground:
-			var shape := HeightMapShape3D.new()
-			shape.map_width = n
-			shape.map_depth = n
-			shape.map_data = heights
-			var col := CollisionShape3D.new()
-			col.shape = shape
-			_body.add_child(col)
-			_colliders.append(col)
+		var col := CollisionShape3D.new()
+		col.shape = shape
+		_body.add_child(col)
 		add_child(_body)
+		_colliders.append(col)
 
 
 ## Relva por níveis: o terreno é re-desenhado em fatias empilhadas, cada uma
@@ -582,8 +571,6 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 	var seaweed_t: Array[Transform3D] = []
 	var buf := PackedFloat32Array()
 	buf.resize(Terrain.BIOME_COUNT)
-	var region_buf := PackedFloat32Array()
-	region_buf.resize(RegionGrammar.TYPE_COUNT)
 
 	# ── árvores ───────────────────────────────────────────────────────────
 	var cells := int(SIZE / TREE_CELL)
@@ -602,13 +589,11 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 				continue
 			if terrain.village_distance(x, z) < Terrain.VILLAGE_RADIUS:
 				continue
-			terrain.biome_weights_s(x, z, h, sl, buf, region_buf)
-			var density := ecology.density_per_100m2("tree", buf, x, z) if ecology != null \
-				else SpeciesKit.tree_density(terrain.dominant_s(x, z, h, sl))
+			var biome := terrain.dominant_s(x, z, h, sl)
+			var density := SpeciesKit.tree_density(biome)
 			if rng.randf() > density * (TREE_CELL * TREE_CELL) / 100.0:
 				continue
-			var id := ecology.pick_species(species.trees, buf, rng.randf(), x, z) if ecology != null \
-				else species.pick(species.trees, terrain.dominant_s(x, z, h, sl), rng.randf())
+			var id := species.pick(species.trees, biome, rng.randf())
 			if id.is_empty():
 				continue
 			var sp: SpeciesKit.Species = species.trees[id]
@@ -650,15 +635,10 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 			if terrain.village_distance(x, z) < Terrain.VILLAGE_RADIUS * 0.7:
 				continue
 			var sl := terrain.slope(x, z)
-			terrain.biome_weights_s(x, z, h, sl, buf, region_buf)
-			var geology_sample: Dictionary = terrain.geology.sample(x, z) if terrain.geology != null else {}
-			var density := ecology.density_per_100m2("rock", buf, x, z) if ecology != null else 0.30
-			var exposure := terrain.geology.exposure_at(x, z, h, sl) if terrain.geology != null else 0.5
-			density *= lerpf(0.30, 1.65, exposure)
-			if rng.randf() > density * (ROCK_CELL * ROCK_CELL) / 100.0:
+			var biome := terrain.dominant_s(x, z, h, sl)
+			if rng.randf() > 0.30:
 				continue
-			var id := ecology.pick_species(species.rocks, buf, rng.randf(), x, z, geology_sample) if ecology != null \
-				else species.pick(species.rocks, terrain.dominant_s(x, z, h, sl), rng.randf())
+			var id := species.pick(species.rocks, biome, rng.randf())
 			if id.is_empty():
 				continue
 			var sp: SpeciesKit.Species = species.rocks[id]
@@ -686,6 +666,8 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 	var pc := int(SIZE / 2.5)
 	for cj in pc:
 		for ci in pc:
+			if rng.randf() > 0.28:
+				continue
 			var x := o.x + (ci + rng.randf()) * 2.5
 			var z := o.y + (cj + rng.randf()) * 2.5
 			if world != null and not world.is_clear_of_spawn(x, z):
@@ -696,12 +678,8 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 			if terrain.path_distance(x, z) < 2.0:
 				continue
 			var sl := terrain.slope(x, z)
-			terrain.biome_weights_s(x, z, h, sl, buf, region_buf)
-			var density := ecology.density_per_100m2("plant", buf, x, z) if ecology != null else 0.55
-			if rng.randf() > density * (2.5 * 2.5) / 100.0:
-				continue
-			var id := ecology.pick_species(species.plants, buf, rng.randf(), x, z) if ecology != null \
-				else species.pick(species.plants, terrain.dominant_s(x, z, h, sl), rng.randf())
+			var biome := terrain.dominant_s(x, z, h, sl)
+			var id := species.pick(species.plants, biome, rng.randf())
 			if id.is_empty():
 				continue
 			var sp: SpeciesKit.Species = species.plants[id]
@@ -711,12 +689,11 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 			var bi := _add(buckets, id, Transform3D(Basis(Vector3.UP, rng.randf() * TAU)
 				.scaled(Vector3(s, s, s)), Vector3(x, h + sp.y_offset * s, z)),
 				_tint(rng), 0.0)
-			if sp.harvest != "":
-				harvest_nodes.append({
-					"pos": Vector3(x, h, z), "kind": sp.harvest, "species": id,
-					"hp": 1, "radius": 0.9, "height": sp.height * s,
-					"alive": true, "bucket": id, "bindex": bi, "chunk": self,
-				})
+			harvest_nodes.append({
+				"pos": Vector3(x, h, z), "kind": sp.harvest, "species": id,
+				"hp": 1, "radius": 0.9, "height": sp.height * s,
+				"alive": true, "bucket": id, "bindex": bi, "chunk": self,
+			})
 
 	# ── algas em prateleiras rasas ─────────────────────────────────────────
 	# O asset é uma instância MultiMesh; só colocamos em profundidade onde a
@@ -780,8 +757,7 @@ func _make_multimesh(id: String, b: Dictionary) -> void:
 	mesh = sp.lods[clampi(lod, 0, sp.lods.size() - 1)]
 	# Os modelos de copa usam cartões alfa. Mantemos a máscara e os LODs do
 	# artista, mas animamos os vértices por instância em vez de deixar folhas imóveis.
-	var moving_vegetation := species.trees.has(id) or (species.plants.has(id) and sp.wind > 0.0)
-	if sp.materials_authored and moving_vegetation:
+	if sp.materials_authored and (species.trees.has(id) or id == "bush"):
 		mesh = mats.wind_foliage_mesh(mesh, sp.height)
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -797,7 +773,7 @@ func _make_multimesh(id: String, b: Dictionary) -> void:
 		mm.set_instance_color(i, Color.WHITE)
 		var tint: Color = c[i]
 		mm.set_instance_custom_data(i, Color(tint.r, tint.g, tint.b, float(b["fade"])))
-		if moving_vegetation:
+		if species.trees.has(id) or id == "bush":
 			# O shader abana as copas para fora da caixa estática da malha; fornece
 			# limites conservadores por chunk para o culling não cortar folhas ao vento.
 			var scale_x := xform.basis.x.length()

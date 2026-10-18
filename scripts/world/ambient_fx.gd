@@ -13,7 +13,6 @@ var player: Node3D
 
 var dust: CPUParticles3D
 var flies: CPUParticles3D
-var _quality_enabled := true
 
 const DUST_PATH := "res://content/fx/kenney/particles/smoke_02.png"
 const FIREFLY_PATH := "res://content/fx/kenney/particles/star_02.png"
@@ -34,7 +33,7 @@ func _process(_delta: float) -> void:
 	if player != null:
 		global_position = player.global_position
 	if flies != null:
-		flies.emitting = _quality_enabled and _night_factor() > 0.15
+		flies.emitting = _night_factor() > 0.15
 
 
 ## 0 = dia cheio, 1 = noite fechada (transição suave ao anoitecer/amanhecer).
@@ -51,14 +50,11 @@ func _night_factor() -> float:
 
 func _apply_quality() -> void:
 	var q: int = clampi(int(Game.settings.get("quality", 1)), 0, 2)
-	_quality_enabled = q > 0
 	if dust != null:
-		# Godot exige amount >= 1 mesmo quando o emissor está desligado.
-		dust.amount = maxi(1, [0, 90, 180][q])
-		dust.emitting = _quality_enabled
+		dust.amount = [0, 90, 180][q]
+		dust.emitting = q >= 1
 	if flies != null:
-		flies.amount = maxi(1, [0, 22, 46][q])
-		flies.emitting = _quality_enabled and _night_factor() > 0.15
+		flies.amount = [0, 22, 46][q]
 
 
 func _make_dust() -> CPUParticles3D:

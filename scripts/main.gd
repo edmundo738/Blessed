@@ -176,12 +176,6 @@ func _pick_spawn() -> Vector3:
 
 func _build_player() -> void:
 	player = _sys("res://scenes/player.tscn", func(): return Player.new()) as Player
-	# VoxelLodTerrain cria a malha e a colisão de forma assíncrona. Mantém o
-	# CharacterBody suspenso até a zona de spawn estar mesclada; caso contrário,
-	# a gravidade começa primeiro e o jogador atravessa o terreno ainda vazio.
-	var wait_for_voxel_collision := world.use_voxel_terrain
-	if wait_for_voxel_collision:
-		player.enabled = false
 	world.add_child(player)
 	# Grupos: há sistemas que precisam do jogador/supervivência sem terem uma
 	# referência direta (ex.: a árvore que cai e magoa quem está debaixo dela).
@@ -192,37 +186,11 @@ func _build_player() -> void:
 	# isso a vegetação já sabe que ali não se planta nada.
 	world.set_spawn_clear(spawn)
 	player.global_position = spawn + Vector3(0, 1.0, 0)
-	# VoxelLodTerrain só cria blocos quando há um VoxelViewer na árvore.
-	# O viewer acompanha o personagem e pede malha e colisão ao redor dele.
-	world.attach_voxel_viewer(player)
-	if wait_for_voxel_collision:
-		call_deferred("_wait_for_spawn_collision", spawn)
 
 	survival = Survival.new()
 	player.add_child(survival)
 	if not survival.is_in_group("survival"):
 		survival.add_to_group("survival")
-
-
-func _wait_for_spawn_collision(spawn: Vector3) -> void:
-	var warning_at := Time.get_ticks_msec() + 15000
-	var warned := false
-	while is_instance_valid(player) and is_instance_valid(world):
-		if world.voxel_collision_ready_at(spawn):
-			# Deixa a física observar a forma que acabou de ser registada antes de
-			# soltar o jogador; a posição final usa a mesma fonte de altura do SDF.
-			await get_tree().physics_frame
-			if not is_instance_valid(player):
-				return
-			player.teleport(Vector3(spawn.x,
-				world.ground_height(spawn.x, spawn.z) + 1.0, spawn.z))
-			player.enabled = true
-			print("WORLD spawn grounded on voxel collision")
-			return
-		if not warned and Time.get_ticks_msec() >= warning_at:
-			push_warning("A aguardar a colisão voxel da zona inicial antes de ativar o jogador")
-			warned = true
-		await get_tree().process_frame
 
 
 func _build_systems() -> void:

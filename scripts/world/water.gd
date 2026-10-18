@@ -24,8 +24,8 @@ extends RefCounted
 ## 16 m; o que é consultado por frame é uma interpolação bilinear de 4 valores.
 ## Nada de simulação hidráulica: água geográfica é barata por construção.
 ##
-## Determinismo: tudo depende de `seed_value` e da configuração geográfica.
-## Duas instâncias com ambos iguais produzem a mesma rede ao bit.
+## Determinismo: tudo depende só de `seed_value`. Duas instâncias do mesmo
+## mundo produzem a mesma rede ao bit.
 
 # ── tipos de água ───────────────────────────────────────────────────────────
 const KIND_NONE := 0
@@ -68,7 +68,6 @@ var z0 := 0.0
 
 # Grelha grossa (hidrologia)
 var _h := PackedFloat32Array()          # relevo
-var _filled := PackedFloat32Array()     # relevo condicionado para drenagem
 var _acc := PackedFloat32Array()        # acumulação de drenagem
 var _down := PackedInt32Array()         # índice da célula a jusante (-1 = sem saída)
 var _lake := PackedFloat32Array()       # nível do lago (DRY = seco)
@@ -94,10 +93,7 @@ var _last_hit := -1
 var _lake_count := 0
 var _lake_bodies := 0
 var _sources := 0
-var _mouth_count := 0
-var _outlet_cells := 0
 var _terrain: WeakRef
-var _shared_key := ""
 
 ## A rede só depende da semente. Muitos `Terrain` do mesmo mundo (testes, menus,
 ## reinícios) partilham a mesma hidrologia em vez de a recalcular.
@@ -114,16 +110,12 @@ func build(terrain: Object, center: Vector2) -> void:
 	var t0 := Time.get_ticks_msec()
 	_terrain = weakref(terrain)
 	seed_value = int(terrain.get("seed_value"))
-	# A geologia e o escoamento são afináveis em terrain.json; cache só pela
-	# semente reutilizava relevo antigo depois de mudar essas regras.
-	_shared_key = "%d:%d" % [seed_value, hash(Db.terrain_cfg)]
-	if _shared.has(_shared_key):
-		var c: Dictionary = _shared[_shared_key]
+	if _shared.has(seed_value):
+		var c: Dictionary = _shared[seed_value]
 		x0 = c["x0"]
 		z0 = c["z0"]
 		n = c["n"]
 		_h = c["h"]
-		_filled = c["filled"]
 		_acc = c["acc"]
 		_down = c["down"]
 		_lake = c["lake"]
@@ -134,9 +126,6 @@ func build(terrain: Object, center: Vector2) -> void:
 		_buckets = c["buckets"]
 		_lake_count = c["lake_count"]
 		_lake_bodies = c["lake_bodies"]
-		_sources = c.get("sources", 0)
-		_mouth_count = c.get("mouths", 0)
-		_outlet_cells = c.get("outlets", 0)
 		phase_ms = c.get("phases", {})
 		built = true
 		build_ms = 0
@@ -145,7 +134,6 @@ func build(terrain: Object, center: Vector2) -> void:
 	z0 = center.y - SPAN * 0.5
 	n = int(SPAN / COARSE) + 1
 	_h.resize(n * n)
-	_filled.resize(n * n)
 	_acc.resize(n * n)
 	_down.resize(n * n)
 	_lake.resize(n * n)
@@ -169,13 +157,11 @@ func build(terrain: Object, center: Vector2) -> void:
 	_retune_levels()
 	phase_ms["carve"] = Time.get_ticks_msec() - _t
 	build_ms = Time.get_ticks_msec() - t0
-	_shared[_shared_key] = {
-		"x0": x0, "z0": z0, "n": n, "h": _h, "filled": _filled,
-		"acc": _acc, "down": _down,
+	_shared[seed_value] = {
+		"x0": x0, "z0": z0, "n": n, "h": _h, "acc": _acc, "down": _down,
 		"lake": _lake, "marsh": _marsh, "seg": _seg, "seg_count": _seg_count,
 		"carve": _carve,
 		"buckets": _buckets, "lake_count": _lake_count, "lake_bodies": _lake_bodies,
-		"sources": _sources, "mouths": _mouth_count, "outlets": _outlet_cells,
 		"phases": phase_ms,
 	}
 
@@ -188,17 +174,11 @@ func _relief(x: float, z: float) -> float:
 
 
 func _sample_relief() -> void:
-	var terrain_obj: Object = _terrain.get_ref()
 	for j in n:
 		var z := z0 + float(j) * COARSE
 		var row := j * n
 		for i in n:
-			var x := x0 + float(i) * COARSE
-			var index := row + i
-			_h[index] = _relief(x, z)
-			# Peso de chuva que chega à superfície. Calcário poroso infiltra mais;
-			# os vales húmidos alimentam os rios com maior escoamento.
-			_acc[index] = float(terrain_obj.call("runoff_factor", x, z)) if terrain_obj != null else 1.0
+			_h[row + i] = _relief(x0 + float(i) * COARSE, z)
 
 
 ## Cada célula desce para a vizinha mais baixa (D8). A acumulação é feita por
@@ -207,8 +187,7 @@ func _sample_relief() -> void:
 func _route_flow() -> void:
 	var count := n * n
 	for i in count:
-		if _acc[i] <= 0.0:
-			_acc[i] = 1.0
+		_acc[i] = 1.0
 		_down[i] = -1
 
 	# ordenação por altitude, descendente — buckets de 2 m (rápido e estável)

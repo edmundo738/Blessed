@@ -442,16 +442,10 @@ func biome_color(i: int, fallback: Color) -> Color:
 	return fallback
 
 
-## kind = "tree", "grass", "plant" ou "rock".
+## kind = "tree" ou "grass".
 func biome_density(i: int, kind: String, fallback: float) -> float:
 	if i >= 0 and i < biomes.size() and typeof(biomes[i]) == TYPE_DICTIONARY:
-		var key := "tree_density"
-		match kind:
-			"tree": key = "tree_density"
-			"grass": key = "grass_density"
-			"plant": key = "plant_density"
-			"rock": key = "rock_density"
-			_: return fallback
+		var key := "tree_density" if kind == "tree" else "grass_density"
 		if biomes[i].has(key):
 			return float(biomes[i][key])
 	return fallback

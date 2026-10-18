@@ -12,8 +12,6 @@ class Species extends RefCounted:
 	var tint: Color = Color.WHITE
 	var scale_range := Vector2(0.85, 1.2)
 	var biomes: PackedInt32Array = PackedInt32Array()
-	## Afinidade geológica opcional (id da formação -> multiplicador de spawn).
-	var geology_affinity: Dictionary = {}
 	var weight: float = 1.0
 	var harvest: String = ""
 	var y_offset: float = 0.0            # quanto enterra no chão
@@ -83,9 +81,6 @@ func _apply_meta(kind: String, s: Species) -> void:
 				b.append(idx)
 		if b.size() > 0:
 			s.biomes = b
-	var ga: Variant = meta.get("geology_affinity", null)
-	if typeof(ga) == TYPE_DICTIONARY:
-		s.geology_affinity = ga.duplicate(true)
 
 
 func _trunk(h: float, rb: float, rt: float, seg: int, tint: Color) -> ArrayMesh:
@@ -169,8 +164,10 @@ func _tree(id: String, trunk_h: float, trunk_rb: float, trunk_rt: float,
 	var blender_lods := BlessedBlenderAssets.lods_for("tree_" + id)
 	if not blender_lods.is_empty():
 		s.lods = blender_lods
-		# O modelo importado só fornece a silhueta em pé. Preserva-se a malha
-		# procedural do tronco criada acima para o abate não levar a copa inteira.
+		# Um GLB é uma malha só: não há tronco separado. A árvore abatida usa o
+		# modelo inteiro (aceitável: é o que o artista desenhou) — o que NÃO se
+		# aceita é ela levar o material das folhas.
+		s.trunk_lods = blender_lods
 		s.materials_authored = true
 		# Imported models use a ground-level origin; do not sink their root into terrain.
 		s.y_offset = 0.0
@@ -369,36 +366,6 @@ func _build_plants() -> void:
 	ms.harvest = "mushroom"
 	ms.height = 0.3
 	plants["mushroom"] = ms
-
-	# Flora não colhível: usa modelos que já estavam no projeto, mas antes não
-	# entravam na população do mundo. Cada uma tem habitat e densidade próprios.
-	_add_flora("fern", "fern_clump", PackedInt32Array([Terrain.B_FOREST, Terrain.B_GROVE, Terrain.B_MARSH]),
-		0.9, Vector2(0.78, 1.28), 0.86, 0.86, Color(0.28, 0.48, 0.24))
-	_add_flora("flowers", "flower_clump", PackedInt32Array([Terrain.B_MEADOW, Terrain.B_GROVE, Terrain.B_SAVANNA]),
-		0.72, Vector2(0.70, 1.18), 0.48, 0.45, Color(0.78, 0.61, 0.36))
-	_add_flora("clover", "clover_clump", PackedInt32Array([Terrain.B_MEADOW, Terrain.B_FOREST]),
-		0.82, Vector2(0.75, 1.22), 0.34, 0.35, Color(0.34, 0.55, 0.28))
-	_add_flora("reed", "reed_clump", PackedInt32Array([Terrain.B_MARSH, Terrain.B_MUD]),
-		1.0, Vector2(0.78, 1.25), 0.92, 0.95, Color(0.52, 0.52, 0.24))
-
-
-func _add_flora(id: String, asset_id: String, habitat: PackedInt32Array, weight: float,
-		scale_range: Vector2, height: float, wind_amount: float, fallback_color: Color) -> void:
-	var s := Species.new()
-	s.id = id
-	var fallback := _shrub(5, 0.42, fallback_color)
-	s.lods = [fallback, _shrub(3, 0.42, fallback_color), _shrub(2, 0.42, fallback_color)]
-	var authored_lods := BlessedBlenderAssets.lods_for(asset_id)
-	if not authored_lods.is_empty():
-		s.lods = authored_lods
-		s.materials_authored = true
-	s.tint = Color.WHITE
-	s.scale_range = scale_range
-	s.biomes = habitat
-	s.weight = weight
-	s.height = height
-	s.wind = wind_amount
-	plants[id] = s
 
 
 func _build_structures() -> void:

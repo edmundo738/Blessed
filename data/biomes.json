@@ -1,17 +1,17 @@
 {
-  "_comment": "Biomas do BLESSED. A ordem define o índice usado por terreno, chunks e shader. Densidades são instâncias por 100 m² e misturam-se pelos pesos contínuos dos biomas; adicionar/remover biomas exige também ajustar o shader (canais UV).",
+  "_comment": "Biomas do BLESSED. A ORDEM define o indice (0..N) usado pelo terreno, chunk e shader. Podes mudar cores, nomes e densidades livremente; adicionar/remover biomas exige tambem ajustar o shader (canais UV).",
   "biomes": [
-    { "id": "sand",     "key": "biome.sand",     "color": [0.80, 0.72, 0.54], "tree_density": 0.05, "grass_density": 0.04, "plant_density": 0.10, "rock_density": 0.25 },
-    { "id": "meadow",   "key": "biome.meadow",   "color": [0.34, 0.50, 0.24], "tree_density": 0.35, "grass_density": 0.55, "plant_density": 2.80, "rock_density": 0.80 },
-    { "id": "forest",   "key": "biome.forest",   "color": [0.16, 0.38, 0.22], "tree_density": 2.60, "grass_density": 0.35, "plant_density": 3.00, "rock_density": 0.60 },
-    { "id": "grove",    "key": "biome.grove",    "color": [0.74, 0.52, 0.55], "tree_density": 2.00, "grass_density": 0.45, "plant_density": 3.40, "rock_density": 0.35 },
-    { "id": "rock",     "key": "biome.rock",     "color": [0.46, 0.45, 0.47], "tree_density": 0.25, "grass_density": 0.08, "plant_density": 0.65, "rock_density": 1.80 },
-    { "id": "snow",     "key": "biome.snow",     "color": [0.86, 0.89, 0.94], "tree_density": 0.35, "grass_density": 0.05, "plant_density": 0.65, "rock_density": 0.55 },
-    { "id": "marsh",    "key": "biome.marsh",    "color": [0.27, 0.43, 0.32], "tree_density": 0.50, "grass_density": 0.60, "plant_density": 3.20, "rock_density": 0.25 },
-    { "id": "desert",   "key": "biome.desert",   "color": [0.87, 0.75, 0.47], "tree_density": 0.04, "grass_density": 0.06, "plant_density": 0.20, "rock_density": 0.40 },
-    { "id": "badlands", "key": "biome.badlands", "color": [0.71, 0.39, 0.21], "tree_density": 0.02, "grass_density": 0.03, "plant_density": 0.12, "rock_density": 0.90 },
-    { "id": "savanna",  "key": "biome.savanna",  "color": [0.60, 0.56, 0.27], "tree_density": 0.60, "grass_density": 0.40, "plant_density": 1.90, "rock_density": 0.65 },
-    { "id": "dirt",     "key": "biome.dirt",     "color": [0.40, 0.30, 0.21], "tree_density": 0.10, "grass_density": 0.12, "plant_density": 1.10, "rock_density": 0.60 },
-    { "id": "mud",      "key": "biome.mud",      "color": [0.30, 0.22, 0.15], "tree_density": 0.12, "grass_density": 0.18, "plant_density": 2.70, "rock_density": 0.20 }
+    { "id": "sand",     "key": "biome.sand",     "color": [0.80, 0.72, 0.54], "tree_density": 0.05, "grass_density": 0.04 },
+    { "id": "meadow",   "key": "biome.meadow",   "color": [0.34, 0.50, 0.24], "tree_density": 0.35, "grass_density": 0.55 },
+    { "id": "forest",   "key": "biome.forest",   "color": [0.16, 0.38, 0.22], "tree_density": 2.60, "grass_density": 0.35 },
+    { "id": "grove",    "key": "biome.grove",    "color": [0.74, 0.52, 0.55], "tree_density": 2.00, "grass_density": 0.45 },
+    { "id": "rock",     "key": "biome.rock",     "color": [0.46, 0.45, 0.47], "tree_density": 0.25, "grass_density": 0.08 },
+    { "id": "snow",     "key": "biome.snow",     "color": [0.86, 0.89, 0.94], "tree_density": 0.35, "grass_density": 0.05 },
+    { "id": "marsh",    "key": "biome.marsh",    "color": [0.27, 0.43, 0.32], "tree_density": 0.50, "grass_density": 0.60 },
+    { "id": "desert",   "key": "biome.desert",   "color": [0.87, 0.75, 0.47], "tree_density": 0.04, "grass_density": 0.06 },
+    { "id": "badlands", "key": "biome.badlands", "color": [0.71, 0.39, 0.21], "tree_density": 0.02, "grass_density": 0.03 },
+    { "id": "savanna",  "key": "biome.savanna",  "color": [0.60, 0.56, 0.27], "tree_density": 0.60, "grass_density": 0.40 },
+    { "id": "dirt",     "key": "biome.dirt",     "color": [0.40, 0.30, 0.21], "tree_density": 0.10, "grass_density": 0.12 },
+    { "id": "mud",      "key": "biome.mud",      "color": [0.30, 0.22, 0.15], "tree_density": 0.12, "grass_density": 0.18 }
   ]
 }

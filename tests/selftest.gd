@@ -76,20 +76,6 @@ func _run() -> void:
 	# ── 1. mundo ──────────────────────────────────────────────────────────
 	var world: World = main.world
 	check("mundo existe", world != null)
-	var voxel_expected := ClassDB.class_exists("VoxelLodTerrain") \
-		and ClassDB.class_exists("VoxelMesherTransvoxel") and ClassDB.class_exists("VoxelViewer")
-	check("backend voxel suave acompanha a capacidade da build",
-		world.use_voxel_terrain == voxel_expected
-		and (not voxel_expected or (world.voxel_terrain != null
-			and main.player.get_node_or_null("VoxelViewer") != null)),
-		"voxel=%s esperado=%s" % [str(world.use_voxel_terrain), str(voxel_expected)])
-	var grammar: RegionGrammar = world.terrain.region_grammar
-	var center_cell := (RegionGrammar.SIZE / 2) * RegionGrammar.SIZE + RegionGrammar.SIZE / 2
-	check("WFC produz uma gramática de habitats válida e mantém o prado de início",
-		grammar != null and grammar.solved
-		and grammar.tiles.size() == RegionGrammar.SIZE * RegionGrammar.SIZE
-		and grammar.tiles[center_cell] == RegionGrammar.MEADOW,
-		"solved=%s tentativas=%d" % [str(grammar.solved), grammar.solve_attempts])
 	check("céu nativo com ciclo dia/noite", world.environment.background_mode == Environment.BG_SKY
 		and world.sky_resource != null and world.sky_resource.sky_material is ShaderMaterial)
 	var sky_mat := world.sky_resource.sky_material as ShaderMaterial
@@ -424,12 +410,10 @@ func _run() -> void:
 				int(felled.get("remaining_logs")) == logs_before - 1 and physical_wood
 				and inv.count("wood") == wood_before)
 			var tree_mesh := felled.get_node("TreeMesh") as MeshInstance3D
-			# O abate usa a malha procedural só do tronco, não o GLB completo com
-			# copa. Por isso o material correto é o sólido da madeira do mundo,
-			# mesmo quando a árvore em pé veio de um modelo importado.
-			check("árvore caída usa material sólido de tronco",
-				tree_mesh.material_override == world.mats.structure,
-				"material=%s" % str(tree_mesh.material_override))
+			var species_id := str(target.get("species", ""))
+			var preserves_material := not (world.species.trees[species_id] as SpeciesKit.Species).materials_authored \
+				or tree_mesh.material_override == null
+			check("árvore caída conserva o material do modelo original", preserves_material)
 		check("nó colhido fica marcado", not bool(target.get("alive", true)))
 		check("colisão da árvore em pé é removida ao cair",
 			(target.get("collider") as CollisionShape3D).is_queued_for_deletion())
@@ -549,57 +533,52 @@ func _run() -> void:
 	check("load restaura o tronco abatido e colhível", restored_logs > 0,
 		"troncos=%d" % restored_logs)
 
-	# ── geometria do terreno: o backend ativo é o único dono do chão ─────
+	# ── geometria do terreno: a saia não pode ser degenerada ─────────────
 	# (regressão real: get_vertex_count() devolvia 0 e os 384 triângulos da
 	#  saia apontavam todos para os vértices 0..3 do canto do chunk)
-	if main.world.use_voxel_terrain:
-		var duplicate_heightfields := 0
-		for child in main.world.get_children():
-			if child is Chunk and (child as Chunk).get("_mesh_inst") != null:
-				duplicate_heightfields += 1
-		check("Transvoxel é dono do chão sem malha de altura duplicada",
-			main.world.voxel_terrain != null and duplicate_heightfields == 0,
-			"heightfields=%d" % duplicate_heightfields)
-	else:
-		var tchunk: Node3D = null
-		var tmesh: Mesh = null
-		for c in main.world.get_children():
-			if not (c is Chunk):
-				continue
-			for mi in c.get_children():
-				if mi is MeshInstance3D and (mi as MeshInstance3D).mesh != null \
-						and (mi as MeshInstance3D).mesh.get_surface_count() > 0:
-					tchunk = c
-					tmesh = (mi as MeshInstance3D).mesh
-					break
-			if tmesh:
+	var tchunk: Node3D = null
+	var tmesh: Mesh = null
+	for c in main.world.get_children():
+		if not (c is Chunk):
+			continue
+		for mi in c.get_children():
+			if mi is MeshInstance3D and (mi as MeshInstance3D).mesh != null \
+					and (mi as MeshInstance3D).mesh.get_surface_count() > 0:
+				tchunk = c
+				tmesh = (mi as MeshInstance3D).mesh
 				break
 		if tmesh:
-			var tres: int = Chunk.RES[clampi(int(tchunk.get("lod")), 0, Chunk.RES.size() - 1)]
-			var ground_tris: int = tres * tres * 2
-			var tarr: Array = tmesh.surface_get_arrays(0)
-			var tidx: Array = tarr[Mesh.ARRAY_INDEX]
-			# desde que a franja cinzenta foi removida, a malha do chunk é SÓ chão:
-			# o número de triângulos tem de bater certo com a grelha, sem sobras.
-			check("chunk sem saia (só a grelha do chão)", tidx.size() / 3 == ground_tris,
-				"%d triângulos, esperados %d" % [int(tidx.size() / 3), ground_tris])
-			var tverts: Array = tarr[Mesh.ARRAY_VERTEX]
-			var down := 0
-			for r in tidx.size() / 3:
-				var a: Vector3 = tverts[int(tidx[r * 3])]
-				var b: Vector3 = tverts[int(tidx[r * 3 + 1])]
-				var cc: Vector3 = tverts[int(tidx[r * 3 + 2])]
-				var gn := (b - a).cross(cc - a)
-				if gn.length_squared() < 1e-12:
-					continue
-				gn = gn.normalized()
-				# Godot: frente = horário => normal (b-a)x(c-a) aponta para BAIXO quando a face olha para cima
-				if gn.y >= 0.0:
-					down += 1
-			check("chão tem as faces viradas para cima", down == 0,
-				"%d viradas ao contrário" % down)
-		else:
-			check("terreno tem geometria", false, "nenhuma mesh de terreno encontrada")
+			break
+	if tmesh:
+		var tres: int = Chunk.RES[clampi(int(tchunk.get("lod")), 0, Chunk.RES.size() - 1)]
+		var tn: int = tres + 1
+		var ground_tris: int = tres * tres * 2
+		var tarr: Array = tmesh.surface_get_arrays(0)
+		var tidx: Array = tarr[Mesh.ARRAY_INDEX]
+		# desde que a franja cinzenta foi removida, a malha do chunk é SÓ chão:
+		# o número de triângulos tem de bater certo com a grelha, sem sobras.
+		check("chunk sem saia (só a grelha do chão)", tidx.size() / 3 == ground_tris,
+			"%d triângulos, esperados %d" % [int(tidx.size() / 3), ground_tris])
+		# winding: o chão aponta para cima, a saia para fora do chunk
+		var tabb: AABB = tmesh.get_aabb()
+		var centre := Vector3(tabb.position.x + tabb.size.x * 0.5, 0.0,
+			tabb.position.z + tabb.size.z * 0.5)
+		var tverts: Array = tarr[Mesh.ARRAY_VERTEX]
+		var down := 0
+		for r in tidx.size() / 3:
+			var a: Vector3 = tverts[int(tidx[r * 3])]
+			var b: Vector3 = tverts[int(tidx[r * 3 + 1])]
+			var cc: Vector3 = tverts[int(tidx[r * 3 + 2])]
+			var gn := (b - a).cross(cc - a)
+			if gn.length_squared() < 1e-12:
+				continue
+			gn = gn.normalized()
+			# Godot: frente = horário => normal (b-a)x(c-a) aponta para BAIXO quando a face olha para cima
+			if gn.y >= 0.0:
+				down += 1
+		check("chão tem as faces viradas para cima", down == 0, "%d viradas ao contrário" % down)
+	else:
+		check("terreno tem geometria", false, "nenhuma mesh de terreno encontrada")
 
 	# ── nenhum material opaco pode escrever ALPHA ─────────────────────────
 	# (regressão real: toon_foliage escrevia ALPHA e, em Godot 4, isso põe o
@@ -965,10 +944,7 @@ func _run() -> void:
 	var made_axe: Dictionary = Game.request("craft", {"recipe": "stone_axe"})
 	check("com bancada perto, o machado é feito",
 		bool(made_axe.get("ok", false)) and inv.count("axe") >= 1,
-		"reason=%s player=%s bench=%s dist=%.2f stations=%s" % [
-			str(made_axe.get("reason", "-")), str(main.player.global_position),
-			str(bench_pos), main.player.global_position.distance_to(bench_pos),
-			str(main.interaction.nearby_stations())])
+		"reason=%s" % str(made_axe.get("reason", "-")))
 	var bench_slot := -1
 	for i in inv.SLOTS:
 		if str((inv.slots[i] as Dictionary).get("id", "")) == "axe":
@@ -1170,10 +1146,6 @@ func _run() -> void:
 	check("a cadeira é um cochilo (recupera, mas não passa a noite)",
 		float(sv.energy) > 40.0 and float(Game.hour) < 5.0,
 		"energia %.1f, hora %.1f" % [float(sv.energy), float(Game.hour)])
-	check("a sequência do cochilo fecha antes do próximo sono",
-		not bool(it.sleeping) and bool(main.player.enabled),
-		"sleeping=%s enabled=%s hour=%.1f" % [str(it.sleeping),
-			str(main.player.enabled), float(Game.hour)])
 
 	# ── fome e sede ligadas ao fôlego (não são barras de rodapé) ─────────
 	sv.hunger = 100.0
@@ -1387,12 +1359,9 @@ func _run() -> void:
 	var catcher_sleep := func(_q: float, place: String) -> void:
 		dormiu_em.append(place)
 	main.interaction.slept.connect(catcher_sleep)
-	var bed_interact_result: Dictionary = it._do_interact({})
+	it._do_interact({})
 	check("dormir é uma sequência (o jogador deita-se e fica preso nela)",
-		bool(it.sleeping) and not bool(main.player.enabled),
-		"bed=%s focus=%s result=%s" % [str(cama.get("id", "")),
-			str((it.focus.get("ref", {}) as Dictionary).get("id", "")),
-			str(bed_interact_result)])
+		bool(it.sleeping) and not bool(main.player.enabled))
 	var deadline := Time.get_ticks_msec() + 12000
 	while bool(it.sleeping) and Time.get_ticks_msec() < deadline:
 		await get_tree().process_frame
@@ -1401,11 +1370,7 @@ func _run() -> void:
 		not bool(it.sleeping) and bool(main.player.enabled), "12 s de limite")
 	check("o corpo fica deitado no leito (não dorme a flutuar)",
 		main.player.global_position.distance_to(cama["pos"]) < 2.0,
-		"distância=%.2f m pos=%s cama=%s bed=%s focus=%s eventos=%s sleeping=%s threat=%.2f" % [
-			main.player.global_position.distance_to(cama["pos"]),
-			str(main.player.global_position), str(cama["pos"]), str(cama.get("id", "")),
-			str((it.focus.get("ref", {}) as Dictionary).get("id", "")), str(dormiu_em),
-			str(it.sleeping), float(sv.creature_threat)])
+		"distância=%.2f m" % main.player.global_position.distance_to(cama["pos"]))
 	check("o sinal de dormir diz onde e com que qualidade",
 		"bed" in dormiu_em and float(sv.energy) > 30.0,
 		"local=%s energia=%.0f" % [str(dormiu_em), float(sv.energy)])
@@ -2367,9 +2332,7 @@ func _first_day() -> void:
 	_fd_step("DIA 1 · dormir passa a noite e devolve a energia",
 		not bool(main.interaction.sleeping) and hora >= 5.0 and hora <= 9.5
 		and float(sv.energy) > 31.0,
-		"hora=%.1f energia=%.0f sleeping=%s alive=%s threat=%.2f pos=%s cama=%s" % [
-			hora, float(sv.energy), str(main.interaction.sleeping), str(sv.alive),
-			float(sv.creature_threat), str(main.player.global_position), str(cama_e["pos"])])
+		"hora=%.1f energia=%.0f" % [hora, float(sv.energy)])
 
 	# ── 13. o dia fecha ───────────────────────────────────────────────────
 	_fd_step("DIA 1 · o primeiro dia fecha-se ponta a ponta",

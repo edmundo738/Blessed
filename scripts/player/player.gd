@@ -70,7 +70,7 @@ var was_grounded := true
 var stamina := 100.0
 ## O corpo do jogador (Survival). O Player não lê as barras — lê o estado do
 ## corpo para tremer, respirar e arrastar-se. Quem o atribui é o main.
-var survival: Survival
+var survival: Node
 var surface := "grass"
 var enabled := true
 ## Modo deus (só laboratório/dev): voar sem gravidade nem natação.
@@ -290,13 +290,6 @@ func _smooth_look(delta: float) -> void:
 
 
 # ── direção pedida ────────────────────────────────────────────────────────
-## Direção pedida, em espaço LOCAL do jogador.
-##
-## Convenção Godot: a câmara e o jogador olham para **-Z**. Por isso
-## "para a frente" é z NEGATIVO. Antes isto estava trocado nos dois eixos:
-## usava +Z como frente (W andava para trás) e get_axis("move_right",
-## "move_left") devolve +1 quando se carrega em A (A andava para a direita).
-## tests/diag.gd mede isto tecla a tecla — ver "A. CONTROLOS".
 ## Voo do modo deus: direto, sem gravidade, sem bob. Espaço sobe, Ctrl desce.
 func _move_fly() -> void:
 	var wish := _wish_direction()
@@ -313,6 +306,13 @@ func _move_fly() -> void:
 	velocity = dir * speed + Vector3.UP * vert * speed * 0.8
 
 
+## Direção pedida, em espaço LOCAL do jogador.
+##
+## Convenção Godot: a câmara e o jogador olham para **-Z**. Por isso
+## "para a frente" é z NEGATIVO. Antes isto estava trocado nos dois eixos:
+## usava +Z como frente (W andava para trás) e get_axis("move_right",
+## "move_left") devolve +1 quando se carrega em A (A andava para a direita).
+## tests/diag.gd mede isto tecla a tecla — ver "A. CONTROLOS".
 func _wish_direction() -> Vector3:
 	# get_axis(negativo, positivo) = força(positivo) - força(negativo).
 	# A ordem dos argumentos importa: trocá-la inverte o eixo.
@@ -488,13 +488,13 @@ func stamina_recovery() -> float:
 	if survival == null:
 		return base
 	var m := 1.0
-	var hunger := survival.hunger
-	var thirst := survival.thirst
+	var hunger := float(survival.get("hunger"))
+	var thirst := float(survival.get("thirst"))
 	if hunger < 45.0:
 		m *= lerpf(0.45, 1.0, clampf(hunger / 45.0, 0.0, 1.0))
 	if thirst < 40.0:
 		m *= lerpf(0.40, 1.0, clampf(thirst / 40.0, 0.0, 1.0))
-	if survival.sickness() > 0.2:
+	if float(survival.get("sickness")) > 0.2:
 		m *= 0.75        # enjoo tira o fôlego depressa
 	return base * m
 
@@ -504,8 +504,8 @@ func stamina_recovery() -> float:
 func stamina_reserve() -> float:
 	if survival == null:
 		return 100.0
-	var hunger := survival.hunger
-	var thirst := survival.thirst
+	var hunger := float(survival.get("hunger"))
+	var thirst := float(survival.get("thirst"))
 	var m := 1.0
 	if hunger < 40.0:
 		m *= lerpf(0.60, 1.0, clampf(hunger / 40.0, 0.0, 1.0))
@@ -519,9 +519,9 @@ func stamina_reserve() -> float:
 func fatigue_level() -> float:
 	if survival == null:
 		return 0.0
-	var low_energy := clampf((35.0 - survival.energy) / 35.0, 0.0, 1.0)
-	var low_food := clampf((30.0 - survival.hunger) / 30.0, 0.0, 1.0)
-	var low_water := clampf((30.0 - survival.thirst) / 30.0, 0.0, 1.0)
+	var low_energy := clampf((35.0 - float(survival.get("energy"))) / 35.0, 0.0, 1.0)
+	var low_food := clampf((30.0 - float(survival.get("hunger"))) / 30.0, 0.0, 1.0)
+	var low_water := clampf((30.0 - float(survival.get("thirst"))) / 30.0, 0.0, 1.0)
 	return clampf(maxf(low_energy * 1.0, maxf(low_food * 0.6, low_water * 0.7)), 0.0, 1.0)
 
 

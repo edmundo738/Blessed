@@ -147,10 +147,21 @@ func _build_ruins(c: Vector2, base: float) -> void:
 			body.add_child(cs)
 			add_child(body)
 
-	# 2. fragmentos de ruína compostos por WFC. A topologia (paredes que se
-	# ligam) vem de um pequeno exemplo; variações visuais partilham os mesmos
-	# conectores, para a diversidade não abrir buracos nem criar peças soltas.
-	_build_wfc_ruin(c, rng)
+	# 2. circulo de colunas: umas de pe, outras partidas
+	var n_col := 9
+	for i in n_col:
+		var a := float(i) / float(n_col) * TAU + 0.2
+		var r := 7.2 + rng.randf_range(-0.3, 0.3)
+		var p := Vector3(c.x + cos(a) * r, 0, c.y + sin(a) * r)
+		p.y = _ground_at(p.x, p.z)
+		var roll := rng.randf()
+		if roll < 0.45:
+			_column(rng, p, rng.randf_range(4.2, 5.4), false)
+		elif roll < 0.80:
+			_column(rng, p, rng.randf_range(1.2, 2.6), false)
+		else:
+			_column(rng, p, rng.randf_range(3.0, 4.2), true)
+			_rubble(rng, p, 1.6, 4)
 
 	# 3. muralha exterior em arcos, com duas entradas
 	var wall_r := 13.0
@@ -197,144 +208,6 @@ func _build_ruins(c: Vector2, base: float) -> void:
 
 	# 7. entulho espalhado
 	_rubble(rng, centre, 14.0, 26)
-
-
-const RUIN_GRID := 9
-const RUIN_CELL := 2.3
-const RUIN_VARIANTS := 3
-const RUIN_DIRS := [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]
-const RUIN_OPPOSITE_BITS := [4, 8, 1, 2]
-
-
-func _build_wfc_ruin(c: Vector2, rng: RandomNumberGenerator) -> void:
-	var occupied := PackedByteArray()
-	occupied.resize(RUIN_GRID * RUIN_GRID)
-	# Mapa-exemplo: muralha antiga quase fechada, uma entrada e um braço interno.
-	# O solver aprende os conectores norte/leste/sul/oeste desta composição.
-	for x in range(2, 7):
-		occupied[2 * RUIN_GRID + x] = 1
-		occupied[6 * RUIN_GRID + x] = 1
-	for z in range(3, 6):
-		occupied[z * RUIN_GRID + 2] = 1
-		occupied[z * RUIN_GRID + 6] = 1
-	occupied[4 * RUIN_GRID + 2] = 0 # entrada ocidental
-	occupied[4 * RUIN_GRID + 6] = 0 # quebra do lado oriental
-	for x in range(3, 6):
-		occupied[4 * RUIN_GRID + x] = 1
-	occupied[4 * RUIN_GRID + 4] = 0 # corredor interior aberto
-
-	var signatures := PackedByteArray()
-	signatures.resize(RUIN_GRID * RUIN_GRID)
-	var frequency := PackedFloat32Array()
-	frequency.resize(16)
-	for z in range(1, RUIN_GRID - 1):
-		for x in range(1, RUIN_GRID - 1):
-			var index := z * RUIN_GRID + x
-			if occupied[index] == 0:
-				continue
-			var mask := 0
-			for direction in 4:
-				var neighbor: Vector2i = Vector2i(x, z) + RUIN_DIRS[direction]
-				if occupied[neighbor.y * RUIN_GRID + neighbor.x] != 0:
-					mask |= 1 << direction
-			signatures[index] = mask
-			frequency[mask] += 1.0
-
-	var tile_count := 16 * RUIN_VARIANTS
-	var allowed := PackedInt64Array()
-	allowed.resize(tile_count * 4)
-	var weights := PackedFloat32Array()
-	weights.resize(tile_count)
-	for tile in tile_count:
-		var mask: int = int(tile / RUIN_VARIANTS)
-		var variant: int = tile % RUIN_VARIANTS
-		var variant_weight: float = [1.0, 0.52, 0.18][variant]
-		if mask == 0:
-			variant_weight = [3.2, 0.82, 0.15][variant]
-		weights[tile] = (frequency[mask] + 0.10) * variant_weight
-		for direction in 4:
-			var bit := 1 << direction
-			var neighbor_mask := 0
-			for other in tile_count:
-				var other_mask: int = int(other / RUIN_VARIANTS)
-				var has_port: bool = (mask & bit) != 0
-				var has_mate: bool = (other_mask & RUIN_OPPOSITE_BITS[direction]) != 0
-				if has_port == has_mate:
-					neighbor_mask |= 1 << other
-			allowed[tile * 4 + direction] = neighbor_mask
-
-	var fixed: Dictionary = {}
-	for edge in RUIN_GRID:
-		fixed[edge] = 0
-		fixed[(RUIN_GRID - 1) * RUIN_GRID + edge] = 0
-		fixed[edge * RUIN_GRID] = 0
-		fixed[edge * RUIN_GRID + RUIN_GRID - 1] = 0
-	# O centro fica livre para o largo, NPCs e fogo; a ruína constrói-se à volta.
-	for z in range(3, 6):
-		for x in range(3, 6):
-			fixed[z * RUIN_GRID + x] = 0
-
-	var solver := WFC2D.new()
-	var solved := solver.solve(RUIN_GRID, RUIN_GRID, allowed, weights,
-		Game.world_seed ^ 0x5E771E, PackedFloat32Array(), fixed, 0)
-	var layout: PackedInt32Array = solved["tiles"]
-	if not bool(solved["success"]):
-		push_warning("Ruína WFC usou layout vazio após %d contradições" % int(solved["contradictions"]))
-		return
-	var half := float(RUIN_GRID - 1) * RUIN_CELL * 0.5
-	for z in RUIN_GRID:
-		for x in RUIN_GRID:
-			var tile := layout[z * RUIN_GRID + x]
-			var mask: int = int(tile / RUIN_VARIANTS)
-			var variant: int = tile % RUIN_VARIANTS
-			var center := Vector3(c.x + float(x) * RUIN_CELL - half, 0.0,
-				c.y + float(z) * RUIN_CELL - half)
-			center.y = _ground_at(center.x, center.z)
-			if mask == 0:
-				if variant == 1:
-					_rubble(rng, center, 0.65, 2)
-				elif variant == 2:
-					_column(rng, center, rng.randf_range(1.1, 2.4), false)
-				continue
-			var height: float = [3.7, 2.4, 1.25][variant]
-			for direction: int in [1, 2]: # cada ligação é construída uma vez (E e S)
-				if (mask & (1 << direction)) == 0:
-					continue
-				var step := Vector3(RUIN_DIRS[direction].x, 0.0, RUIN_DIRS[direction].y) * RUIN_CELL
-				_wfc_wall_segment(rng, center, center + step, height, variant)
-			if _bit_count(mask) >= 3 and rng.randf() < 0.38:
-				_column(rng, center, rng.randf_range(2.0, 4.0), false)
-
-
-func _wfc_wall_segment(rng: RandomNumberGenerator, from: Vector3, to: Vector3,
-		max_height: float, damage: int) -> void:
-	var delta := to - from
-	var length := Vector2(delta.x, delta.z).length()
-	var count := maxi(int(ceil(length / 0.78)), 2)
-	var yaw := atan2(-delta.z, delta.x)
-	for i in count:
-		if damage >= 2 and rng.randf() < 0.25:
-			continue
-		var t := (float(i) + 0.5) / float(count)
-		var p := from.lerp(to, t)
-		p.y = _ground_at(p.x, p.z)
-		var h := max_height * rng.randf_range(0.44, 1.0)
-		if damage >= 1 and rng.randf() < 0.34:
-			h *= rng.randf_range(0.36, 0.65)
-		if rng.randf() < 0.10:
-			h = rng.randf_range(0.3, 0.7)
-		_block(Vector3(length / float(count) + 0.08, h, 0.62), p, yaw,
-			_stone(rng, 0.5 + float(damage) * 0.16),
-			Vector3(rng.randf_range(-0.035, 0.035), 0.0, rng.randf_range(-0.045, 0.045)))
-
-
-func _bit_count(mask: int) -> int:
-	var value := mask
-	var count := 0
-	while value != 0:
-		value &= value - 1
-		count += 1
-	return count
 
 
 func _part(parent: Node, mesh: ArrayMesh, pos: Vector3, size: Vector3) -> void:

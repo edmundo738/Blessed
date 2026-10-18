@@ -1,5 +1,5 @@
 {
-  "_comment": "Metadados das espécies. Os modelos editáveis vêm do kit Blender; species.gd mantém a geometria de reserva. 'biomes' usa ids de data/biomes.json e pode incluir geology_affinity (formação -> multiplicador). Aqui controlas habitat, raridade, colheita, escala e vento.",
+  "_comment": "Metadados das espécies. Os modelos editáveis vêm do kit Blender; species.gd mantém a geometria de reserva. Aqui controlas habitat, raridade, colheita, escala e vento. 'biomes' usa os ids de data/biomes.json.",
   "trees": {
     "oak":    { "biomes": ["meadow", "forest"],            "weight": 1.0,  "harvest": "tree_oak",    "scale": [0.92, 1.28], "height": 6.8, "wind": 0.55 },
     "birch":  { "biomes": ["forest", "meadow", "snow"],    "weight": 0.8,  "harvest": "tree_birch",  "scale": [0.88, 1.24], "height": 7.1, "wind": 0.70 },
@@ -11,15 +11,10 @@
     "rock_0":     { "biomes": ["rock", "meadow", "sand", "marsh"], "weight": 1.0,  "harvest": "rock",       "scale": [0.8, 1.5], "height": 1.0 },
     "rock_1":     { "biomes": ["rock", "meadow", "sand", "marsh"], "weight": 1.0,  "harvest": "rock",       "scale": [0.8, 1.5], "height": 1.0 },
     "rock_2":     { "biomes": ["rock", "meadow", "sand", "marsh"], "weight": 0.45, "harvest": "rock",       "scale": [0.8, 1.5], "height": 1.0 },
-    "flint_node": { "biomes": ["sand", "rock", "meadow"],          "weight": 0.5,  "harvest": "flint_node", "scale": [0.7, 1.2], "height": 0.3,
-                    "geology_affinity": {"alluvium": 0.65, "sandstone": 1.35, "limestone": 1.8, "granite": 0.20, "basalt": 0.15} }
+    "flint_node": { "biomes": ["sand", "rock", "meadow"],          "weight": 0.5,  "harvest": "flint_node", "scale": [0.7, 1.2], "height": 0.3 }
   },
   "plants": {
     "bush":       { "biomes": ["meadow", "forest", "grove"], "weight": 1.0, "harvest": "bush",       "scale": [0.8, 1.3], "height": 0.9, "wind": 1.0 },
-    "mushroom":   { "biomes": ["forest", "marsh"],           "weight": 0.8, "harvest": "mushroom",    "scale": [0.8, 1.4], "height": 0.3 },
-    "fern":       { "biomes": ["forest", "grove", "marsh"], "weight": 0.9, "harvest": "",            "scale": [0.78, 1.28], "height": 0.86, "wind": 0.86 },
-    "flowers":    { "biomes": ["meadow", "grove", "savanna"], "weight": 0.72, "harvest": "",          "scale": [0.70, 1.18], "height": 0.48, "wind": 0.45 },
-    "clover":     { "biomes": ["meadow", "forest"],           "weight": 0.82, "harvest": "",            "scale": [0.75, 1.22], "height": 0.34, "wind": 0.35 },
-    "reed":       { "biomes": ["marsh", "mud"],                "weight": 1.0, "harvest": "",             "scale": [0.78, 1.25], "height": 0.92, "wind": 0.95 }
+    "mushroom":   { "biomes": ["forest", "marsh"],           "weight": 0.8, "harvest": "mushroom",    "scale": [0.8, 1.4], "height": 0.3 }
   }
 }
