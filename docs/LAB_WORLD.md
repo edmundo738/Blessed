@@ -252,3 +252,19 @@ bosque (44,-64).
 - Provas (labscene 51–56): bloco sólido → pá negada → picareta abre
   ar → escavações ligadas formam túnel contínuo → malha orientada →
   heightfield/hidrologia intocados.
+
+### CavePatch aprofundado (2026-10-19)
+
+- **Forma de monte**: o bloco-caixa virou elipsoide com ruído — lê-se
+  como outeiro de rocha na encosta, não como um caixote.
+- **Entrada natural**: túnel pré-escavado na face oeste com câmara;
+  descobre-se a andar. Túneis novos nascem arredondados (smax suave).
+- **Sílex na rocha**: 263 veios determinísticos dentro do monte;
+  brilham ocre na malha (cor por vértice), rendem `flint` ao escavar
+  e o brilho some depois de extraídos.
+- **Lençol freático**: o monte desce até y≈0,3; escavar abaixo de
+  y≈1,6 enche a mina (plano de água no interior do patch). Continua
+  sem tocar na hidrologia do mundo — a decisão de ligar os dois
+  sistemas é futura e do dono.
+- Provas (labscene 57–60): entrada aberta, veios existem, escavar no
+  veio rende sílex, cavar fundo inunda.

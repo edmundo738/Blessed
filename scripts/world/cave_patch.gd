@@ -1,26 +1,25 @@
 class_name CavePatch
 extends RefCounted
-## CavePatch — protótipo de escavação VOLUMÉTRICA sobre o LabWorld.
+## CavePatch — escavação VOLUMÉTRICA sobre o LabWorld (protótipo).
 ##
-## O terreno do laboratório é heightfield (bom para rios/lagos/hidrologia
-## e NÃO se toca nisso). Cavernas precisam de volume: este patch é um
-## bloco de rocha com um campo de distância assinada (SDF) numa grelha
-## 3D local. Sólido onde sdf<0, ar onde sdf>0. Escavar = subtrair uma
-## esfera ao campo (CSG); a malha renasce por Surface Nets ingénua:
-## um vértice por célula cortada (média das interseções das arestas),
-## quads entre células vizinhas de arestas com mudança de sinal.
-## A orientação das faces NÃO depende de convenções decoradas: cada
-## triângulo é virado até o seu normal apontar ao longo do gradiente
-## do SDF (de sólido para ar = para fora). Winding certa por prova,
-## não por fé — a lição do bug das faces de cima.
+## O terreno é heightfield (rios/lagos/hidrologia NÃO se toca). Este
+## patch é um monte de rocha com campo de distância assinada (SDF) em
+## grelha 3D: sólido onde sdf<0, ar onde sdf>0. Escavar = subtrair
+## esfera com blend suave (smax polinomial) — os túneis nascem com
+## cantos arredondados em vez de buracos dentados. A malha renasce por
+## Surface Nets ingénua e cada triângulo é virado até alinhar com o
+## gradiente do SDF: faces para fora POR CONSTRUÇÃO (lição do winding).
 ##
-## Determinístico: o ruído da superfície usa hash inteiro da posição.
+## Dentro da rocha há VEIOS DE SÍLEX determinísticos (hash da posição):
+## brilham ocre na malha e rendem `flint` ao escavar; escavado o veio,
+## o brilho some. Determinístico por construção (sem RNG de sessão).
 
 var origin: Vector3  # canto mínimo no mundo
 var dims: Vector3i  # células por eixo
 var cell: float = 1.0
 var sdf: PackedFloat32Array  # pontos da grelha (dims+1 por eixo)
-var last_outward_ratio := 0.0  # prova de orientação da última malha
+var ore: Array[Vector3] = []  # veios de sílex ainda por escavar (mundo)
+var last_outward_ratio := 0.0
 var last_verts := 0
 var last_tris := 0
 
@@ -34,17 +33,19 @@ func _init(p_origin: Vector3, p_dims: Vector3i, p_cell: float = 1.0) -> void:
 	var nz := dims.z + 1
 	sdf.resize(nx * ny * nz)
 	var c := Vector3(dims) * cell * 0.5
-	var half := c
+	var rr := Vector3(maxf(c.x, 1.0), maxf(c.y, 1.0), maxf(c.z, 1.0))
 	for z in nz:
 		for y in ny:
 			for x in nx:
 				var p := Vector3(x, y, z) * cell
-				# SDF de caixa (negativo dentro) + ruído de rocha
-				var d := p - c
-				var q := d.abs() - half
-				var box := Vector3(maxf(q.x, 0.0), maxf(q.y, 0.0), maxf(q.z, 0.0)).length() \
-						+ minf(maxf(q.x, maxf(q.y, q.z)), 0.0)
-				sdf[_idx(x, y, z)] = box + _rock_noise(p) * 0.55
+				# monte arredondado (elipsoide), não uma caixa: a rocha
+				# lê-se como outeiro na encosta, com ruído de superfície
+				var k := (p - c) / rr
+				var ell := (k.length() - 1.0) * minf(rr.x, minf(rr.y, rr.z))
+				sdf[_idx(x, y, z)] = ell + _rock_noise(p) * 0.55
+				# veio de sílex: bem dentro da rocha, determinístico
+				if ell < -2.2 and _vein_hash(x, y, z) > 0.86:
+					ore.append(origin + p)
 
 
 func _idx(x: int, y: int, z: int) -> int:
@@ -52,7 +53,6 @@ func _idx(x: int, y: int, z: int) -> int:
 
 
 func _rock_noise(p: Vector3) -> float:
-	# valor determinístico por célula de 2 m, interpolado de forma simples
 	var xi := int(floor(p.x * 0.5))
 	var yi := int(floor(p.y * 0.5))
 	var zi := int(floor(p.z * 0.5))
@@ -60,8 +60,10 @@ func _rock_noise(p: Vector3) -> float:
 	return float(h % 1000) / 1000.0 - 0.5
 
 
-func point_at(x: int, y: int, z: int) -> Vector3:
-	return origin + Vector3(x, y, z) * cell
+func _vein_hash(x: int, y: int, z: int) -> float:
+	var h := (x * 911 + y * 541 + z * 733) & 0x7fffffff
+	h = (h ^ (h >> 13)) * 1274126177 & 0x7fffffff
+	return float(h % 1000) / 1000.0
 
 
 func sdf_at_world(wp: Vector3) -> float:
@@ -76,10 +78,34 @@ func is_air(wp: Vector3) -> bool:
 	return sdf_at_world(wp) > 0.0
 
 
-## Escava uma esfera (CSG: subtrair ao sólido). Devolve pontos mudados.
-func carve(wp: Vector3, radius: float) -> int:
+## Há sílex por escavar perto deste ponto?
+func ore_near(wp: Vector3, r: float) -> bool:
+	for o in ore:
+		if o.distance_to(wp) <= r:
+			return true
+	return false
+
+
+## Retira o sílex num raio (foi escavado). Devolve true se havia.
+func consume_ore(wp: Vector3, r: float) -> bool:
+	var found := false
+	for i in range(ore.size() - 1, -1, -1):
+		if ore[i].distance_to(wp) <= r:
+			ore.remove_at(i)
+			found = true
+	return found
+
+
+func _smax(a: float, b: float, k: float) -> float:
+	# máximo suave polinomial: mistura a e b numa banda k (cantos moles)
+	var h := clampf(0.5 + 0.5 * (b - a) / k, 0.0, 1.0)
+	return lerpf(a, b, h) + k * h * (1.0 - h)
+
+
+## Escava esfera com blend suave (túneis arredondados). smooth<=0 = corte seco.
+func carve(wp: Vector3, radius: float, smooth: float = 0.7) -> int:
 	var lp := wp - origin
-	var r := radius + cell
+	var r := radius + cell + smooth
 	var x0 := clampi(int(floor((lp.x - r) / cell)), 0, dims.x)
 	var x1 := clampi(int(ceil((lp.x + r) / cell)), 0, dims.x)
 	var y0 := clampi(int(floor((lp.y - r) / cell)), 0, dims.y)
@@ -91,10 +117,9 @@ func carve(wp: Vector3, radius: float) -> int:
 		for y in range(y0, y1 + 1):
 			for x in range(x0, x1 + 1):
 				var p := Vector3(x, y, z) * cell
-				var d := p.distance_to(lp)
-				var tool := radius - d  # >0 dentro da esfera-ferramenta
+				var tool := radius - p.distance_to(lp)
 				var i := _idx(x, y, z)
-				var nv: float = maxf(sdf[i], tool)
+				var nv: float = _smax(sdf[i], tool, smooth) if smooth > 0.0 else maxf(sdf[i], tool)
 				if nv != sdf[i]:
 					sdf[i] = nv
 					changed += 1
@@ -111,20 +136,18 @@ func _grad(x: int, y: int, z: int) -> Vector3:
 	return Vector3(xp - xm, yp - ym, zp - zm)
 
 
-## Surface Nets: devolve arrays de malha + faces de colisão + prova de
-## orientação (1.0 = todos os normais geométricos alinhados com o
-## gradiente, ou seja, para fora do sólido).
+## Surface Nets: arrays + faces de colisão + cores (rocha / brilho de
+## sílex) + prova de orientação (1.0 = normais para fora do sólido).
 func build_mesh() -> Dictionary:
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
 	var idx := PackedInt32Array()
-	var vert_of := {}  # índice linear da célula -> vértice
-	# 1) um vértice por célula cortada
+	var vert_of := {}
 	for z in dims.z:
 		for y in dims.y:
 			for x in dims.x:
 				var corners: Array[float] = []
-				var cut := false
 				var has_in := false
 				var has_out := false
 				for dz in 2:
@@ -138,8 +161,6 @@ func build_mesh() -> Dictionary:
 								has_out = true
 				if not (has_in and has_out):
 					continue
-				cut = true
-				# média das interseções das 12 arestas da célula
 				var acc := Vector3.ZERO
 				var n_edge := 0
 				const EDGES := [[0, 0, 0, 1, 0, 0], [0, 1, 0, 1, 1, 0],
@@ -162,18 +183,22 @@ func build_mesh() -> Dictionary:
 				if n_edge == 0:
 					continue
 				var vp := acc / float(n_edge)
+				var wp := origin + vp * cell
 				vert_of[x + dims.x * (y + dims.y * z)] = verts.size()
-				verts.append(origin + vp * cell)
+				verts.append(wp)
 				var g := _grad(x, y, z)
 				normals.append(g.normalized() if g.length() > 0.0001 else Vector3.UP)
-	# 2) quads nas arestas com mudança de sinal (eixos x, y, z)
+				# cor: brilho ocre onde há sílex por baixo; rocha no resto
+				if ore_near(wp, 1.7):
+					colors.append(Color(0.92, 0.66, 0.28))
+				else:
+					var sh := 0.36 + (_rock_noise(vp * cell) + 0.5) * 0.14
+					colors.append(Color(sh, sh * 0.94, sh * 0.86))
 	var tris: Array = []
 	_add_axis_quads(vert_of, tris, 0)
 	_add_axis_quads(vert_of, tris, 1)
 	_add_axis_quads(vert_of, tris, 2)
-	# 3) orientação por gradiente + faces de colisão
 	var faces := PackedVector3Array()
-	var outward := 0
 	for t in tris:
 		var a: Vector3 = verts[t[0]]
 		var b: Vector3 = verts[t[1]]
@@ -184,20 +209,16 @@ func build_mesh() -> Dictionary:
 		var g := _grad(clampi(int(lp.x), 0, dims.x), clampi(int(lp.y), 0, dims.y),
 				clampi(int(lp.z), 0, dims.z))
 		if n.dot(g) < 0.0:
-			idx.append(t[0])
-			idx.append(t[2])
-			idx.append(t[1])
+			idx.append_array([t[0], t[2], t[1]])
 			faces.append_array([a, c, b])
 		else:
-			idx.append(t[0])
-			idx.append(t[1])
-			idx.append(t[2])
+			idx.append_array([t[0], t[1], t[2]])
 			faces.append_array([a, b, c])
-		outward += 1  # após a correção, todos apontam para fora
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
 	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_COLOR] = colors
 	arrays[Mesh.ARRAY_INDEX] = idx
 	last_verts = verts.size()
 	last_tris = idx.size() / 3
@@ -207,8 +228,6 @@ func build_mesh() -> Dictionary:
 
 
 func _add_axis_quads(vert_of: Dictionary, tris: Array, axis: int) -> void:
-	# para cada aresta paralela ao eixo com mudança de sinal, liga as
-	# (até) 4 células que a partilham num quad = 2 triângulos
 	var lim := [dims.x, dims.y, dims.z]
 	for z in range(lim[2] + (1 if axis == 2 else 0)):
 		for y in range(lim[1] + (1 if axis == 1 else 0)):
@@ -222,7 +241,6 @@ func _add_axis_quads(vert_of: Dictionary, tris: Array, axis: int) -> void:
 				var vb := sdf[_idx(b[0], b[1], b[2])]
 				if (va < 0.0) == (vb < 0.0):
 					continue
-				# células adjacentes: deslocamentos nos outros 2 eixos
 				var others := [0, 1, 2]
 				others.erase(axis)
 				var cells: Array = []

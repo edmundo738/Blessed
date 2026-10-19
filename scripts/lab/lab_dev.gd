@@ -458,7 +458,8 @@ func _apply_tool(fill: bool) -> void:
 			_denial(cat, LabWorld.M_ROCK)
 			return
 		_dust(cat, false, LabWorld.M_ROCK)
-		DroppedItem.spawn(scene, "stone", 1, cat + Vector3(0, 0.8, 0), scene.inv, scene.player)
+		DroppedItem.spawn(scene, str(cres.get("yield_item", "stone")), 1,
+				cat + Vector3(0, 0.8, 0), scene.inv, scene.player)
 		print("LABCAVEDIG ", tool, " em ", cat)
 		return
 	# Se o raio acerta primeiro numa árvore/pedra, o clique é partir — cavar

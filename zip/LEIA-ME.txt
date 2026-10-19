@@ -1,14 +1,12 @@
-BLESSED - pack unico do laboratorio (CavePatch)
+BLESSED - pack unico do laboratorio (CavePatch aprofundado)
 
 COMO USAR: extrai e copia as pastas por cima da tua pasta Blessed.
 Abre scenes/lab.tscn e carrega F5.
 
-NOVO: CAVEPATCH - bloco de rocha volumetrica (SDF + Surface Nets)
-na zona alta do bosque. Picareta escava tuneis reais por onde andas.
-A agua/rios nao sao tocados (prototipo ao lado do heightfield).
+CAVERNA: monte de rocha no bosque (44,-64) com entrada natural.
+Picareta escava tuneis arredondados; veios ocre = silex (flint);
+cavar fundo demais atinge o lencol freatico e a mina enche.
+A hidrologia do mundo continua intacta (prototipo ao lado).
 
 CONSTRUIR (B): 1-8 pecas, R roda 45, LMB coloca, RMB remove.
-Fundacao alinha com a vizinha; construcao ligada e mais estavel.
-Escavar longe de agua ja nao reconstrói a agua toda (mais rapido).
-
-Provas: LABSCENE_PASS 56 - LABTEST_PASS 18 - selftest 250 ok.
+Provas: LABSCENE_PASS 60 - LABTEST_PASS 18 - selftest 250 ok.

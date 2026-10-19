@@ -478,3 +478,11 @@ céu e testes estão no marco mais recente no topo e em `docs/AUDIT_2026-10-14.m
   explícita do protótipo).
 - **Verificação: LABSCENE_PASS 56/56, LABTEST_PASS 18/18, selftest
   250 ok / 0 falhas / 30 saltadas.** PNG: `docs/shots/09_lab_3d.png`.
+
+## CavePatch aprofundado (2026-10-19)
+
+- Monte elipsoidal com entrada natural e câmara; carve suave (smax);
+  263 veios de sílex com brilho na malha que rende `flint`; lençol
+  freático inunda a mina ao cavar abaixo de y≈1,6.
+- **Verificação: LABSCENE_PASS 60/60, LABTEST_PASS 18/18, selftest
+  250 ok / 0 falhas / 30 saltadas.** PNG: `docs/shots/09_lab_3d.png`.

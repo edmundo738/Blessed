@@ -569,6 +569,9 @@ var cave: CavePatch
 var _cave_body: StaticBody3D
 var _cave_mi: MeshInstance3D
 var _cave_cs: CollisionShape3D
+var _cave_water: MeshInstance3D
+var cave_flooded := false
+const AQUIFER_Y := 1.0  # lençol freático do lab: abaixo disto, a mina enche
 # EFICIÊNCIA (base HD2D media primitivas, nós também): materiais e
 # malhas de caixa são PARTILHADOS por todas as peças — antes cada peça
 # criava material+BoxMesh novos (centenas de recursos gémeos).
@@ -963,8 +966,15 @@ func _build_cave() -> void:
 	for dx in [-12.0, 0.0, 12.0]:
 		for dz in [-12.0, 0.0, 12.0]:
 			min_h = minf(min_h, lab.height(center.x + dx, center.y + dz))
-	cave = CavePatch.new(Vector3(center.x - 12.0, min_h - 3.0, center.y - 12.0),
-			Vector3i(24, 12, 24), 1.0)
+	# mais fundo que a versão 1: o monte desce até perto do lençol
+	# freático (y≈1) — quem cavar fundo demais encontra água
+	cave = CavePatch.new(Vector3(center.x - 12.0, min_h - 8.0, center.y - 12.0),
+			Vector3i(24, 16, 24), 1.0)
+	# ENTRADA NATURAL: túnel pré-escavado na face oeste + câmara —
+	# a caverna descobre-se a andar, não a ler texto
+	for step in [0.0, 2.0, 4.0, 6.0, 8.0]:
+		cave.carve(cave.origin + Vector3(step, 5, 12), 2.3)
+	cave.carve(cave.origin + Vector3(9, 5, 12), 2.6)
 	_cave_body = StaticBody3D.new()
 	_cave_body.name = "LabCaveRock"
 	_cave_body.collision_layer = 1
@@ -973,15 +983,30 @@ func _build_cave() -> void:
 	_cave_body.set_meta("lab_kind", "cave_rock")
 	_cave_mi = MeshInstance3D.new()
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.42, 0.38, 0.35)
+	mat.vertex_color_use_as_albedo = true  # rocha + brilho ocre do sílex
 	mat.roughness = 1.0
 	_cave_mi.material_override = mat
 	_cave_body.add_child(_cave_mi)
 	_cave_cs = CollisionShape3D.new()
 	_cave_body.add_child(_cave_cs)
 	add_child(_cave_body)
+	# água do lençol: escondida até alguém cavar fundo demais
+	_cave_water = MeshInstance3D.new()
+	_cave_water.name = "LabCaveWater"
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(22, 22)
+	_cave_water.mesh = pm
+	var wmat := StandardMaterial3D.new()
+	wmat.albedo_color = Color(0.25, 0.5, 0.7, 0.75)
+	wmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	wmat.roughness = 0.25
+	_cave_water.material_override = wmat
+	_cave_water.position = Vector3(center.x, AQUIFER_Y, center.y)
+	_cave_water.visible = false
+	add_child(_cave_water)
 	_rebuild_cave()
-	print("LABCAVE bloco de rocha em ", center, " base ", min_h - 3.0)
+	print("LABCAVE monte de rocha em ", center, " base ", min_h - 8.0,
+			" veios de silex: ", cave.ore.size())
 
 
 func _rebuild_cave() -> void:
@@ -1002,12 +1027,22 @@ func dig_cave(at: Vector3, tool: String) -> Dictionary:
 		return {"ok": false, "reason": "no_cave"}
 	if tool != "pickaxe":
 		return {"ok": false, "material": LabWorld.M_ROCK, "reason": "tool"}
+	var got_ore := cave.consume_ore(at, 2.1)
 	var changed := cave.carve(at, 1.7)
 	if changed == 0:
 		return {"ok": false, "material": LabWorld.M_ROCK, "reason": "air"}
 	_rebuild_cave()
+	# cavou abaixo do lençol freático: a mina começa a encher. A água
+	# aqui é do patch (plano no interior), NÃO mexe na hidrologia do
+	# mundo — a fronteira do protótipo mantém-se honesta.
+	if at.y < AQUIFER_Y + 0.6 and not cave_flooded:
+		cave_flooded = true
+		if _cave_water != null:
+			_cave_water.visible = true
+		print("LABCAVE inundacao: escavacao abaixo do lencol freatico")
 	return {"ok": true, "material": LabWorld.M_ROCK, "removed": float(changed) * 0.11,
-			"yield_item": "stone", "cave": true}
+			"yield_item": "flint" if got_ore else "stone", "cave": true,
+			"flooded": cave_flooded}
 
 
 # ── vegetação e pedras: nós reais, colhíveis pelo raycast do LabDev ───────

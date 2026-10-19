@@ -303,6 +303,22 @@ func _ready() -> void:
 	_check(absf(scene.lab.height(44.0, -64.0) - h_before) < 0.001,
 			"caverna: hidrologia/terreno heightfield INTOCADOS pelo túnel")
 
+	# aprofundar: entrada natural, sílex na rocha, lençol freático
+	_check(scene.cave.is_air(scene.cave.origin + Vector3(2, 5, 12))
+			and scene.cave.is_air(scene.cave.origin + Vector3(7, 5, 12)),
+			"caverna: ENTRADA natural pré-escavada na face oeste")
+	_check(scene.cave.ore.size() > 0,
+			"caverna: veios de sílex existem dentro da rocha")
+	var ore_hit: Dictionary = {}
+	if scene.cave.ore.size() > 0:
+		ore_hit = scene.dig_cave(scene.cave.ore[0], "pickaxe")
+	_check(str(ore_hit.get("yield_item", "")) == "flint",
+			"caverna: escavar no veio rende SÍLEX (flint), não pedra comum")
+	var flood_hit: Dictionary = scene.dig_cave(scene.cave.origin + Vector3(13, 1, 12), "pickaxe")
+	_check(bool(flood_hit.get("flooded", false)) and scene.cave_flooded
+			and scene._cave_water != null and scene._cave_water.visible,
+			"caverna: cavar abaixo do lençol freático ENCHE a mina de água")
+
 	# grelha para o PNG da etapa (render por software a partir dos dados reais)
 	var bytes := PackedByteArray()
 	bytes.resize(LabWorld.N * LabWorld.N * 2)
