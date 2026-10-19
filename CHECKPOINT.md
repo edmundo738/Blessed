@@ -468,3 +468,13 @@ céu e testes estão no marco mais recente no topo e em `docs/AUDIT_2026-10-14.m
   agora a pedido do dono (ficam arquivados em content/characters/lucia).
 - **Verificação: LABSCENE_PASS 50/50, LABTEST_PASS 18/18, selftest
   250 ok / 0 falhas / 30 saltadas.** PNG: `docs/shots/09_lab_3d.png`.
+
+## CavePatch SDF/Surface Nets (2026-10-19)
+
+- `scripts/world/cave_patch.gd`: volume SDF 24×12×24, carve CSG por
+  esfera, Surface Nets com orientação garantida pelo gradiente.
+- Lab: bloco de rocha em (44,-64); picareta escava túneis reais com
+  colisão; pedra cai como drop. Hidrologia intocada (fronteira
+  explícita do protótipo).
+- **Verificação: LABSCENE_PASS 56/56, LABTEST_PASS 18/18, selftest
+  250 ok / 0 falhas / 30 saltadas.** PNG: `docs/shots/09_lab_3d.png`.

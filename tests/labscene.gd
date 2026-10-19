@@ -279,6 +279,30 @@ func _ready() -> void:
 	_check(inland_ok and scene._water_builds > builds0,
 			"eficiência: escavar longe de água NÃO reconstrói a água; junto dela sim")
 
+	# CavePatch: escavação volumétrica sem tocar na hidrologia
+	_check(scene.cave != null and scene._cave_body != null,
+			"caverna: bloco de rocha volumétrico existe na cena")
+	var cc: Vector3 = scene.cave.origin + Vector3(12, 6, 12)
+	var h_before: float = scene.lab.height(44.0, -64.0)
+	_check(not scene.cave.is_air(cc),
+			"caverna: o centro do bloco começa SÓLIDO")
+	var cave_denied: Dictionary = scene.dig_cave(cc, "shovel")
+	var cave_dug: Dictionary = scene.dig_cave(cc, "pickaxe")
+	_check(not bool(cave_denied["ok"]) and bool(cave_dug["ok"]) and scene.cave.is_air(cc),
+			"caverna: pá não entra; picareta abre AR dentro da rocha")
+	var tunnel_ok := true
+	for step in [2.0, 5.0, 8.0]:
+		scene.dig_cave(scene.cave.origin + Vector3(step, 6, 12), "pickaxe")
+		if not scene.cave.is_air(scene.cave.origin + Vector3(step, 6, 12)):
+			tunnel_ok = false
+	_check(tunnel_ok and scene.cave.is_air(scene.cave.origin + Vector3(3.5, 6, 12)),
+			"caverna: escavações ligadas formam TÚNEL contínuo")
+	_check(scene.cave.last_verts > 0 and scene.cave.last_tris > 0
+			and scene.cave.last_outward_ratio > 0.99,
+			"caverna: Surface Nets gera malha com faces para fora (gradiente)")
+	_check(absf(scene.lab.height(44.0, -64.0) - h_before) < 0.001,
+			"caverna: hidrologia/terreno heightfield INTOCADOS pelo túnel")
+
 	# grelha para o PNG da etapa (render por software a partir dos dados reais)
 	var bytes := PackedByteArray()
 	bytes.resize(LabWorld.N * LabWorld.N * 2)

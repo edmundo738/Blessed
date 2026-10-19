@@ -175,6 +175,7 @@ func _ready() -> void:
 	_build_props()
 	_build_stations()
 	build_demo_house()
+	_build_cave()
 	_spawn_player()
 	var dev := LabDev.new()
 	dev.name = "LabDev"
@@ -564,6 +565,10 @@ const BUILD_MAX_STILT := 2.6
 
 var _build_root: Node3D
 var _built: Dictionary = {}  # "gx:gz:level:piece" -> StaticBody3D
+var cave: CavePatch
+var _cave_body: StaticBody3D
+var _cave_mi: MeshInstance3D
+var _cave_cs: CollisionShape3D
 # EFICIÊNCIA (base HD2D media primitivas, nós também): materiais e
 # malhas de caixa são PARTILHADOS por todas as peças — antes cada peça
 # criava material+BoxMesh novos (centenas de recursos gémeos).
@@ -946,6 +951,63 @@ func build_demo_house() -> int:
 			placed += 1
 	print("LABDEMO casinha-exemplo: ", placed, "/", plan.size(), " pecas")
 	return placed
+
+
+## CavePatch (protótipo): bloco de rocha volumétrico na zona alta do
+## bosque. A hidrologia NÃO sabe que ele existe — é a fronteira do
+## protótipo: primeiro provar túneis; inundação de minas vem depois,
+## se o dono quiser.
+func _build_cave() -> void:
+	var center := Vector2(44.0, -64.0)
+	var min_h := 999.0
+	for dx in [-12.0, 0.0, 12.0]:
+		for dz in [-12.0, 0.0, 12.0]:
+			min_h = minf(min_h, lab.height(center.x + dx, center.y + dz))
+	cave = CavePatch.new(Vector3(center.x - 12.0, min_h - 3.0, center.y - 12.0),
+			Vector3i(24, 12, 24), 1.0)
+	_cave_body = StaticBody3D.new()
+	_cave_body.name = "LabCaveRock"
+	_cave_body.collision_layer = 1
+	_cave_body.collision_mask = 0
+	_cave_body.set_meta("lab_cave", true)
+	_cave_body.set_meta("lab_kind", "cave_rock")
+	_cave_mi = MeshInstance3D.new()
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.42, 0.38, 0.35)
+	mat.roughness = 1.0
+	_cave_mi.material_override = mat
+	_cave_body.add_child(_cave_mi)
+	_cave_cs = CollisionShape3D.new()
+	_cave_body.add_child(_cave_cs)
+	add_child(_cave_body)
+	_rebuild_cave()
+	print("LABCAVE bloco de rocha em ", center, " base ", min_h - 3.0)
+
+
+func _rebuild_cave() -> void:
+	var data := cave.build_mesh()
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, data["arrays"])
+	_cave_mi.mesh = mesh
+	var shape := ConcavePolygonShape3D.new()
+	shape.set_faces(data["faces"])
+	_cave_cs.shape = shape
+
+
+## Escavar na rocha volumétrica: só a picareta entra (a negação é por
+## efeito, como no resto do laboratório). Devolve o mesmo contrato
+## do tool_dig para o LabDev tratar som/poeira/drops sem saber de SDF.
+func dig_cave(at: Vector3, tool: String) -> Dictionary:
+	if cave == null:
+		return {"ok": false, "reason": "no_cave"}
+	if tool != "pickaxe":
+		return {"ok": false, "material": LabWorld.M_ROCK, "reason": "tool"}
+	var changed := cave.carve(at, 1.7)
+	if changed == 0:
+		return {"ok": false, "material": LabWorld.M_ROCK, "reason": "air"}
+	_rebuild_cave()
+	return {"ok": true, "material": LabWorld.M_ROCK, "removed": float(changed) * 0.11,
+			"yield_item": "stone", "cave": true}
 
 
 # ── vegetação e pedras: nós reais, colhíveis pelo raycast do LabDev ───────

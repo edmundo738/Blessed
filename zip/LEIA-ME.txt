@@ -1,16 +1,14 @@
-BLESSED - pack unico do laboratorio (construcao polida)
+BLESSED - pack unico do laboratorio (CavePatch)
 
 COMO USAR: extrai e copia as pastas por cima da tua pasta Blessed.
 Abre scenes/lab.tscn e carrega F5.
 
-NOVO NESTE PACK:
-- Sons de construcao: batida de madeira, baque de pedra, estrondo
-  quando uma estrutura colapsa. Poeira da cor do material em cada peca.
-- Uma casinha-exemplo ja construida junto a clareira (porta, janela,
-  telhado de duas aguas, escadas). Remove-lhe a fundacao e ve o colapso.
+NOVO: CAVEPATCH - bloco de rocha volumetrica (SDF + Surface Nets)
+na zona alta do bosque. Picareta escava tuneis reais por onde andas.
+A agua/rios nao sao tocados (prototipo ao lado do heightfield).
 
-CONSTRUIR (tecla B): roda ou 1-8 escolhe a peca, R roda 45 graus,
-LMB coloca (consome materiais), RMB remove (devolve metade).
-Fantasma: verde firme, amarelo estica, laranja fraco, vermelho nao entra.
+CONSTRUIR (B): 1-8 pecas, R roda 45, LMB coloca, RMB remove.
+Fundacao alinha com a vizinha; construcao ligada e mais estavel.
+Escavar longe de agua ja nao reconstrói a agua toda (mais rapido).
 
-Provas: LABSCENE_PASS 46 - LABTEST_PASS 18 - selftest 245 ok.
+Provas: LABSCENE_PASS 56 - LABTEST_PASS 18 - selftest 250 ok.

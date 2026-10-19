@@ -446,6 +446,21 @@ func _apply_tool(fill: bool) -> void:
 	if hit.is_empty():
 		return
 	var collider: Object = hit.get("collider")
+	# Rocha volumétrica (CavePatch): a picareta abre túnel; outra
+	# ferramenta nega pelo efeito. Aterrar na caverna ainda não existe.
+	if collider != null and (collider as Node).has_meta("lab_cave"):
+		var cat: Vector3 = hit.get("position", Vector3.ZERO)
+		if fill:
+			_denial(cat, LabWorld.M_ROCK)
+			return
+		var cres: Dictionary = scene.dig_cave(cat, tool)
+		if not bool(cres.get("ok", false)):
+			_denial(cat, LabWorld.M_ROCK)
+			return
+		_dust(cat, false, LabWorld.M_ROCK)
+		DroppedItem.spawn(scene, "stone", 1, cat + Vector3(0, 0.8, 0), scene.inv, scene.player)
+		print("LABCAVEDIG ", tool, " em ", cat)
+		return
 	# Se o raio acerta primeiro numa árvore/pedra, o clique é partir — cavar
 	# através de uma árvore para o chão atrás dela seria mentira física.
 	if collider != null and (collider as Node).has_meta("lab_kind"):

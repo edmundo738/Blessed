@@ -228,3 +228,27 @@ migrado depois de aprovado aqui):
   +0,10). Isolar sai mais fraco; ligar a aldeia compensa.
 - Provas (labscene 47–50): alinhamento de nível, bónus de ligação,
   material partilhado entre peças, água não reconstruída em terra seca.
+
+### CavePatch: escavação volumétrica (2026-10-19)
+
+Protótipo sobre o LabWorld, **sem tocar na hidrologia**: o terreno
+continua heightfield (rios/lagos como estão) e ao lado nasce um bloco
+de rocha volumétrico (24×12×24 m, células de 1 m) na zona alta do
+bosque (44,-64).
+
+- **SDF**: campo de distância assinada em grelha 3D (sólido < 0,
+  ar > 0), caixa com ruído determinístico de rocha.
+- **Escavar = CSG**: subtrair esfera ao campo (`max(sdf, r−d)`); só a
+  picareta entra, a negação é por efeito como no resto do lab.
+- **Surface Nets ingénua**: 1 vértice por célula cortada (média das
+  interseções das arestas, `t=|a|/(|a|+|b|)`), quads nas arestas com
+  mudança de sinal, normais pelo gradiente. Cada triângulo é virado
+  até alinhar com o gradiente → faces para fora **por construção**
+  (a lição do winding), com `last_outward_ratio` como prova.
+- Colisão = as mesmas faces (ConcavePolygonShape), por isso o túnel
+  anda-se por dentro a sério.
+- Fronteira do protótipo: a água não entra nos túneis (inundação de
+  minas é decisão futura do dono, não um acidente).
+- Provas (labscene 51–56): bloco sólido → pá negada → picareta abre
+  ar → escavações ligadas formam túnel contínuo → malha orientada →
+  heightfield/hidrologia intocados.
