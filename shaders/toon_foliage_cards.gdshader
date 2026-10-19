@@ -14,6 +14,11 @@ uniform float ambient_gain : hint_range(0.0, 2.0) = 0.78;
 uniform float wind_strength : hint_range(0.0, 1.0) = 0.12;
 uniform float wind_speed : hint_range(0.0, 4.0) = 1.1;
 uniform float wind_height = 6.0;
+// Recolorir a folhagem sem perder a máscara alfa: a sakura do kit tem folhas
+// vermelhas de ácer. O jogador deve ver uma cerejeira rosada, não uma árvore
+// de outono; a silhueta (textura) mantém-se e só a matiz é puxada.
+uniform vec4 recolour : source_color = vec4(1.0);
+uniform float recolour_amount : hint_range(0.0, 1.0) = 0.0;
 
 varying vec3 v_color;
 varying vec3 v_tint;
@@ -36,7 +41,13 @@ void fragment() {
 	vec4 texel = texture(albedo_texture, UV) * albedo_tint;
 	// Máscara binária: sem blending semitransparente nas bordas das folhas.
 	float covered = step(alpha_cutoff, texel.a);
-	ALBEDO = texel.rgb * v_color * v_tint * mix(0.62, 1.04, v_height);
+	vec3 leaf = texel.rgb;
+	if (recolour_amount > 0.001) {
+		float lum = dot(leaf, vec3(0.299, 0.587, 0.114));
+		vec3 tinted = recolour.rgb * (0.42 + 1.16 * lum);
+		leaf = mix(leaf, tinted, recolour_amount);
+	}
+	ALBEDO = leaf * v_color * v_tint * mix(0.62, 1.04, v_height);
 	ALPHA = covered;
 	ALPHA_SCISSOR_THRESHOLD = 0.5;
 	ROUGHNESS = 0.84;

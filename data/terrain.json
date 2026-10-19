@@ -15,6 +15,17 @@
     "hills":     { "freq": 0.0065,  "octaves": 4 },
     "erosion":   { "freq": 0.0016,  "octaves": 3 }
   },
+  "geology": {
+    "province_frequency": 0.00052,
+    "fracture_frequency": 0.0038,
+    "strata_frequency": 0.010
+  },
+  "ecology": {
+    "tree_frequency": 0.009,
+    "rock_frequency": 0.013,
+    "plant_frequency": 0.018,
+    "species_frequency": 0.0055
+  },
   "continent_spline": [
     [-1.00, -46.0], [-0.62, -30.0], [-0.42, -7.0], [-0.24, 0.8],
     [0.00, 4.5], [0.25, 11.0], [0.55, 22.0], [1.00, 36.0]

@@ -9,6 +9,7 @@ const INK := Color("202a2b")
 const WOOD := Color("a97542")
 const LEAF := Color("76ad55")
 const METAL := Color("c8d5d2")
+const STONE := Color("9aa1a0")
 const RED := Color("d94e4d")
 const BLUE := Color("60b6d2")
 const GOLD := Color("f3c966")
@@ -74,6 +75,40 @@ func _draw() -> void:
 			_stroke(center + Vector2(8, 13) * k, center + Vector2(-7, -11) * k, WOOD, 5.0 * k)
 			_stroke(center + Vector2(-14, -10) * k, center + Vector2(12, -14) * k, METAL, 5.0 * k)
 			_stroke(center + Vector2(-14, -10) * k, center + Vector2(-18, -14) * k, METAL, 3.0 * k)
+		# Lasca de pedra: um ramo com uma lasca amarrada. Três traços e a fibra
+		# atada dizem "improvisado" sem uma linha de texto.
+		"stone_blade":
+			_stroke(center + Vector2(9, 14) * k, center + Vector2(-7, -9) * k, WOOD, 4.5 * k)
+			_poly(center + Vector2(-8, -10) * k, [Vector2(-6, -3), Vector2(4, -8), Vector2(10, -2), Vector2(2, 7), Vector2(-5, 5)], STONE)
+			_stroke(center + Vector2(-2, -6) * k, center + Vector2(4, 2) * k, Color("6f5a3a"), 1.6 * k)
+		# Ferramentas primitivas: MESMA silhueta das de pedra, mas o cabo é um
+		# pau cru e a cabeça é pedra clara amarrada com fibra. O ícone diz
+		# "isto é o degrau de baixo" sem uma linha de texto.
+		"primitive_axe":
+			_stroke(center + Vector2(7, 13) * k, center + Vector2(-8, -13) * k, Color("8a6136"), 4.6 * k)
+			_poly(center + Vector2(-9, -12) * k, [Vector2(-1, -8), Vector2(11, -7), Vector2(10, 1), Vector2(1, 6), Vector2(-3, 2)], STONE)
+			_stroke(center + Vector2(-3, -5) * k, center + Vector2(5, 1) * k, Color("6f5a3a"), 1.8 * k)
+		"primitive_pickaxe":
+			_stroke(center + Vector2(8, 13) * k, center + Vector2(-7, -11) * k, Color("8a6136"), 4.6 * k)
+			_stroke(center + Vector2(-14, -10) * k, center + Vector2(12, -14) * k, STONE, 5.0 * k)
+			_stroke(center + Vector2(-2, -12) * k, center + Vector2(4, -11) * k, Color("6f5a3a"), 1.8 * k)
+		# Isqueiro primitivo: pedra de sílex + pedra de bater + feixe de fibra.
+		"fire_kit":
+			_stroke(center + Vector2(-9, 6) * k, center + Vector2(2, 12) * k, Color("8f8b84"), 4.6 * k)
+			_stroke(center + Vector2(-2, -4) * k, center + Vector2(11, 3) * k, Color("6f6a63"), 4.6 * k)
+			_stroke(center + Vector2(-6, 10) * k, center + Vector2(9, -8) * k, Color("c9a45e"), 2.0 * k)
+			_poly(center + Vector2(11, -10) * k, [Vector2(-3, 2), Vector2(0, -5), Vector2(4, -7), Vector2(6, -2), Vector2(3, 4)], Color("f0a23c"))
+		# Cofre e cadeira: mobiliário que serve para guardar e para descansar.
+		"chest":
+			_poly(center + Vector2(-14, -3) * k, [Vector2(0, 0), Vector2(28, 0), Vector2(26, 15), Vector2(2, 15)], Color("9c7043"))
+			_stroke(center + Vector2(-12, -1) * k, center + Vector2(13, -1) * k, Color("6d4a29"), 3.0 * k)
+			_stroke(center + Vector2(-1, 0) * k, center + Vector2(-1, 10) * k, GOLD, 3.4 * k)
+		"chair":
+			_stroke(center + Vector2(-7, 4) * k, center + Vector2(-7, 14) * k, Color("8a6136"), 3.4 * k)
+			_stroke(center + Vector2(-8, 5) * k, center + Vector2(-8, -12) * k, Color("6d4a29"), 3.0 * k)
+			_stroke(center + Vector2(-9, 5) * k, center + Vector2(9, 5) * k, Color("a87a48"), 3.6 * k)
+			_stroke(center + Vector2(7, 6) * k, center + Vector2(7, 15) * k, Color("6d4a29"), 3.0 * k)
+			_stroke(center + Vector2(2, 15) * k, center + Vector2(9, 15) * k, Color("6d4a29"), 3.0 * k)
 		"rod":
 			_stroke(center + Vector2(-8, 14) * k, center + Vector2(8, -16) * k, WOOD, 3.0 * k)
 			_stroke(center + Vector2(8, -16) * k, center + Vector2(16, -5) * k, INK, 1.4 * k)
@@ -107,10 +142,28 @@ func _draw() -> void:
 			draw_circle(center + Vector2(-2, -3) * k, 4.0 * k, Color("f5d2a7"))
 			if item_id.begins_with("fish"):
 				_poly(center + Vector2(8, 0) * k, [Vector2(0, 0), Vector2(9, -7), Vector2(9, 7)], BLUE)
-		"bottle", "water":
+		"bottle", "water", "water_salt":
 			_poly(center, [Vector2(-6, -14), Vector2(6, -14), Vector2(6, -8), Vector2(11, -4), Vector2(10, 13), Vector2(-10, 13), Vector2(-11, -4), Vector2(-6, -8)], Color("9ed8d0"))
-			draw_rect(Rect2(center + Vector2(-7, 1) * k, Vector2(14, 10) * k), BLUE if item_id == "water" else Color("c5e6d7"))
+			var liquido := Color("c5e6d7")
+			if item_id == "water":
+				liquido = BLUE
+			elif item_id == "water_salt":
+				# mar: verde-acinzentado, com duas riscas de sal
+				liquido = Color("4f8f92")
+			draw_rect(Rect2(center + Vector2(-7, 1) * k, Vector2(14, 10) * k), liquido)
+			if item_id == "water_salt":
+				_stroke(center + Vector2(-4, 5) * k, center + Vector2(3, 5) * k, Color("d9eef0"), 1.2 * k)
+				_stroke(center + Vector2(-2, 8) * k, center + Vector2(4, 8) * k, Color("d9eef0"), 1.2 * k)
 			_stroke(center + Vector2(-5, -10) * k, center + Vector2(5, -10) * k, INK, 2.0 * k)
+		"workbench":
+			# tampo + quatro pernas + ferramentas em cima
+			draw_rect(Rect2(center + Vector2(-15, -8) * k, Vector2(30, 7) * k), INK)
+			draw_rect(Rect2(center + Vector2(-14, -7) * k, Vector2(28, 5) * k), WOOD)
+			for dx in [-12.0, 8.0]:
+				draw_rect(Rect2(center + Vector2(dx, -2) * k, Vector2(6, 16) * k), INK)
+				draw_rect(Rect2(center + Vector2(dx + 1, -1) * k, Vector2(4, 14) * k), Color("8a5f38"))
+			_stroke(center + Vector2(-10, -12) * k, center + Vector2(-3, -12) * k, METAL, 2.2 * k)
+			_stroke(center + Vector2(2, -13) * k, center + Vector2(9, -10) * k, METAL, 2.2 * k)
 		"wall", "floor", "pillar", "bed":
 			if item_id == "wall":
 				draw_rect(Rect2(center + Vector2(-13, -11) * k, Vector2(26, 22) * k), WOOD)

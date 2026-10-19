@@ -50,9 +50,11 @@ da malha da pedra.
 - Árvores, arbustos, cogumelos e rochas têm mesh base, LOD1 e LOD2.
 - O gerador tenta os rácios de simplificação `0,58` e `0,25`; a tabela contém a
   contagem final real de vértices após exportação/importação.
-- O mundo usa quatro faixas por distância: `lod 0` até 60 m, `lod 1` até 120 m,
-  `lod 2` até 180 m e `lod 3` no horizonte. Uma histerese de 8 m evita alternância
+- O mundo usa quatro faixas por distância: `lod 0` até 42 m, `lod 1` até 85 m,
+  `lod 2` até 135 m e `lod 3` no horizonte. Uma histerese de 8 m evita alternância
   visível; o quarto nível só desenha terreno com uma grelha mais leve.
+  (As faixas eram 60/120/180 m; foram encurtadas depois de `-- perf` medir
+  1,4 M primitivas e 3 FPS numa GPU integrada.)
 - Só `lod 0` recebe colisões e sombras detalhadas. A relva diminui com a distância;
   as algas ficam no anel mais próximo, debaixo de água rasa.
 - Cada `MultiMeshInstance3D` pertence a um chunk, para o motor poder ocultar

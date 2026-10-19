@@ -29,6 +29,15 @@ uniform float bump_strength : hint_range(0.0, 3.0) = 1.0;
 uniform float spec_strength : hint_range(0.0, 2.0) = 0.55;
 uniform float detail_fade_near = 45.0;
 uniform float detail_fade_far = 230.0;
+// Chão por baixo da relva: de perto vê-se TERRA (castanha, o solo onde a relva
+// cresce) entre as lâminas; a partir de ~20 m o que domina é a cor da própria
+// relva, senão o campo lia-se como poeira com pontos verdes por cima.
+uniform float soil_near = 4.0;
+uniform float soil_far = 20.0;
+uniform float soil_strength : hint_range(0.0, 1.0) = 0.85;
+uniform float soil_red = 0.30;
+uniform float soil_green = 0.21;
+uniform float soil_blue = 0.14;
 
 varying vec3 v_world;
 varying vec3 v_wn;
@@ -105,7 +114,7 @@ float aa(float freq, float fp) {
 // ── classes de material: cada uma devolve albedo, altura (para a normal) e roughness ──
 // k = 0..1 intensidade do detalhe (já com o desvanecimento por distância)
 
-void cls_grass(vec2 p, vec3 base, float k, float fp, out vec3 alb, out float h, out float rough) {
+void cls_grass(vec2 p, vec3 base, float k, float fp, float soil_mix, out vec3 alb, out float h, out float rough) {
 	float macro = fbm3(p * 0.018);                       // manchas de 50 m: viçoso vs seco
 	float clump = vnoise(p * 1.6);                       // tufos de ~60 cm
 	float fine = vnoise(p * 9.0);                        // lâminas
@@ -127,8 +136,23 @@ void cls_grass(vec2 p, vec3 base, float k, float fp, out vec3 alb, out float h, 
 	float d2 = length(fract(g2) - o2);
 	float on2 = step(0.84, hash21(id2 + 9.1));
 	c = mix(c, c * 0.70, on2 * (1.0 - smoothstep(0.12, 0.34, d2)) * k * 0.55 * aa(3.1, fp));
-	alb = c;
-	h = (clump * 0.6 + fine * 0.4 * aa(9.0, fp)) * 0.8;
+
+	// O solo por baixo: entre as lâminas de relva vê-se terra, não uma tela
+	// verde. `base` é a cor do bioma, por isso cada pradaria tem a sua terra
+	// (a savana fica mais clara e poeirenta, a floresta mais escura e húmida).
+	vec3 soil = vec3(soil_red, soil_green, soil_blue);
+	soil = mix(soil, base * vec3(0.66, 0.52, 0.40), 0.42);
+	soil *= 0.82 + 0.36 * macro;                       // manchas de humidade
+	soil *= mix(1.0, 0.80 + 0.34 * clump, k);          // grumos
+	float grain = vnoise(p * 22.0);
+	soil *= mix(1.0, 0.88 + 0.24 * grain, k * aa(22.0, fp));
+	// raízes: a terra imediatamente sob a relva é mais escura
+	soil = mix(soil, soil * 0.72, on2 * 0.5 * k);
+
+	vec3 grassy = c;
+	alb = mix(grassy, soil, clamp(soil_mix, 0.0, 1.0));
+	h = mix((clump * 0.6 + fine * 0.4 * aa(9.0, fp)) * 0.8,
+		(vnoise(p * 12.0) * 0.5 + clump * 0.5), clamp(soil_mix, 0.0, 1.0));
 	rough = 0.92;
 }
 
@@ -269,7 +293,8 @@ void fragment() {
 	vec3 alb = vec3(0.0);
 	float hgt = 0.0;
 	float rgh = 0.0;
-	if (wc.x > 0.01) { cls_grass(p, base, k, fp, a_g, h_g, r_g); alb += a_g * wc.x; hgt += h_g * wc.x; rgh += r_g * wc.x; }
+	float soil_mix = soil_strength * (1.0 - smoothstep(soil_near, soil_far, dist));
+	if (wc.x > 0.01) { cls_grass(p, base, k, fp, soil_mix, a_g, h_g, r_g); alb += a_g * wc.x; hgt += h_g * wc.x; rgh += r_g * wc.x; }
 	if (wc.y > 0.01) { cls_dirt(p, base, k, fp, a_d, h_d, r_d); alb += a_d * wc.y; hgt += h_d * wc.y; rgh += r_d * wc.y; }
 	if (wc.z > 0.01) { cls_sand(p, base, k, fp, a_s, h_s, r_s); alb += a_s * wc.z; hgt += h_s * wc.z; rgh += r_s * wc.z; }
 	if (wc.w > 0.01) { cls_strata(p, v_world.y, base, k, fp, a_t, h_t, r_t); alb += a_t * wc.w; hgt += h_t * wc.w; rgh += r_t * wc.w; }
@@ -308,7 +333,7 @@ void fragment() {
 		vec3 da;
 		vec2 px = p + vec2(e, 0.0);
 		vec2 pz = p + vec2(0.0, e);
-		if (wc.x > 0.01) { cls_grass(px, base, 0.0, fp, da, dh, dr); h1 += dh * wc.x; cls_grass(pz, base, 0.0, fp, da, dh, dr); h2 += dh * wc.x; }
+		if (wc.x > 0.01) { cls_grass(px, base, 0.0, fp, soil_mix, da, dh, dr); h1 += dh * wc.x; cls_grass(pz, base, 0.0, fp, soil_mix, da, dh, dr); h2 += dh * wc.x; }
 		if (wc.y > 0.01) { cls_dirt(px, base, 0.0, fp, da, dh, dr); h1 += dh * wc.y; cls_dirt(pz, base, 0.0, fp, da, dh, dr); h2 += dh * wc.y; }
 		if (wc.z > 0.01) { cls_sand(px, base, 0.0, fp, da, dh, dr); h1 += dh * wc.z; cls_sand(pz, base, 0.0, fp, da, dh, dr); h2 += dh * wc.z; }
 		if (wc.w > 0.01) { cls_strata(px, v_world.y, base, 0.0, fp, da, dh, dr); h1 += dh * wc.w; cls_strata(pz, v_world.y, base, 0.0, fp, da, dh, dr); h2 += dh * wc.w; }

@@ -88,26 +88,67 @@ func _build() -> void:
 
 # ── peças ─────────────────────────────────────────────────────────────────
 func _vignette() -> void:
+	# O véu deixou de ser só "medo". É aqui que o CORPO do jogador se vê:
+	# fome, sede, cansaço, frio e enjoo têm cada um a sua cor e o seu ritmo.
+	# Regra do projecto: o efeito vem primeiro, o texto confirma (se tanto).
 	var sh := Shader.new()
 	sh.code = """
 shader_type canvas_item;
 uniform float fear : hint_range(0.0, 1.0) = 0.0;
 uniform float grain : hint_range(0.0, 1.0) = 0.4;
 uniform float hurt : hint_range(0.0, 1.0) = 0.0;
+uniform float hunger : hint_range(0.0, 1.0) = 0.0;
+uniform float thirst : hint_range(0.0, 1.0) = 0.0;
+uniform float fatigue : hint_range(0.0, 1.0) = 0.0;
+uniform float cold : hint_range(0.0, 1.0) = 0.0;
+uniform float sick : hint_range(0.0, 1.0) = 0.0;
 uniform float time_s = 0.0;
 float rnd(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+float band(float e0, float e1, float x) { return smoothstep(e0, e1, x); }
+
 void fragment() {
 	vec2 uv = UV;
 	vec2 c = uv - 0.5;
 	float d = length(c) * 1.42;
-	float vig = smoothstep(0.55, 1.25, d);
-	vec3 col = vec3(0.0);
-	float a = vig * (0.28 + fear * 0.62) + hurt * 0.55 * (1.0 - d);
-	// pulsa com o medo
-	a *= 1.0 + fear * 0.12 * sin(time_s * (2.0 + fear * 4.0));
+	float vig = band(0.55, 1.25, d);
+
+	float h = band(0.45, 1.0, hunger);
+	float t = band(0.45, 1.0, thirst);
+	float f = band(0.35, 1.0, fatigue);
+	float k = band(0.40, 1.0, cold);
+	float s = band(0.25, 1.0, sick);
+
+	// A escuridão é o que se SENTE: cada necessidade aperta as bordas.
+	// (Somar cor clara sobre a relva lia-se como neblina — o corpo a falhar
+	//  tem de escurecer, não de clarear.)
+	float lids = band(0.30, 1.10, d + 0.12 * sin(uv.x * 3.14159));
+	float breath = 0.5 - 0.5 * cos(time_s * (1.15 + t * 0.9));
+	float dark = vig * (0.26 + fear * 0.60)
+		+ vig * (h * 0.38 + t * 0.42 + k * 0.24)
+		+ f * (lids * 0.50 + 0.12 * breath)
+		+ s * vig * 0.22 * (0.7 + 0.3 * sin(time_s * 2.2));
+	dark = clamp(dark, 0.0, 0.88);
+
+	// A cor diz QUAL necessidade é: âmbar na fome, cinza seco na sede,
+	// azul-gelo no frio, verde no enjoo. Tudo escuro — a cor não ilumina.
+	vec3 tint = vec3(0.12, 0.065, 0.015) * h
+		+ vec3(0.035, 0.05, 0.062) * t
+		+ vec3(0.02, 0.02, 0.055) * f
+		+ vec3(0.05, 0.085, 0.115) * k
+		+ vec3(0.028, 0.085, 0.030) * s;
+	tint = mix(vec3(0.0), tint, vig + f * 0.35 + s * 0.5);
+
+	// o frio tem cristais: pontos claros, raros, só nos cantos
+	float frost = step(0.94, rnd(floor(uv * 230.0))) * vig * k;
+
+	// dano e medo continuam por cima de tudo
+	tint += vec3(0.02, 0.0, 0.03) * fear * 1.2;
+	tint += vec3(0.5, 0.0, 0.05) * hurt * 0.6;
+
 	float g = (rnd(uv * 512.0 + time_s) - 0.5) * grain * 0.06;
-	col = vec3(0.02, 0.0, 0.03) * (fear * 1.2) + vec3(0.5, 0.0, 0.05) * hurt * 0.6;
-	COLOR = vec4(col + g, clamp(a + g, 0.0, 1.0));
+	vec3 col = tint + vec3(0.55, 0.68, 0.80) * frost * 0.45;
+	float a = clamp(dark + frost * 0.28 + g, 0.0, 0.92);
+	COLOR = vec4(clamp(col + g, 0.0, 1.0), a);
 }
 """
 	var mat := ShaderMaterial.new()
@@ -123,6 +164,31 @@ void fragment() {
 	hurt_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	hurt_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(hurt_rect)
+
+
+## Traduz um estado do corpo para o véu. Quanto mais perto de zero a barra,
+## mais forte o efeito — é o mesmo número que o jogador vê na barra, mas
+## sentido em vez de lido.
+func _feeling(value: float) -> float:
+	return clampf((45.0 - value) / 45.0, 0.0, 1.0)
+
+
+func _paint_feeling() -> void:
+	if fear_rect == null or not (fear_rect.material is ShaderMaterial):
+		return
+	var mat := fear_rect.material as ShaderMaterial
+	var sv: Node = survival
+	if sv == null:
+		return
+	mat.set_shader_parameter("hunger", _feeling(float(sv.get("hunger"))))
+	mat.set_shader_parameter("thirst", _feeling(float(sv.get("thirst"))))
+	mat.set_shader_parameter("fatigue", _feeling(float(sv.get("energy"))))
+	mat.set_shader_parameter("cold", _feeling(float(sv.get("warmth")) * 0.8))
+	# enjoo: o veneno da comida/água tem relógio próprio; apaga-se com o tempo
+	var ill := 0.0
+	if sv.has_method("sickness"):
+		ill = float(sv.call("sickness"))
+	mat.set_shader_parameter("sick", ill)
 
 
 func _crosshair() -> Control:
@@ -543,6 +609,7 @@ func _process(delta: float) -> void:
 			subtitle.visible = false
 	if hurt_rect.color.a > 0.0:
 		hurt_rect.color.a = maxf(0.0, hurt_rect.color.a - delta * 1.2)
+	_paint_feeling()
 	if fear_rect and fear_rect.material is ShaderMaterial:
 		(fear_rect.material as ShaderMaterial).set_shader_parameter("time_s",
 			float(Time.get_ticks_msec()) * 0.001)
@@ -648,12 +715,16 @@ func _refresh_prompt() -> void:
 	var action := Loc.t(key)
 	var target := ""
 	var kind := str(f.get("kind", ""))
+	var verb := "hud.verb_take"
 	var hold_action := false
+	var missing := ""
 	if kind == "harvest":
 		var node: Dictionary = f["ref"]
 		var resource_id := str(node.get("kind", ""))
 		var spec: Dictionary = Db.HARVEST.get(resource_id, {})
-		var want := str(spec.get("tool", ""))
+		var held := inv.hotbar_id() if inv != null else ""
+		var power: Dictionary = Db.item(held).get("power", {}) if inv != null else {}
+		var has_tool := power.has(str(spec.get("action", "")))
 		if resource_id.begins_with("tree"):
 			target = Loc.t("hud.target_tree")
 		elif resource_id == "rock":
@@ -665,21 +736,43 @@ func _refresh_prompt() -> void:
 			var yield_ids := yields.keys()
 			target = Db.item_name(str(yield_ids[0])) if not yield_ids.is_empty() else action
 		hold_action = resource_id.begins_with("tree") or resource_id == "rock"
-		if hold_action and want != "" and inv != null and inv.hotbar_id() != want:
-			action += "  ·  " + Loc.t("hud.needs_tool", [Db.item_name(want)])
+		if hold_action:
+			# Trabalho contínuo = rato esquerdo. Árvores dão-se com as mãos (mais
+			# devagar); rochas sem picareta não dão nada — e o HUD diz o motivo.
+			verb = "hud.verb_work"
+			if missing.is_empty() and not spec.get("needs", "") == "" and not has_tool:
+				missing = Loc.t("hud.needs_tool", [Db.item_name(str(spec["needs"]))])
+		elif kind == "harvest":
+			verb = "hud.verb_take"
 		var max_hp := maxf(float(node.get("max_hp", node.get("hp", 1))), 1.0)
 		var hp := maxf(float(node.get("hp", max_hp)), 0.0)
 		prompt_bar.value = (1.0 - hp / max_hp) * 100.0
 		prompt_bar.visible = hold_action and hp < max_hp
+	elif kind == "structure":
+		var e: Dictionary = f["ref"]
+		target = Db.item_name(str(e.get("id", "")))
+		hold_action = not (str(e.get("id", "")) in ["campfire", "bed"])
+		if hold_action:
+			# Estruturas colocadas: demolir exige segurar, para não desaparecerem
+			# com um toque acidental no F.
+			verb = "hud.verb_work"
+			action = Loc.t("prompt.remove")
+		prompt_bar.visible = false
 	else:
 		match kind:
-			"structure": target = Db.item_name(str(f["ref"].get("id", "")))
 			"water": target = Loc.t("hud.target_water")
 			"npc": target = Loc.t("hud.target_person")
 			"felled_tree": target = Loc.t("hud.target_log")
+			"animal":
+				target = Loc.t("hud.target_animal")
+				verb = "hud.verb_work"
 		prompt_bar.visible = false
-	var binding := Loc.t("hud.hold_interact") if hold_action else "[F]"
-	prompt_label.text = "%s   %s · %s" % [binding, target, action] if target != "" else "%s   %s" % [binding, action]
+	var binding := "[%s]" % Loc.t(verb)
+	var texto := "%s   %s · %s" % [binding, target, action] if target != "" \
+		else "%s   %s" % [binding, action]
+	if missing != "":
+		texto += "   ·   " + missing
+	prompt_label.text = texto
 
 
 func _on_time(hour: float, day: int) -> void:

@@ -150,8 +150,9 @@ static func tapered(rng: RandomNumberGenerator, height: float, r_bottom: float,
 
 
 ## Rocha: bolha achatada e muito irregular.
-static func rock(rng: RandomNumberGenerator, size: float) -> ArrayMesh:
-	return blob(rng, size, 1, 0.34, Vector3(1.25, 0.72, 1.05), Color(0.92, 0.92, 0.98))
+static func rock(rng: RandomNumberGenerator, size: float,
+		tint: Color = Color(0.92, 0.92, 0.98)) -> ArrayMesh:
+	return blob(rng, size, 1, 0.34, Vector3(1.25, 0.72, 1.05), tint)
 
 
 ## Tufo de relva: lâminas em quads, com tinta da base para a ponta.

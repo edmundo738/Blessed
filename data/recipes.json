@@ -1,0 +1,254 @@
+{
+  "_doc": [
+    "Receitas do Blessed — editáveis sem tocar em código.",
+    "station: '' = Criação (faz-se na mão, com o que se apanha),",
+    "         'workbench' = Bancada (coisas melhores, mais duradouras),",
+    "         'campfire'  = Fogueira (cozinhar e ferver água).",
+    "needs: o que se gasta.  result/qty: o que sai.",
+    "Uma receita com station nunca aparece sem a estação ao lado; o menu mostra-a",
+    "em 'Ainda falta' com o nome da estação, em vez de a esconder."
+  ],
+  "stations": {
+    "": "Criação",
+    "workbench": "Bancada",
+    "campfire": "Fogueira"
+  },
+  "recipes": [
+    {
+      "id": "stick",
+      "result": "stick",
+      "qty": 2,
+      "needs": {
+        "wood": 1
+      }
+    },
+    {
+      "id": "leaf_fiber",
+      "result": "fiber",
+      "qty": 1,
+      "needs": {
+        "leaf": 3
+      }
+    },
+    {
+      "id": "torch",
+      "result": "torch",
+      "qty": 2,
+      "needs": {
+        "stick": 1,
+        "fiber": 1
+      }
+    },
+    {
+      "id": "fire_kit",
+      "result": "fire_kit",
+      "qty": 1,
+      "needs": {
+        "flint": 2,
+        "stone": 1,
+        "fiber": 2
+      }
+    },
+    {
+      "id": "stone_blade",
+      "result": "stone_blade",
+      "qty": 1,
+      "needs": {
+        "stone": 2,
+        "stick": 1,
+        "fiber": 2
+      },
+      "_why": "lasca: corta melhor que as mãos; nao pica pedra"
+    },
+    {
+      "id": "workbench",
+      "result": "workbench",
+      "qty": 1,
+      "needs": {
+        "wood": 4,
+        "stick": 2
+      }
+    },
+    {
+      "id": "campfire",
+      "result": "campfire",
+      "qty": 1,
+      "needs": {
+        "stone": 4,
+        "stick": 3,
+        "wood": 2
+      }
+    },
+    {
+      "id": "stone_axe",
+      "result": "axe",
+      "qty": 1,
+      "needs": {
+        "stick": 2,
+        "stone": 3,
+        "fiber": 1
+      },
+      "station": "workbench"
+    },
+    {
+      "id": "stone_pickaxe",
+      "result": "pickaxe",
+      "qty": 1,
+      "needs": {
+        "stick": 2,
+        "stone": 4,
+        "fiber": 1
+      },
+      "station": "workbench"
+    },
+    {
+      "id": "stone_shovel",
+      "result": "shovel",
+      "qty": 1,
+      "needs": {
+        "stick": 2,
+        "stone": 2,
+        "fiber": 1
+      },
+      "station": "workbench"
+    },
+    {
+      "id": "bottle",
+      "result": "bottle",
+      "qty": 1,
+      "needs": {
+        "fiber": 4,
+        "wood": 1
+      },
+      "_why": "recipiente improvisado: nasce VAZIO, existe para transportar agua"
+    },
+    {
+      "id": "primitive_axe",
+      "result": "primitive_axe",
+      "qty": 1,
+      "needs": {
+        "stick": 2,
+        "stone": 2,
+        "fiber": 2
+      },
+      "_why": "abre a madeira a serio: 18 golpes -> 6"
+    },
+    {
+      "id": "primitive_pickaxe",
+      "result": "primitive_pickaxe",
+      "qty": 1,
+      "needs": {
+        "stick": 2,
+        "stone": 3,
+        "fiber": 2
+      },
+      "_why": "A TRAVESSIA: primeira ferramenta com mine; sem ela a rocha e impossivel"
+    },
+    {
+      "id": "rod",
+      "result": "rod",
+      "qty": 1,
+      "needs": {
+        "stick": 3,
+        "fiber": 3
+      },
+      "station": "workbench"
+    },
+    {
+      "id": "chest",
+      "result": "chest",
+      "qty": 1,
+      "needs": {
+        "wood": 6,
+        "fiber": 2
+      },
+      "station": "workbench"
+    },
+    {
+      "id": "chair",
+      "result": "chair",
+      "qty": 1,
+      "needs": {
+        "wood": 3,
+        "fiber": 1
+      },
+      "station": "workbench"
+    },
+    {
+      "id": "bed",
+      "result": "bed",
+      "qty": 1,
+      "needs": {
+        "fiber": 12,
+        "stick": 4
+      },
+      "station": "workbench"
+    },
+    {
+      "id": "wall",
+      "result": "wall",
+      "qty": 1,
+      "needs": {
+        "wood": 3
+      },
+      "station": "workbench"
+    },
+    {
+      "id": "floor",
+      "result": "floor",
+      "qty": 1,
+      "needs": {
+        "wood": 2
+      },
+      "station": "workbench"
+    },
+    {
+      "id": "pillar",
+      "result": "pillar",
+      "qty": 2,
+      "needs": {
+        "wood": 2,
+        "fiber": 1
+      },
+      "station": "workbench"
+    },
+    {
+      "id": "boil_water",
+      "result": "water_clean",
+      "qty": 1,
+      "needs": {
+        "water": 1
+      },
+      "station": "campfire"
+    },
+    {
+      "id": "fish_cooked",
+      "result": "fish_cooked",
+      "qty": 1,
+      "needs": {
+        "fish_raw": 1
+      },
+      "station": "campfire"
+    },
+    {
+      "id": "meat_cooked",
+      "result": "meat_cooked",
+      "qty": 1,
+      "needs": {
+        "meat_raw": 1
+      },
+      "station": "campfire"
+    },
+    {
+      "id": "stew",
+      "result": "stew",
+      "qty": 1,
+      "needs": {
+        "meat_cooked": 1,
+        "mushroom": 2,
+        "water": 1
+      },
+      "station": "campfire"
+    }
+  ]
+}

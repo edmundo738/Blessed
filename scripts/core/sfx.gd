@@ -130,6 +130,37 @@ func _build(name: String) -> AudioStreamWAV:
 			_tone_into(a, 180.0, 0.25, 0, int(0.05 * RATE))
 		"step_water":
 			a = _buf(0.22); _noise_into(a, 0.4); _one_pole(a, 700.0); _decay(a, 0.18)
+		"step_sand":
+			# Grão fino e seco: ruído agudo, sem corpo grave.
+			a = _buf(0.12); _noise_into(a, 0.42); _one_pole(a, 4200.0); _decay(a, 0.08)
+			_tone_into(a, 1500.0, 0.04, 0, int(0.025 * RATE))
+		"step_dirt":
+			# Terra batida: um baque curto com farelo por cima.
+			a = _buf(0.13); _noise_into(a, 0.44); _one_pole(a, 900.0)
+			_tone_into(a, 96.0, 0.20, 0, int(0.07 * RATE)); _decay(a, 0.10)
+		"step_snow":
+			# Neve: crunch seco, mais ruído que tom, cauda muito curta.
+			a = _buf(0.16); _noise_into(a, 0.36); _one_pole(a, 2100.0); _decay(a, 0.13)
+			for i in range(0, a.size(), 137):
+				a[i] *= 1.6
+		"step_mud":
+			# Lama: o som molhado que diz "aqui não se corre".
+			a = _buf(0.24); _noise_into(a, 0.34); _one_pole(a, 520.0)
+			_tone_into(a, 62.0, 0.12, 0, int(0.12 * RATE)); _decay(a, 0.20)
+		"dig_soil":
+			a = _buf(0.22); _noise_into(a, 0.52); _one_pole(a, 700.0)
+			_sweep_into(a, 130.0, 70.0, 0.18); _decay(a, 0.16)
+		"dig_sand":
+			a = _buf(0.18); _noise_into(a, 0.46); _one_pole(a, 3100.0); _decay(a, 0.12)
+		"dig_rock":
+			a = _buf(0.20); _noise_into(a, 0.32); _one_pole(a, 1700.0); _decay(a, 0.09)
+			_tone_into(a, 540.0, 0.16, 0, int(0.05 * RATE))
+			_tone_into(a, 880.0, 0.10, int(0.02 * RATE), int(0.07 * RATE))
+		"leaf_rustle":
+			a = _buf(0.30); _noise_into(a, 0.28); _one_pole(a, 2800.0); _decay(a, 0.24)
+		"body_fall":
+			a = _buf(0.34); _noise_into(a, 0.32); _one_pole(a, 420.0)
+			_sweep_into(a, 110.0, 48.0, 0.4); _decay(a, 0.28)
 		"jump":
 			# Impulso curto de ar + grave macio; não reutiliza um passo/tambor.
 			a = _buf(0.24); _noise_into(a, 0.16); _one_pole(a, 520.0)
@@ -172,6 +203,25 @@ func _build(name: String) -> AudioStreamWAV:
 		"scream":
 			a = _buf(1.0); _noise_into(a, 0.5); _one_pole(a, 1600.0)
 			_sweep_into(a, 900.0, 240.0, 0.5); _decay(a, 0.85)
+		"stomach":
+			# Gorgolejo grave: um deslize de frequência e duas bolhas curtas.
+			var st := _buf(0.55)
+			_sweep_into(st, 96.0, 48.0, 0.35)
+			for k in 2:
+				var at := int(RATE * (0.08 + 0.16 * k))
+				for i in int(RATE * 0.16):
+					if at + i < st.size():
+						var env := sin(PI * float(i) / (RATE * 0.16))
+						st[at + i] += sin(TAU * (70.0 - 18.0 * k) * float(i) / RATE) * 0.22 * env
+			_noise_into(st, 0.05)
+			_one_pole(st, 0.16)
+			_decay(st, 0.5)
+		"breath":
+			# Uma expiração: ruído suave, ataque curto e cauda longa.
+			var br := _buf(0.7)
+			_noise_into(br, 0.30)
+			_one_pole(br, 0.05)
+			_decay(br, 0.62)
 		"heartbeat":
 			a = _buf(0.9)
 			_sweep_into(a, 90.0, 45.0, 0.7)

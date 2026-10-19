@@ -5,3 +5,7 @@ export/
 __pycache__/
 *.pyc
 *.blend1
+.tmp_*
+*.log
+.voxel_tools_staging.zip
+.voxel_probe_appdata/

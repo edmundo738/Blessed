@@ -27,27 +27,26 @@ static func path_for(asset_id: String) -> String:
 	return RUNTIME_DIR + asset_id + ".glb"
 
 
+## Carregamento pelo `Assets` (scripts/core/assets.gd), não pelo `ResourceLoader`
+## direto: `ResourceLoader.exists()` responde SIM pela simples existência do
+## `.import`, mesmo quando o `.scn` importado não está lá — e depois o `load()`
+## falha com três erros por recurso e devolve nulo. Numa build sem cache de
+## importação (o contentor onde isto é desenvolvido, o build web, um clone novo)
+## era isso que acontecia: as árvores e as ferramentas caíam TODAS para a malha
+## gerada por código e ninguém percebia porquê. O `Assets` pergunta pelo produto
+## e ainda sabe abrir o glTF em runtime quando ele não existe.
 static func has_asset(asset_id: String) -> bool:
-	return ResourceLoader.exists(path_for(asset_id))
+	return Assets.exists(path_for(asset_id))
 
 
 static func scene_for(asset_id: String) -> PackedScene:
-	var path := path_for(asset_id)
-	if not ResourceLoader.exists(path):
-		return null
-	return load(path) as PackedScene
+	return Assets.scene(path_for(asset_id))
 
 
 static func mesh_for(asset_id: String) -> ArrayMesh:
 	if _mesh_cache.has(asset_id):
 		return _mesh_cache[asset_id] as ArrayMesh
-	var packed := scene_for(asset_id)
-	if packed == null:
-		return null
-	var root := packed.instantiate()
-	var mesh_node := _first_mesh(root)
-	var result: ArrayMesh = mesh_node.mesh as ArrayMesh if mesh_node != null else null
-	root.free()
+	var result := Assets.mesh(path_for(asset_id))
 	if result != null:
 		_mesh_cache[asset_id] = result
 	return result
@@ -60,7 +59,11 @@ static func lods_for(asset_id: String) -> Array[ArrayMesh]:
 		return result
 	result.append(base)
 	for level in range(1, 3):
-		var mesh := mesh_for("%s_lod%d" % [asset_id, level])
+		var lod_id := "%s_lod%d" % [asset_id, level]
+		# LODs são opcionais: vários modelos só têm o mesh-base. Não chamar
+		# Assets.mesh para um caminho inexistente evita erros de carregamento por
+		# cada espécie; o LOD mantém a mesma malha até haver variante real.
+		var mesh := mesh_for(lod_id) if has_asset(lod_id) else null
 		result.append(mesh if mesh != null else base)
 	return result
 

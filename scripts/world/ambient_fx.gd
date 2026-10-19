@@ -13,9 +13,10 @@ var player: Node3D
 
 var dust: CPUParticles3D
 var flies: CPUParticles3D
+var _quality_enabled := true
 
-const DUST_SPRITE := preload("res://content/fx/kenney/particles/smoke_02.png")
-const FIREFLY_SPRITE := preload("res://content/fx/kenney/particles/star_02.png")
+const DUST_PATH := "res://content/fx/kenney/particles/smoke_02.png"
+const FIREFLY_PATH := "res://content/fx/kenney/particles/star_02.png"
 
 
 func _ready() -> void:
@@ -33,7 +34,7 @@ func _process(_delta: float) -> void:
 	if player != null:
 		global_position = player.global_position
 	if flies != null:
-		flies.emitting = _night_factor() > 0.15
+		flies.emitting = _quality_enabled and _night_factor() > 0.15
 
 
 ## 0 = dia cheio, 1 = noite fechada (transição suave ao anoitecer/amanhecer).
@@ -50,11 +51,14 @@ func _night_factor() -> float:
 
 func _apply_quality() -> void:
 	var q: int = clampi(int(Game.settings.get("quality", 1)), 0, 2)
+	_quality_enabled = q > 0
 	if dust != null:
-		dust.amount = [0, 90, 180][q]
-		dust.emitting = q >= 1
+		# Godot exige amount >= 1 mesmo quando o emissor está desligado.
+		dust.amount = maxi(1, [0, 90, 180][q])
+		dust.emitting = _quality_enabled
 	if flies != null:
-		flies.amount = [0, 22, 46][q]
+		flies.amount = maxi(1, [0, 22, 46][q])
+		flies.emitting = _quality_enabled and _night_factor() > 0.15
 
 
 func _make_dust() -> CPUParticles3D:
@@ -72,7 +76,7 @@ func _make_dust() -> CPUParticles3D:
 	p.initial_velocity_max = 0.22
 	p.scale_amount_min = 0.5
 	p.scale_amount_max = 1.3
-	p.mesh = _billboard_quad(Vector2(0.20, 0.20), Color(0.86, 0.82, 0.70, 0.20), DUST_SPRITE)
+	p.mesh = _billboard_quad(Vector2(0.20, 0.20), Color(0.86, 0.82, 0.70, 0.20), Assets.texture(DUST_PATH))
 	p.color = Color(1, 1, 1, 1)
 	return p
 
@@ -92,7 +96,7 @@ func _make_flies() -> CPUParticles3D:
 	p.initial_velocity_max = 0.45
 	p.scale_amount_min = 0.6
 	p.scale_amount_max = 1.1
-	p.mesh = _billboard_quad(Vector2(0.105, 0.105), Color(1.65, 1.45, 0.62, 0.88), FIREFLY_SPRITE)
+	p.mesh = _billboard_quad(Vector2(0.105, 0.105), Color(1.65, 1.45, 0.62, 0.88), Assets.texture(FIREFLY_PATH))
 	p.emitting = false
 	return p
 

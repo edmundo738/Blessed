@@ -79,14 +79,14 @@ O projeto tem o seu próprio teste — é o que corre antes de se dizer que algo
 cd /home/user/Blessed && ./tools/check.sh
 ```
 
-Último resultado: **125 verificações, 0 falhas** (`SELFTEST_PASS`) — verificado no Godot 4.7.2
-headless real. O workflow `.github/workflows/selftest.yml` repete o self-test a cada push
+Último resultado: **279 verificações, 0 falhas** (`SELFTEST_PASS`) no Godot 4.7.2
+nativo e headless. O workflow `.github/workflows/selftest.yml` repete o self-test a cada push
 (GitHub Actions), que **falha o build se o self-test falhar**.
 
 Há três sondas, todas a correr o jogo a sério dentro do motor:
 
 ```bash
-./tools/check.sh                                              # 125 verificações, PASS/FAIL
+./tools/check.sh                                              # 279 verificações, PASS/FAIL
 godot --headless --path . --quit-after 3000 -- diag           # números, não opiniões
 node shot.mjs . -- shot                                       # despeja a geometria real
 ```

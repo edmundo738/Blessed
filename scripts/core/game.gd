@@ -41,7 +41,7 @@ var settings := {
 	"fov": 78.0,
 	"invert_y": false,
 	"volume": 0.7,
-	"view_distance": 160.0,
+	"view_distance": 120.0,
 	"shadows": 1,              # 0 desligado, 1 normal, 2 alto
 	"head_bob": 1.0,
 	"quality": 1,              # 0 compativel, 1 equilibrado, 2 cinematografico
@@ -138,6 +138,9 @@ func _build_input_map() -> void:
 		"locale": [KEY_F2],
 		"camera_toggle": [KEY_V],
 		"status_panel": [KEY_N],
+		# Deitar no chão. Existe porque a cama exige bancada + 12 de fibra: sem
+		# isto a primeira noite não tinha saída. `Z` de "zzz" (o `R` é a bênção).
+		"sleep": [KEY_Z],
 	}
 	for action in keys:
 		if not InputMap.has_action(action):
@@ -148,12 +151,28 @@ func _build_input_map() -> void:
 			if not InputMap.action_has_event(action, ev):
 				InputMap.action_add_event(action, ev)
 	# botões do rato
+	#   esquerdo → `use`      : trabalhar (segurar)
+	#   direito  → `use_item` : usar o que está na mão
+	# Antes o rato só tinha o esquerdo e o direito não fazia nada — metade das
+	# mãos ficava sem função nenhuma.
 	if not InputMap.has_action("use"):
 		InputMap.add_action("use")
 	var mb := InputEventMouseButton.new()
 	mb.button_index = MOUSE_BUTTON_LEFT
 	if not InputMap.action_has_event("use", mb):
 		InputMap.action_add_event("use", mb)
+	if not InputMap.has_action("use_item"):
+		InputMap.add_action("use_item")
+	var rb := InputEventMouseButton.new()
+	rb.button_index = MOUSE_BUTTON_RIGHT
+	if not InputMap.action_has_event("use_item", rb):
+		InputMap.action_add_event("use_item", rb)
+	# `X` é a alternativa de teclado (o `R` já é a bênção). Serve para quem joga
+	# sem rato direito ou quer a mão direita no teclado.
+	var rk := InputEventKey.new()
+	rk.physical_keycode = KEY_X
+	if not InputMap.action_has_event("use_item", rk):
+		InputMap.action_add_event("use_item", rk)
 	# barra rápida 1..9
 	for i in 9:
 		var a := "hotbar_%d" % (i + 1)
@@ -168,6 +187,13 @@ func _build_input_map() -> void:
 # ══════════════════════════════════════════════════════════════════════════
 #  TEMPO / FASES DO DIA
 # ══════════════════════════════════════════════════════════════════════════
+## Quanto tempo de JOGO passa num segundo real. O fogo e o sono têm de usar a
+## mesma régua do relógio — senão um dia dura 10 minutos na HUD e outra coisa
+## no mundo.
+func hours_per_second() -> float:
+	return 24.0 / DAY_SECONDS
+
+
 func _process(delta: float) -> void:
 	if paused or not started:
 		return

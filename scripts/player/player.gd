@@ -20,6 +20,9 @@ const WALK := 4.0
 const SPRINT := 6.2
 const CROUCH_SPEED := 1.8
 const SWIM := 3.0
+## A partir desta profundidade é preciso nadar (modelo do Minecraft: rio raso
+## atravessa-se a pé).
+const WADE_DEPTH := 1.35
 const ACCEL_GROUND := 18.0
 const ACCEL_AIR := 4.5
 const FRICTION := 15.0
@@ -34,6 +37,7 @@ var lean_node: Node3D
 var hands: Node3D
 var collider: CollisionShape3D
 var avatar: Node3D
+var body: PlayerBody
 var third_person := false
 
 var yaw := 0.0
@@ -45,6 +49,14 @@ var target_lean := 0.0
 
 var bob_t := 0.0
 var bob_amp := 0.0
+var tremor := 0.0
+## Traumas de câmara (0..1). Soma-se ao tremor da fome, mas decai depressa:
+## o golpe faz a câmara "sentir" o impacto sem tirar o controlo ao jogador.
+var trauma := 0.0
+var _trauma_t := 0.0
+## Esforço acumulado (correr, saltar, trepar). O sono lê-o para decidir
+## quanto cansaço houve nesse dia; não é uma barra, é um histórico.
+var exertion := 0.0
 var step_phase := 0.0
 var coyote := 0.0
 var jump_buffer := 0.0
@@ -52,10 +64,22 @@ var mantle_cooldown := 0.0
 var crouching := false
 var sprinting := false
 var swimming := false
+## Corrente da água onde o corpo está (m/s, no plano XZ). Vem do BHFS.
+var _flow := Vector2.ZERO
+var _flow_speed := 0.0
+## Água rasa: anda-se dentro dela (só mais devagar). Nadar num rio de 40 cm é o
+## que prendia o jogador: o modo natação tira-lhe o chão e o movimento normal.
+var wading := false
+var _surface_y := -100000.0
 var was_grounded := true
 var stamina := 100.0
+## O corpo do jogador (Survival). O Player não lê as barras — lê o estado do
+## corpo para tremer, respirar e arrastar-se. Quem o atribui é o main.
+var survival: Survival
 var surface := "grass"
 var enabled := true
+## Modo deus (só laboratório/dev): voar sem gravidade nem natação.
+var dev_fly := false
 
 ## chamado pelo Survival
 var speed_multiplier := 1.0
@@ -114,11 +138,21 @@ func _build_tree() -> void:
 	# Associar o script antes de entrar na árvore garante que _ready() cria
 	# braços e malha do item; sem esta ordem, a primeira pessoa fica vazia.
 	camera.add_child(hands)
+	if hands.has_signal("swung"):
+		hands.connect("swung", func() -> void:
+			if body != null:
+				body.attack())
 
 	avatar = Node3D.new()
 	avatar.name = "Avatar2D"
 	avatar.set_script(load("res://scripts/player/pixel_avatar.gd"))
 	add_child(avatar)
+	# O avatar 2D fica como fallback/retrato, mas a câmara externa passa a
+	# mostrar o corpo 3D. O billboard era o que fazia o jogador parecer um
+	# cartaz e impedia-o de ler o próprio peso no mundo.
+	avatar.visible = false
+	body = PlayerBody.new()
+	add_child(body)
 	# A primeira pessoa é a experiência padrão; V continua a permitir a câmara externa.
 	_set_view_mode(false)
 
@@ -142,6 +176,12 @@ func _physics_process(delta: float) -> void:
 		return
 	_smooth_look(delta)
 	mantle_cooldown = maxf(0.0, mantle_cooldown - delta)
+	trauma = maxf(0.0, trauma - delta * 2.9)
+	if dev_fly:
+		_move_fly()
+		move_and_slide()
+		_update_body()
+		return
 	_swim_check()
 	var wish := _wish_direction()
 	if swimming:
@@ -153,6 +193,15 @@ func _physics_process(delta: float) -> void:
 	_surface_probe()
 	if avatar != null and avatar.has_method("update_pose"):
 		avatar.call("update_pose", velocity, yaw, camera.global_position)
+	_update_body()
+
+
+func _update_body() -> void:
+	if hands != null and hands.has_method("set_motion"):
+		hands.call("set_motion", Vector2(velocity.x, velocity.z).length(), swimming, pitch)
+	if body == null:
+		return
+	body.update_pose(velocity, is_on_floor(), crouching, swimming, pitch)
 
 
 # ── apresentação do jogador ────────────────────────────────────────────────
@@ -165,7 +214,9 @@ func _set_view_mode(use_third_person: bool) -> void:
 	if hands != null:
 		hands.visible = not third_person
 	if avatar != null:
-		avatar.visible = third_person
+		avatar.visible = false
+	if body != null:
+		body.set_body_visible(third_person)
 	if third_person:
 		camera.position = Vector3(0.0, -0.12, 4.2)
 		camera.rotation.x = -0.12
@@ -274,6 +325,22 @@ func _smooth_look(delta: float) -> void:
 ## usava +Z como frente (W andava para trás) e get_axis("move_right",
 ## "move_left") devolve +1 quando se carrega em A (A andava para a direita).
 ## tests/diag.gd mede isto tecla a tecla — ver "A. CONTROLOS".
+## Voo do modo deus: direto, sem gravidade, sem bob. Espaço sobe, Ctrl desce.
+func _move_fly() -> void:
+	var wish := _wish_direction()
+	var dir := (transform.basis * Vector3(wish.x, 0.0, wish.z))
+	dir.y = 0.0
+	if dir.length_squared() > 0.0001:
+		dir = dir.normalized()
+	var speed := 18.0 if Input.is_action_pressed("sprint") else 9.0
+	var vert := 0.0
+	if Input.is_action_pressed("jump"):
+		vert += 1.0
+	if Input.is_action_pressed("crouch"):
+		vert -= 1.0
+	velocity = dir * speed + Vector3.UP * vert * speed * 0.8
+
+
 func _wish_direction() -> Vector3:
 	# get_axis(negativo, positivo) = força(positivo) - força(negativo).
 	# A ordem dos argumentos importa: trocá-la inverte o eixo.
@@ -284,6 +351,11 @@ func _wish_direction() -> Vector3:
 
 
 func _move_land(delta: float, wish: Vector3) -> void:
+	# vadear: a corrente puxa de lado, mas pouco (0,6 m/s no pior caso contra
+	# 4 m/s a andar). Serve para o rio se SENTIR, não para roubar o controlo.
+	if wading and _flow_speed > 0.05:
+		velocity.x += _flow.x * _flow_speed * 0.18 * delta
+		velocity.z += _flow.y * _flow_speed * 0.18 * delta
 	# gravidade
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
@@ -303,15 +375,18 @@ func _move_land(delta: float, wish: Vector3) -> void:
 		_animate_eye(h)
 
 	# sprint só com fôlego e a andar para a frente
-	var has_stamina := stamina > 2.0
+	var has_stamina := stamina > 2.0 and stamina < stamina_reserve() - 4.0
 	sprinting = Input.is_action_pressed("sprint") and not crouching \
-		and wish.z < -0.2 and has_stamina and is_on_floor()  # frente é -Z
+		and wish.z < -0.2 and has_stamina and is_on_floor() and not wading  # frente é -Z
 	var target_speed := WALK
 	if sprinting:
 		target_speed = SPRINT
 	elif crouching:
 		target_speed = CROUCH_SPEED
 	target_speed *= speed_multiplier
+	if wading:
+		# a água trava: atravessar um rio a correr não é de graça
+		target_speed *= 0.62
 
 	var dir_world := (transform.basis * Vector3(wish.x, 0, wish.z)).normalized() \
 		if wish.length_squared() > 0.0001 else Vector3.ZERO
@@ -324,11 +399,14 @@ func _move_land(delta: float, wish: Vector3) -> void:
 	velocity.x = flat.x
 	velocity.z = flat.z
 
-	# fôlego
+	# fôlego — e o corpo que o paga
 	if sprinting:
 		stamina = maxf(0.0, stamina - 14.0 * delta * stamina_drain_multiplier)
+		# O esforço é medido aqui e não inventado no sono: correr é o que
+		# cansa, e o cansaço é o que faz a noite valer a pena.
+		exertion = clampf(exertion + delta * 0.11 * stamina_drain_multiplier, 0.0, 100.0)
 	else:
-		stamina = minf(100.0, stamina + (9.0 if is_on_floor() else 4.0) * delta)
+		stamina = minf(stamina_reserve(), stamina + stamina_recovery() * delta)
 	Bus.stat_changed.emit("stamina", stamina, 100.0)
 
 	# saltar com buffer + coyote
@@ -347,6 +425,7 @@ func _move_land(delta: float, wish: Vector3) -> void:
 			coyote = 0.0
 			jumped.emit()
 			Sfx.play("jump", -8.0, randf_range(0.94, 1.06))
+			camera_kick(0.06)
 	# altura de salto variavel: largar o botao cedo corta a subida (salto curto vs alto)
 	if Input.is_action_just_released("jump") and velocity.y > 0.0:
 		velocity.y *= 0.45
@@ -355,6 +434,9 @@ func _move_land(delta: float, wish: Vector3) -> void:
 	if is_on_floor() and not was_grounded:
 		var force := clampf(absf(velocity.y) / 12.0, 0.0, 1.0)
 		landed.emit(force)
+		camera_kick(0.12 + force * 0.40)
+		if body != null:
+			body.land(force)
 		if force > 0.12:
 			Sfx.play_at("step_" + surface, global_position, -8.0, 0.8)
 	was_grounded = is_on_floor()
@@ -368,7 +450,9 @@ func _move_land(delta: float, wish: Vector3) -> void:
 func _move_swim(delta: float, wish: Vector3) -> void:
 	var dir_world := (transform.basis * Vector3(wish.x, 0, wish.z)).normalized() \
 		if wish.length_squared() > 0.0001 else Vector3.ZERO
-	var flat := Vector3(velocity.x, 0, velocity.z).move_toward(dir_world * SWIM, 9.0 * delta)
+	var push := _flow * _flow_speed * 0.58
+	var flat := Vector3(velocity.x, 0, velocity.z).move_toward(
+		dir_world * SWIM + Vector3(push.x, 0, push.y), 9.0 * delta)
 	velocity.x = flat.x
 	velocity.z = flat.z
 	# flutuação: sobe devagar, afunda devagar, salto = braçada
@@ -379,9 +463,14 @@ func _move_swim(delta: float, wish: Vector3) -> void:
 		up = 2.6
 	elif Input.is_action_pressed("crouch"):
 		up = -2.4
-	var target_y := up - 0.5
+	# Fora de água com a cabeça a descoberto, o corpo sobe sozinho: sem isto
+	# ficar parado fazia o jogador afundar até ao fundo (e "afogar-se" sem
+	# perceber porquê). O Crouch continua a servir para descer.
+	var eye := global_position.y + (CROUCH_EYE if crouching else EYE)
+	var buoy := clampf((_surface_y - eye) * 1.8, -1.2, 2.6) if _surface_y > -99999.0 else 0.0
+	var target_y := up + buoy
 	velocity.y = lerpf(velocity.y, target_y, 1.0 - exp(-5.0 * delta))
-	stamina = minf(100.0, stamina + 3.0 * delta)
+	stamina = minf(stamina_reserve(), stamina + 3.0 * delta)
 	Bus.stat_changed.emit("stamina", stamina, 100.0)
 	camera.fov = lerpf(camera.fov, float(Game.settings["fov"]) + 3.0, 1.0 - exp(-4.0 * delta))
 
@@ -389,8 +478,30 @@ func _move_swim(delta: float, wish: Vector3) -> void:
 func _swim_check() -> void:
 	var was := swimming
 	var water_world := get_parent()
-	swimming = water_world != null and water_world.has_method("is_in_water") \
-		and water_world.call("is_in_water", global_position)
+	var in_water := false
+	if water_world != null and water_world.has_method("is_in_water"):
+		in_water = bool(water_world.call("is_in_water", global_position))
+	_surface_y = -100000.0
+	if in_water and water_world.has_method("water_surface_height"):
+		_surface_y = float(water_world.call("water_surface_height",
+			global_position.x, global_position.z))
+	# A corrente empurra, mas nunca prende: o máximo é 60 % da velocidade a
+	# nadar, por isso dá para atravessar um rio a favor ou contra.
+	_flow = Vector2.ZERO
+	_flow_speed = 0.0
+	if in_water and water_world.has_method("water_sample"):
+		var ws: Dictionary = water_world.call("water_sample",
+			global_position.x, global_position.z)
+		if not ws.is_empty():
+			_flow = ws.get("flow", Vector2.ZERO)
+			_flow_speed = clampf(float(ws.get("speed", 0.0)), 0.0, 3.4)
+	var deep := in_water
+	if in_water and water_world.has_method("ground_height"):
+		var bed := float(water_world.call("ground_height",
+			global_position.x, global_position.z))
+		deep = _surface_y - bed > WADE_DEPTH
+	wading = in_water and not deep
+	swimming = deep
 	if swimming != was and water_world != null and water_world.has_method("set_underwater"):
 		water_world.call("set_underwater", swimming)
 	if swimming and not was:
@@ -401,6 +512,51 @@ func _swim_check() -> void:
 
 
 # ── head bob / passos ─────────────────────────────────────────────────────
+## Quanto de fôlego o corpo recupera por segundo. Com fome ou sede a barrar,
+## recupera devagar — a fome deixa de ser um número de rodapé e passa a ser a
+## razão pela qual se para, se come e se planiza o próximo troço.
+func stamina_recovery() -> float:
+	var base := 9.0 if is_on_floor() else 4.0
+	if survival == null:
+		return base
+	var m := 1.0
+	var hunger := survival.hunger
+	var thirst := survival.thirst
+	if hunger < 45.0:
+		m *= lerpf(0.45, 1.0, clampf(hunger / 45.0, 0.0, 1.0))
+	if thirst < 40.0:
+		m *= lerpf(0.40, 1.0, clampf(thirst / 40.0, 0.0, 1.0))
+	if survival.sickness() > 0.2:
+		m *= 0.75        # enjoo tira o fôlego depressa
+	return base * m
+
+
+## Reserva de fôlego. Esfomeado, o corpo não aguenta o mesmo sprint: a barra
+## enche menos e esvazia-se mais depressa, e o jogador sente-o nas pernas.
+func stamina_reserve() -> float:
+	if survival == null:
+		return 100.0
+	var hunger := survival.hunger
+	var thirst := survival.thirst
+	var m := 1.0
+	if hunger < 40.0:
+		m *= lerpf(0.60, 1.0, clampf(hunger / 40.0, 0.0, 1.0))
+	if thirst < 35.0:
+		m *= lerpf(0.55, 1.0, clampf(thirst / 35.0, 0.0, 1.0))
+	return 100.0 * m
+
+
+## Quanto o corpo está a falhar (0 = inteiro, 1 = a cair). Fome e sono somam;
+## é a única coisa que o jogador precisa de "ler" para saber que está mal.
+func fatigue_level() -> float:
+	if survival == null:
+		return 0.0
+	var low_energy := clampf((35.0 - survival.energy) / 35.0, 0.0, 1.0)
+	var low_food := clampf((30.0 - survival.hunger) / 30.0, 0.0, 1.0)
+	var low_water := clampf((30.0 - survival.thirst) / 30.0, 0.0, 1.0)
+	return clampf(maxf(low_energy * 1.0, maxf(low_food * 0.6, low_water * 0.7)), 0.0, 1.0)
+
+
 func _head_bob(delta: float) -> void:
 	var spd := Vector3(velocity.x, 0, velocity.z).length()
 	var grounded := is_on_floor() and not swimming
@@ -424,6 +580,38 @@ func _head_bob(delta: float) -> void:
 		camera.rotation = Vector3.ZERO
 	lean_node.rotation.z += sin(bob_t) * 0.012 * bob_amp
 
+	# ── o corpo a falhar: tremor de mãos e pernas ────────────────────────
+	# Não é um aviso, é uma sensação: a câmara treme um pouco e a respiração
+	# entra no movimento. Some quando o jogador come/dorme/beber.
+	var fatigue := fatigue_level()
+	tremor = lerpf(tremor, fatigue, 1.0 - exp(-2.5 * delta))
+	if tremor > 0.001:
+		var tt := float(Time.get_ticks_msec()) * 0.001
+		lean_node.rotation.z += sin(tt * 9.3) * 0.0075 * tremor
+		cam_pivot.rotation.x += sin(tt * 7.1 + 1.3) * 0.0035 * tremor
+		cam_pivot.position.y += sin(tt * 2.2) * 0.012 * tremor
+		camera.fov = lerpf(camera.fov, float(Game.settings["fov"]) - 3.0 * tremor,
+			1.0 - exp(-3.0 * delta))
+
+	# ── impacto: o corpo sente o que a mão fez ───────────────────────────
+	# Curva quadrática: um toque pequeno não abana nada, um golpe a sério
+	# sente-se. As três frequências não são múltiplas umas das outras para
+	# não desenhar um padrão repetido.
+	if trauma > 0.001:
+		var s := trauma * trauma
+		_trauma_t += delta
+		var tt2 := _trauma_t
+		camera.position += Vector3(
+			sin(tt2 * 47.0) * 0.030,
+			sin(tt2 * 59.0 + 0.8) * 0.026,
+			sin(tt2 * 38.0 + 1.7) * 0.018) * s
+		lean_node.rotation.z += sin(tt2 * 41.0) * 0.035 * s
+		cam_pivot.rotation.x += sin(tt2 * 53.0 + 0.4) * 0.022 * s
+		camera.fov = lerpf(camera.fov, float(Game.settings["fov"]) + 2.4 * s,
+			1.0 - exp(-10.0 * delta))
+	else:
+		_trauma_t = 0.0
+
 	# passos no ponto certo do ciclo
 	if grounded and bob_amp > 0.12:
 		step_phase += delta * (2.0 + spd * 0.42)
@@ -441,9 +629,17 @@ func _animate_eye(h: float) -> void:
 
 
 func _surface_probe() -> void:
-	# o chão por baixo decide o som do passo
+	# Quem manda no som do passo é o mundo: o mesmo material que decidiu a cor
+	# do chão, a colisão e a água. O Player não inventa uma segunda verdade.
 	var w := get_parent()
-	if w == null or not w.has_method("ground_height"):
+	if w == null:
+		surface = "grass"
+		return
+	if w.has_method("footstep_material_at"):
+		surface = str(w.call("footstep_material_at", global_position.x, global_position.z))
+		return
+	# Fallback para mundos antigos/sem API de superfície.
+	if not w.has_method("ground_height"):
 		surface = "grass"
 		return
 	var h: float = w.call("ground_height", global_position.x, global_position.z)
@@ -454,11 +650,20 @@ func _surface_probe() -> void:
 			and h < water_height - 0.35:
 		surface = "water"
 	elif h < Terrain.SEA_LEVEL + 0.35:
-		surface = "stone"
+		surface = "sand"
 	elif global_position.y < h + 0.3:
 		surface = "grass"
-	if w.has_method("path_distance_at"):
-		pass
+
+
+## Impacto de câmara. `amount` é 0..1: 0,12 é um golpe numa árvore, 0,35 é
+## uma pedra a ceder debaixo da picareta, 0,5 é aterrar de uma altura grande.
+func camera_kick(amount: float) -> void:
+	trauma = clampf(maxf(trauma, amount), 0.0, 1.0)
+
+
+func body_attack() -> void:
+	if body != null:
+		body.attack()
 
 
 ## Teletransporte suave (spawn, respawn, viagem rápida).
