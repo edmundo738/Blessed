@@ -1,12 +1,16 @@
-BLESSED - pack unico do laboratorio (CavePatch aprofundado)
+BLESSED - pack de atualizacoes (base HD2D + laboratorio + caverna)
 
-COMO USAR: extrai e copia as pastas por cima da tua pasta Blessed.
-Abre scenes/lab.tscn e carrega F5.
+COMO USAR: extrai e copia as pastas por cima da tua pasta Blessed
+(substituir tudo). Abre scenes/lab.tscn no Godot e carrega F5.
 
-CAVERNA: monte de rocha no bosque (44,-64) com entrada natural.
-Picareta escava tuneis arredondados; veios ocre = silex (flint);
-cavar fundo demais atinge o lencol freatico e a mina enche.
-A hidrologia do mundo continua intacta (prototipo ao lado).
+O QUE TRAZ:
+- Base HD2D integrada: player/corpo/maos, animais, mundo, sons.
+- Construcao inteligente: 8 pecas, fundacao adaptativa e alinhada,
+  estabilidade com bonus de ligacao, colapso em cascata, sons/poeira.
+- CavePatch: monte de rocha com entrada natural, tuneis SDF
+  (picareta), veios de silex (flint), lencol freatico que inunda.
+- Eficiencia: materiais partilhados, agua so reconstruida perto de agua.
 
-CONSTRUIR (B): 1-8 pecas, R roda 45, LMB coloca, RMB remove.
+TESTAR RAPIDO: tecla B constroi (1-8 pecas, R roda, LMB/RMB).
+A caverna fica no bosque (44,-64). Cavar fundo demais enche a mina.
 Provas: LABSCENE_PASS 60 - LABTEST_PASS 18 - selftest 250 ok.
