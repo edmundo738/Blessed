@@ -130,3 +130,29 @@ degraus de ¼ para reconstruir no máximo 4× durante o crescimento.
 Prova (labscene 21–24): a ilha tem relva, escavar faz o pedaço perder
 lâminas, aterrar + tempo faz-las voltar. Custo por frame: zero fora dos
 pedaços a recrescer.
+
+## Estação de escavação jogável (2026-10-19)
+
+A estação `dig_pit` (30, 30) deixou de ser só "cava aqui": tem um objetivo
+descoberto **pelo efeito, nunca por texto**:
+
+- Enterrada a **3,2 m** (sob a camada de rocha dos 2,3 m) está uma
+  **relíquia** (`LabScene.RELIC_DEPTH`). A matemática das camadas ensina a
+  lição sem palavras: a pá escava o solo, **bate na rocha e é negada**
+  (poeira cinzenta); a mão nem ao subsolo chega; só a picareta atravessa.
+- **Glint:** ao escavar perto do sítio e já fundo, a poeira começa a
+  brilhar dourada, com intensidade = proximidade × profundidade
+  (`glint` 0..1 no resultado de `tool_dig`). Nenhum HUD diz "está aqui".
+- **Desenterrar:** a relíquia emerge luminosa no buraco, com explosão de
+  partículas douradas e flash dourado de 200 ms no `LabDev`
+  (`_flash_gold`) — dopamina visual, zero texto. Item novo: `relic`.
+- Prova (labscene 25–29): estação localizada; pá negada na rocha com a
+  relíquia ainda enterrada; glint observado durante a descida; picareta
+  desenterra; relíquia visível no mundo.
+
+Game taste aplicado nesta passagem: feedback por material (poeira areia/
+terra/rocha com cores próprias, cinzenta na negação), ritmo por ferramenta
+(intervalos 0,22/0,14/0,28 s), negação por efeito (slot a piscar, poeira
+seca), pista por intensificação sensorial (glint) e recompensa com
+espetáculo curto (burst + flash + objeto emissivo). O ecrã continua
+limpo: a barra dev mostra só ferramenta e material sob a mira.

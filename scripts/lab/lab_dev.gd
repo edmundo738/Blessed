@@ -19,6 +19,7 @@ var _tool_slots: Dictionary = {}
 var _mat_label: Label
 var _aim_timer := 0.0
 var _denial_timer := 0.0
+var _relic_seen := false
 
 
 func setup(p_scene: LabScene) -> void:
@@ -283,9 +284,51 @@ func _apply_tool(fill: bool) -> void:
 		DroppedItem.spawn(scene, str(res.get("yield_item", "soil")), 1,
 				at + Vector3(0, 1.0, 0), scene.inv, scene.player)
 	_dust(at, fill, int(res.get("material", LabWorld.M_DIRT)))
+	var glint := float(res.get("glint", 0.0))
+	if glint > 0.05:
+		_glint_dust(at, glint)
+	if bool(res.get("relic", false)) and not _relic_seen:
+		_relic_seen = true
+		_flash_gold()
 	print("LABDIG ", tool, " ", "fill" if fill else "dig", " em ", at,
 			" altura ", before, " -> ", scene.lab.height(at.x, at.z),
 			" material ", res.get("material"))
+
+
+## Brilho na poeira: a pista sensorial da estacao de escavacao. A
+## intensidade vem do LabScene (perto + fundo = mais ouro). Nenhum texto
+## diz "esta aqui" — quem joga aprende a ler a poeira.
+func _glint_dust(at: Vector3, intensity: float) -> void:
+	var p := CPUParticles3D.new()
+	p.amount = int(6.0 + intensity * 22.0)
+	p.one_shot = true
+	p.explosiveness = 0.9
+	p.lifetime = 0.8
+	p.direction = Vector3(0, 1, 0)
+	p.spread = 38.0
+	p.initial_velocity_min = 1.2
+	p.initial_velocity_max = 3.0 + intensity * 2.0
+	p.gravity = Vector3(0, -2.2, 0)
+	p.scale_amount_min = 0.04
+	p.scale_amount_max = 0.10 + intensity * 0.08
+	p.color = Color(1.0, 0.80, 0.30, 0.9)
+	scene.add_child(p)
+	p.global_position = at + Vector3(0, 0.3, 0)
+	p.emitting = true
+	var t := get_tree().create_timer(1.2)
+	t.timeout.connect(p.queue_free)
+
+
+## Flash dourado de 200 ms ao desenterrar: dopamina visual, zero texto.
+func _flash_gold() -> void:
+	var rect := ColorRect.new()
+	rect.color = Color(1.0, 0.82, 0.35, 0.28)
+	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(rect)
+	var tween := create_tween()
+	tween.tween_property(rect, "color:a", 0.0, 0.45)
+	tween.tween_callback(rect.queue_free)
 
 
 ## Ferramenta errada = EFEITO, nao sermão: slot pisca vermelho, poeira

@@ -23,6 +23,12 @@ var _grass: Dictionary = {}  # Vector2i -> MultiMeshInstance3D
 var _grass_growth: Dictionary = {}  # Vector2i -> 0..1 (recrescimento)
 var _grass_root: Node3D
 var _blade_mesh: ArrayMesh
+var _dig_site := Vector2.INF
+var _relic_found := false
+var _relic_node: Node3D
+
+const RELIC_DEPTH := 3.2  # m abaixo da superficie original (sob a rocha)
+const RELIC_RADIUS := 3.5
 var _props_root: Node3D
 var _stations_root: Node3D
 var _underwater := false
@@ -73,8 +79,80 @@ func tool_dig(tool: String, x: float, z: float, fill_mode: bool = false) -> Dict
 		return {"ok": false, "material": mat, "reason": "tool"}
 	var removed: float = lab.dig(x, z, float(prof["radius"]), float(prof["depth"]))
 	rebuild_area(x, z, float(prof["radius"]) + 6.0)
+	var dug_now := lab.depth_dug(x, z)
+	var glint := 0.0
+	if not _relic_found and _dig_site != Vector2.INF:
+		var dsite := Vector2(x, z).distance_to(_dig_site)
+		if dsite < 6.0 and dug_now > 1.2:
+			# pista sensorial, nunca texto: quanto mais perto e mais
+			# fundo, mais a poeira brilha (0..1)
+			glint = clampf((1.0 - dsite / 6.0) * 0.5 + dug_now / RELIC_DEPTH * 0.5, 0.0, 1.0)
+		if dsite < RELIC_RADIUS and dug_now >= RELIC_DEPTH:
+			_unearth_relic()
 	return {"ok": true, "material": mat, "removed": removed,
-			"yield_item": str(YIELD_ITEM.get(mat, "soil"))}
+			"yield_item": str(YIELD_ITEM.get(mat, "soil")),
+			"glint": glint, "relic": _relic_found}
+
+
+func dig_site_pos() -> Vector2:
+	return _dig_site
+
+
+func relic_found() -> bool:
+	return _relic_found
+
+
+func relic_node() -> Node3D:
+	return _relic_node
+
+
+## O momento de dopamina da estacao de escavacao: a reliquia emerge do
+## buraco com explosao dourada. Descoberta pelo efeito — nenhum texto
+## disse onde estava nem que ferramenta usar; o chao ensinou (a pa parou
+## na rocha, a poeira comecou a brilhar, a picareta atravessou).
+func _unearth_relic() -> void:
+	_relic_found = true
+	var at := Vector3(_dig_site.x, lab.height(_dig_site.x, _dig_site.y) + 0.7, _dig_site.y)
+	_relic_node = Node3D.new()
+	_relic_node.name = "LabRelic"
+	_relic_node.position = at
+	var mi := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radial_segments = 4
+	sm.rings = 2
+	sm.radius = 0.42
+	sm.height = 1.1
+	mi.mesh = sm
+	mi.rotation_degrees = Vector3(0, 45, 0)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(1.0, 0.78, 0.25)
+	mat.emission_enabled = true
+	mat.emission = Color(1.0, 0.62, 0.15)
+	mat.emission_energy_multiplier = 1.6
+	mi.material_override = mat
+	_relic_node.add_child(mi)
+	add_child(_relic_node)
+	var p := CPUParticles3D.new()
+	p.amount = 60
+	p.one_shot = true
+	p.explosiveness = 0.95
+	p.lifetime = 0.9
+	p.direction = Vector3(0, 1, 0)
+	p.spread = 55.0
+	p.initial_velocity_min = 2.5
+	p.initial_velocity_max = 5.5
+	p.gravity = Vector3(0, -4.0, 0)
+	p.scale_amount_min = 0.05
+	p.scale_amount_max = 0.16
+	p.color = Color(1.0, 0.80, 0.30)
+	add_child(p)
+	p.global_position = at
+	p.emitting = true
+	var t := get_tree().create_timer(1.4)
+	t.timeout.connect(p.queue_free)
+	if inv != null:
+		DroppedItem.spawn(self, "relic", 1, at + Vector3(0, 0.6, 0), inv, player)
+	print("LABRELIC desenterrada em ", _dig_site)
 
 
 const SPECIES_COLOR := {
@@ -547,6 +625,8 @@ func _build_stations() -> void:
 	for st in lab.stations:
 		var x := float(st.get("x", 0.0))
 		var z := float(st.get("z", 0.0))
+		if str(st.get("id", "")) == "dig_pit":
+			_dig_site = Vector2(x, z)
 		var y := lab.height(x, z)
 		var disc := MeshInstance3D.new()
 		var cm := CylinderMesh.new()

@@ -159,6 +159,29 @@ func _ready() -> void:
 		var g_back := scene.grass_count(gci, gcj)
 		_check(g_back > g_dug, "aterrar + tempo: a relva recresce (%d -> %d)" % [g_dug, g_back])
 
+	# estação de escavação: a pá para na rocha; a picareta desenterra
+	var site := scene.dig_site_pos()
+	_check(site != Vector2.INF, "estação de escavação (dig_pit) localizada")
+	if site != Vector2.INF:
+		var denied := false
+		var saw_glint := false
+		for n in 25:
+			var r: Dictionary = scene.tool_dig("shovel", site.x, site.y)
+			if float(r.get("glint", 0.0)) > 0.05:
+				saw_glint = true
+			if not bool(r["ok"]):
+				denied = true
+				break
+		_check(denied and not scene.relic_found(),
+				"pá bate na camada de rocha e para (relíquia continua enterrada)")
+		_check(saw_glint, "poeira brilha perto do prémio (pista sensorial, sem texto)")
+		for n in 30:
+			scene.tool_dig("pickaxe", site.x, site.y)
+			if scene.relic_found():
+				break
+		_check(scene.relic_found(), "picareta atravessa a rocha e desenterra a relíquia")
+		_check(scene.relic_node() != null, "relíquia visível e luminosa no mundo")
+
 	# grelha para o PNG da etapa (render por software a partir dos dados reais)
 	var bytes := PackedByteArray()
 	bytes.resize(LabWorld.N * LabWorld.N * 2)

@@ -404,3 +404,14 @@ céu e testes estão no marco mais recente no topo e em `docs/AUDIT_2026-10-14.m
   0,15→1 em ~24 s em degraus de ¼ (`advance_growth`).
 - **Verificação: LABSCENE_PASS 24/24, LABTEST_PASS 18/18, selftest
   245 ok / 0 falhas / 30 saltadas.** PNG: `docs/shots/09_lab_3d.png`.
+
+## Estação de escavação jogável (2026-10-19)
+
+- Relíquia enterrada a 3,2 m na `dig_pit` (30,30): pá para na rocha
+  (2,3 m), só a picareta desenterra. Glint dourado na poeira (proximidade
+  × profundidade) como pista sensorial; burst + flash dourado ao emergir.
+  Item novo `relic` (Db + locales). Descoberta pelo efeito, sem texto.
+- **Verificação: LABSCENE_PASS 29/29, LABTEST_PASS 18/18, selftest
+  245 ok / 0 falhas / 30 saltadas.** PNG: `docs/shots/09_lab_3d.png`.
+- Entrega: UM pack cumulativo `Blessed_Lab_Tudo_pack.zip` (pedido do dono:
+  nada de mini-zips por implementação).

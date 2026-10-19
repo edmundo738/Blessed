@@ -24,6 +24,9 @@ const ITEMS := {
 	# Areia escavada (margem/leito): material proprio, nao "solo generico" —
 	# a escavacao identifica o material e cada um rende o seu item.
 	"sand":         {"kind": "resource", "stack": 40, "icon": "sand"},
+	# Relíquia enterrada (estação de escavação do laboratório): o prémio que
+	# só aparece a quem atravessa a camada de rocha com a picareta.
+	"relic":        {"kind": "resource", "stack": 5, "icon": "relic"},
 	# ── comida ──────────────────────────────────────────────────────────────
 	"mushroom":     {"kind": "food", "stack": 20, "icon": "mushroom",
 					 "food": 18, "drink": 0, "risk": 0.25},
