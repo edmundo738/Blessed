@@ -90,7 +90,7 @@ void fragment() {
 	// v_color = rampa da malha (base escura → ponta clara) × cor da relva do
 	// bioma, que chunk.gd escreve como cor de instância. Sem atlas de cor: as
 	// lâminas têm de sair da mesma família do chão por baixo delas.
-	vec3 color = v_color * mix(0.62, 1.16, v_height);
+	vec3 color = v_color * mix(0.58, 1.04, v_height);
 	color *= mix(0.88, 1.12, tone);
 	color *= mix(vec3(1.0), vec3(1.16, 1.02, 0.72), dryness);
 	color *= mix(0.94, 1.06, v_instance.g);

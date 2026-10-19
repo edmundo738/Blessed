@@ -55,7 +55,7 @@ void fragment() {
 	// Os tufos procedurais já têm silhueta triangular na própria malha.
 	// A cor alfa do vértice guarda a camada e dá variação sem duplicar overdraw.
 	ALBEDO = (use_texture ? texel.rgb : vec3(1.0)) * v_color * v_tint;
-	ALBEDO *= mix(0.62, 1.04, v_height) * mix(1.0, 0.88, v_layer);
+	ALBEDO *= mix(0.58, 0.98, v_height) * mix(1.0, 0.88, v_layer);
 	ROUGHNESS = 0.82;
 	SPECULAR = 0.12;
 }

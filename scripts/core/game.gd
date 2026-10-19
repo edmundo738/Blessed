@@ -41,7 +41,7 @@ var settings := {
 	"fov": 78.0,
 	"invert_y": false,
 	"volume": 0.7,
-	"view_distance": 160.0,
+	"view_distance": 120.0,
 	"shadows": 1,              # 0 desligado, 1 normal, 2 alto
 	"head_bob": 1.0,
 	"quality": 1,              # 0 compativel, 1 equilibrado, 2 cinematografico

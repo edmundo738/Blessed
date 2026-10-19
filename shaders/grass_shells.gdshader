@@ -120,7 +120,7 @@ void fragment() {
 	vec3 streak = texture(grass_streak, streak_uv).rgb;
 	float tone = clamp(mask.g * 0.55 + streak.g * 0.45, 0.0, 1.0);
 	float dryness = clamp(v_dryness + (streak.b - 0.5) * 0.55, 0.0, 1.0);
-	vec3 color = v_tint * mix(0.58, 1.22, vertical);
+	vec3 color = v_tint * mix(0.54, 1.06, vertical);
 	color *= mix(0.88, 1.10, tone);
 	color *= mix(vec3(1.0), vec3(1.16, 1.02, 0.72), dryness);
 	ALBEDO = color;

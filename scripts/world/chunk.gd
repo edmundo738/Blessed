@@ -584,6 +584,12 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 	buf.resize(Terrain.BIOME_COUNT)
 	var region_buf := PackedFloat32Array()
 	region_buf.resize(RegionGrammar.TYPE_COUNT)
+	# Densidade por perfil: q=1 é o perfil jogável numa GPU integrada; q=2
+	# devolve o mundo cheio. Sem isto, 46 chunks com ~14 mil instâncias davam
+	# 3 FPS numa Intel UHD 620 (medido com `-- perf` em 2026-10-19).
+	var density_preset := Db.quality_preset(int(Game.settings.get("quality", 1)), {})
+	var density_scale := float(density_preset.get("vegetation", 1.0))
+	density_scale = clampf(density_scale, 0.2, 1.0)
 
 	# ── árvores ───────────────────────────────────────────────────────────
 	var cells := int(SIZE / TREE_CELL)
@@ -605,7 +611,7 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 			terrain.biome_weights_s(x, z, h, sl, buf, region_buf)
 			var density := ecology.density_per_100m2("tree", buf, x, z) if ecology != null \
 				else SpeciesKit.tree_density(terrain.dominant_s(x, z, h, sl))
-			if rng.randf() > density * (TREE_CELL * TREE_CELL) / 100.0:
+			if rng.randf() > density * (TREE_CELL * TREE_CELL) / 100.0 * density_scale:
 				continue
 			var id := ecology.pick_species(species.trees, buf, rng.randf(), x, z) if ecology != null \
 				else species.pick(species.trees, terrain.dominant_s(x, z, h, sl), rng.randf())
@@ -655,7 +661,7 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 			var density := ecology.density_per_100m2("rock", buf, x, z) if ecology != null else 0.30
 			var exposure := terrain.geology.exposure_at(x, z, h, sl) if terrain.geology != null else 0.5
 			density *= lerpf(0.30, 1.65, exposure)
-			if rng.randf() > density * (ROCK_CELL * ROCK_CELL) / 100.0:
+			if rng.randf() > density * (ROCK_CELL * ROCK_CELL) / 100.0 * density_scale:
 				continue
 			var id := ecology.pick_species(species.rocks, buf, rng.randf(), x, z, geology_sample) if ecology != null \
 				else species.pick(species.rocks, terrain.dominant_s(x, z, h, sl), rng.randf())
@@ -698,7 +704,7 @@ func _scatter(o: Vector2, with_collision: bool) -> void:
 			var sl := terrain.slope(x, z)
 			terrain.biome_weights_s(x, z, h, sl, buf, region_buf)
 			var density := ecology.density_per_100m2("plant", buf, x, z) if ecology != null else 0.55
-			if rng.randf() > density * (2.5 * 2.5) / 100.0:
+			if rng.randf() > density * (2.5 * 2.5) / 100.0 * density_scale:
 				continue
 			var id := ecology.pick_species(species.plants, buf, rng.randf(), x, z) if ecology != null \
 				else species.pick(species.plants, terrain.dominant_s(x, z, h, sl), rng.randf())
@@ -782,7 +788,11 @@ func _make_multimesh(id: String, b: Dictionary) -> void:
 	# artista, mas animamos os vértices por instância em vez de deixar folhas imóveis.
 	var moving_vegetation := species.trees.has(id) or (species.plants.has(id) and sp.wind > 0.0)
 	if sp.materials_authored and moving_vegetation:
-		mesh = mats.wind_foliage_mesh(mesh, sp.height)
+		# A sakura do kit tem folhas de ácer vermelhas. Uma cerejeira do jogo
+		# deve ser rosada; o shader puxa a matiz mantendo a máscara alfa.
+		var rec := Color(1.0, 0.62, 0.77) if id == "sakura" else Color.WHITE
+		var amount := 0.72 if id == "sakura" else 0.0
+		mesh = mats.wind_foliage_mesh(mesh, sp.height, rec, amount)
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_custom_data = true

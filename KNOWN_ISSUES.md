@@ -3,6 +3,38 @@
 Cada bug tem: número, causa, correção, teste que o apanha. Quando um bug é
 fechado, o teste que o apanha entra no `tests/selftest.gd` para não voltar.
 
+## CORRIGIDOS (2026-10-19)
+
+22. **Íman dos pickups deixava a segunda colheita para trás** (`dropped_item.gd`).
+    O arremesso inicial punha o item fora do raio de 2,1 m antes de assentar, e
+    o teste do Dia 1 seguia para o arbusto seguinte: `fiber=2 stick=1` em vez
+    de 4/2. Correção: raio 2,6 m, início aos 0,25 s, vácuo direto após 0,55 s
+    e arremesso mais curto. _Teste:_ `DIA 1 · mãos apanham fibra e graveto`.
+23. **Spawn do laboratório em cima de uma árvore** (`lab_scene.gd`).
+    `_build_props()` podia semear uma árvore no ponto de spawn; a cápsula era
+    empurrada para cima do tronco (pés a 4,63 m do relevo). Correção: clareira
+    de 6 m e pés a +0,08 m do chão. _Teste:_ `labscene · spawn assentou`.
+24. **O som do passo tratava a praia como pedra** (`player.gd`).
+    Tudo o que estava a menos de `SEA_LEVEL + 0,35` virava `stone`, e não havia
+    sons de areia/terra/neve/lama. Correção: `footstep_material_at()` no mundo
+    e no laboratório, com sons próprios. _Teste:_ `o chão sabe que material
+    pisamos`, `há sons distintos...`.
+25. **O vento da relva dobrava o tronco das árvores** (`materials.gd`).
+    `wind_foliage_mesh()` trocava todas as superfícies, inclusive a casca, pelo
+    shader de folhagem. Correção: `is_leaf_material()`; o tronco conserva o
+    material do artista. _Teste:_ `chunks usam árvores Blender com vento nas
+    folhas` (continua a encontrar a superfície de folhas).
+26. **A sakura era uma árvore de outono vermelha** (`toon_foliage_cards`).
+    O GLB do kit tem folhas de ácer; o shader não permitia recolorir sem perder
+    a máscara. Correção: `recolour` + `recolour_amount`, aplicados só à sakura.
+27. **O aviso "a aguardar a colisão voxel" poluía runs headless**
+    (`main.gd`). `OS.has_feature("headless")` não é a pergunta certa;
+    passou a `DisplayServer.get_name() != "headless"`.
+28. **Os testes de sono tinham um limite de 12 s** e falhavam quando o
+    headless gerava 46 chunks (frames de ~1,3 s). Não era o sono que estava
+    preso: a sequência tem oito `await` e cada um custa um frame. Limite subiu
+    para 25 s; a sequência em si continua a ser validada.
+
 ## CORRIGIDOS (continuação de 2026-10-16)
 
 17. **Árvore abatida "só encostava" e ficava com cor plana** (`felled_tree.tscn`,

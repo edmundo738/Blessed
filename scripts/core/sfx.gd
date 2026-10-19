@@ -130,6 +130,37 @@ func _build(name: String) -> AudioStreamWAV:
 			_tone_into(a, 180.0, 0.25, 0, int(0.05 * RATE))
 		"step_water":
 			a = _buf(0.22); _noise_into(a, 0.4); _one_pole(a, 700.0); _decay(a, 0.18)
+		"step_sand":
+			# Grão fino e seco: ruído agudo, sem corpo grave.
+			a = _buf(0.12); _noise_into(a, 0.42); _one_pole(a, 4200.0); _decay(a, 0.08)
+			_tone_into(a, 1500.0, 0.04, 0, int(0.025 * RATE))
+		"step_dirt":
+			# Terra batida: um baque curto com farelo por cima.
+			a = _buf(0.13); _noise_into(a, 0.44); _one_pole(a, 900.0)
+			_tone_into(a, 96.0, 0.20, 0, int(0.07 * RATE)); _decay(a, 0.10)
+		"step_snow":
+			# Neve: crunch seco, mais ruído que tom, cauda muito curta.
+			a = _buf(0.16); _noise_into(a, 0.36); _one_pole(a, 2100.0); _decay(a, 0.13)
+			for i in range(0, a.size(), 137):
+				a[i] *= 1.6
+		"step_mud":
+			# Lama: o som molhado que diz "aqui não se corre".
+			a = _buf(0.24); _noise_into(a, 0.34); _one_pole(a, 520.0)
+			_tone_into(a, 62.0, 0.12, 0, int(0.12 * RATE)); _decay(a, 0.20)
+		"dig_soil":
+			a = _buf(0.22); _noise_into(a, 0.52); _one_pole(a, 700.0)
+			_sweep_into(a, 130.0, 70.0, 0.18); _decay(a, 0.16)
+		"dig_sand":
+			a = _buf(0.18); _noise_into(a, 0.46); _one_pole(a, 3100.0); _decay(a, 0.12)
+		"dig_rock":
+			a = _buf(0.20); _noise_into(a, 0.32); _one_pole(a, 1700.0); _decay(a, 0.09)
+			_tone_into(a, 540.0, 0.16, 0, int(0.05 * RATE))
+			_tone_into(a, 880.0, 0.10, int(0.02 * RATE), int(0.07 * RATE))
+		"leaf_rustle":
+			a = _buf(0.30); _noise_into(a, 0.28); _one_pole(a, 2800.0); _decay(a, 0.24)
+		"body_fall":
+			a = _buf(0.34); _noise_into(a, 0.32); _one_pole(a, 420.0)
+			_sweep_into(a, 110.0, 48.0, 0.4); _decay(a, 0.28)
 		"jump":
 			# Impulso curto de ar + grave macio; não reutiliza um passo/tambor.
 			a = _buf(0.24); _noise_into(a, 0.16); _one_pole(a, 520.0)
@@ -153,19 +184,17 @@ func _build(name: String) -> AudioStreamWAV:
 			a = _buf(0.2); _noise_into(a, 0.5); _one_pole(a, 700.0); _decay(a, 0.15)
 			_tone_into(a, 140.0, 0.3, 0, int(0.1 * RATE))
 		"build_wood":
-			# batida de madeira que encaixa: toque seco + corpo grave,
-			# com um segundo toque curto (a peça assenta)
+			# batida de madeira que encaixa (laboratorio de construcao)
 			a = _buf(0.22); _noise_into(a, 0.45); _one_pole(a, 950.0); _decay(a, 0.13)
 			_tone_into(a, 165.0, 0.38, 0, int(0.07 * RATE))
 			_tone_into(a, 230.0, 0.16, int(0.055 * RATE), int(0.11 * RATE))
 		"build_stone":
-			# pedra sobre pedra: baque surdo e pesado, quase sem agudos
+			# pedra sobre pedra: baque surdo e pesado
 			a = _buf(0.26); _noise_into(a, 0.55); _one_pole(a, 480.0); _decay(a, 0.19)
 			_tone_into(a, 82.0, 0.42, 0, int(0.13 * RATE))
 			_tone_into(a, 58.0, 0.25, int(0.02 * RATE), int(0.16 * RATE))
 		"collapse":
-			# estrondo de estrutura a cair: ruído grave longo + queda
-			# de frequência + baque final (o que segurava cedeu)
+			# estrondo de estrutura a cair
 			a = _buf(0.95); _noise_into(a, 0.85); _one_pole(a, 430.0)
 			_sweep_into(a, 150.0, 36.0, 0.55)
 			_tone_into(a, 52.0, 0.4, int(0.10 * RATE), int(0.5 * RATE))

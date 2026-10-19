@@ -157,7 +157,8 @@ func _init() -> void:
 
 ## Material de relva que conserva a textura do asset importado e anima os vértices.
 ## Os materiais são partilhados por todos os chunks com a mesma textura.
-func grass_material_for(source: Material = null, wind_height: float = 0.75) -> ShaderMaterial:
+func grass_material_for(source: Material = null, wind_height: float = 0.75,
+		recolour: Color = Color.WHITE, recolour_amount: float = 0.0) -> ShaderMaterial:
 	var texture: Texture2D = null
 	var tint := Color.WHITE
 	var alpha_cutoff := 0.42
@@ -169,8 +170,9 @@ func grass_material_for(source: Material = null, wind_height: float = 0.75) -> S
 		needs_cutout = base.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED
 		alpha_cutoff = base.alpha_scissor_threshold
 	var shader := _foliage_card_shader if needs_cutout else _grass_shader
-	var key := "%d:%s:%d:%.2f:%.2f" % [texture.get_instance_id() if texture != null else 0,
-		tint.to_html(), int(needs_cutout), wind_height, alpha_cutoff]
+	var key := "%d:%s:%d:%.2f:%.2f:%s:%.2f" % [texture.get_instance_id() if texture != null else 0,
+		tint.to_html(), int(needs_cutout), wind_height, alpha_cutoff,
+		recolour.to_html(), recolour_amount]
 	if _grass_material_cache.has(key):
 		return _grass_material_cache[key] as ShaderMaterial
 	var material := ShaderMaterial.new()
@@ -180,6 +182,9 @@ func grass_material_for(source: Material = null, wind_height: float = 0.75) -> S
 	material.set_shader_parameter("albedo_tint", tint)
 	if needs_cutout:
 		material.set_shader_parameter("alpha_cutoff", alpha_cutoff)
+		if recolour_amount > 0.0:
+			material.set_shader_parameter("recolour", recolour)
+			material.set_shader_parameter("recolour_amount", recolour_amount)
 	_apply_grass_style(material)
 	material.set_shader_parameter("wind_height", maxf(wind_height, 0.1))
 	_grass_material_cache[key] = material
@@ -187,16 +192,35 @@ func grass_material_for(source: Material = null, wind_height: float = 0.75) -> S
 	return material
 
 
-## Cria uma cópia da malha importada uma vez e troca cada material por uma
-## variante que preserva a textura original e acrescenta vento.
-func wind_foliage_mesh(source: ArrayMesh, wind_height: float = 0.75) -> ArrayMesh:
-	var key := "%d:%.2f" % [source.get_instance_id(), wind_height]
+## Uma superfície de folhagem? O tronco é casca: se levar o shader de vento da
+## relva, dobra como erva e perde a textura. A distinção é feita pelo material
+## do artista (nome + cutout), não por uma lista de espécies.
+static func is_leaf_material(mat: Material) -> bool:
+	var base := mat as BaseMaterial3D
+	if base == null:
+		return false
+	var n := base.resource_name.to_lower()
+	if n.contains("leaf") or n.contains("leaves") or n.contains("foliage") \
+			or n.contains("flower") or n.contains("pine") or n.contains("needle"):
+		return true
+	return base.albedo_texture != null \
+		and base.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED
+
+
+## Cria uma cópia da malha importada uma vez e troca SÓ as superfícies de
+## folhagem por variantes com vento. O tronco conserva o material de casca.
+func wind_foliage_mesh(source: ArrayMesh, wind_height: float = 0.75,
+		recolour: Color = Color.WHITE, recolour_amount: float = 0.0) -> ArrayMesh:
+	var key := "%d:%.2f:%s:%.2f" % [source.get_instance_id(), wind_height,
+		recolour.to_html(), recolour_amount]
 	if _grass_mesh_cache.has(key):
 		return _grass_mesh_cache[key] as ArrayMesh
 	var result := source.duplicate() as ArrayMesh
 	for surface in result.get_surface_count():
-		result.surface_set_material(surface,
-			grass_material_for(source.surface_get_material(surface), wind_height))
+		var original := source.surface_get_material(surface)
+		if is_leaf_material(original):
+			result.surface_set_material(surface,
+				grass_material_for(original, wind_height, recolour, recolour_amount))
 	_grass_mesh_cache[key] = result
 	return result
 

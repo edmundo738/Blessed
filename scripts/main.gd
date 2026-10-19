@@ -63,7 +63,7 @@ func _ready() -> void:
 	# (fora do .pck; servem para medir o jogo a sério, não para jogar)
 	for arg in all_args:
 		var s_arg := str(arg)
-		if s_arg in ["selftest", "diag", "shot", "labtest", "labscene"]:
+		if s_arg in ["selftest", "diag", "shot", "labtest", "labscene", "gpushot", "labshot", "perf"]:
 			_start_probe(s_arg)
 			break
 
@@ -219,7 +219,8 @@ func _wait_for_spawn_collision(spawn: Vector3) -> void:
 			player.enabled = true
 			print("WORLD spawn grounded on voxel collision")
 			return
-		if not warned and Time.get_ticks_msec() >= warning_at:
+		if not warned and Time.get_ticks_msec() >= warning_at \
+				and DisplayServer.get_name() != "headless":
 			push_warning("A aguardar a colisão voxel da zona inicial antes de ativar o jogador")
 			warned = true
 		await get_tree().process_frame

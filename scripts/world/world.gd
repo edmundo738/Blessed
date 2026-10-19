@@ -33,10 +33,14 @@ var _target := Vector3.ZERO
 var _last_center := Vector2i(999999, 999999)
 var _last_lod_target := Vector2(INF, INF)
 
-var view_distance := 160.0
+var view_distance := 120.0
 var build_budget_ms := 5.0
 var shadows_enabled := true
-const LOD_THRESHOLDS := [60.0, 120.0, 180.0]
+## Faixas mais curtas do que as originais (60/120/180): com o Transvoxel a
+## desenhar o horizonte, as árvores em LOD0 a 60 m eram a maior factura de
+## triângulos numa GPU integrada. 42 m ainda cobre a zona onde o jogador lê a
+## folha; 85/135 levam a silhueta até à névoa.
+const LOD_THRESHOLDS := [42.0, 85.0, 135.0]
 const LOD_HYSTERESIS := 8.0
 
 var sun: DirectionalLight3D
@@ -96,14 +100,18 @@ func _build_environment() -> void:
 		environment.glow_strength = 0.9
 		environment.glow_bloom = 0.0
 		environment.adjustment_enabled = true
-		environment.adjustment_saturation = 1.04
+		environment.adjustment_saturation = 1.10
+		environment.adjustment_contrast = 1.07
+		environment.adjustment_brightness = 0.97
 		env_node.environment = environment
 	# Controlled bloom: it gives the sun a soft cinematic edge without washing
 	# out the whole image or adding a fake translucent sphere to the sky.
+	# O bloom antigo (0,62) lavava a relva e os brancos do céu; 0,38 conserva
+	# o halo do sol sem transformar o campo num letreiro.
 	environment.glow_enabled = true
-	environment.glow_intensity = 0.62
-	environment.glow_strength = 0.82
-	environment.glow_bloom = 0.06
+	environment.glow_intensity = 0.38
+	environment.glow_strength = 0.76
+	environment.glow_bloom = 0.03
 
 	sun = get_node_or_null("Sun") as DirectionalLight3D
 	if sun == null:
@@ -349,7 +357,7 @@ func set_target(p: Vector3) -> void:
 func radius() -> int:
 	# O VoxelLodTerrain assume o horizonte; chunks secundários concentram
 	# relva, água e objetos na zona jogável para não duplicar a carga da malha.
-	var chunk_distance := minf(view_distance, 144.0) if use_voxel_terrain else view_distance
+	var chunk_distance := minf(view_distance, 96.0) if use_voxel_terrain else view_distance
 	return clampi(int(ceil(chunk_distance / Chunk.SIZE)), 1, 7)
 
 
@@ -573,6 +581,43 @@ func ground_height(x: float, z: float) -> float:
 	return terrain.height(x, z)
 
 
+## Que superfície está debaixo dos pés? É a autoridade única do som de passo.
+##
+## Antes o Player escolhia `stone` para tudo o que estava perto do nível do
+## mar: praia, calçada e leito de rio soavam a pedra, e um prado molhado soava
+## a relva seca. O material que o terreno já conhece (bioma + água + geologia)
+## passa a decidir o som, tal como decide a cor e a colisão.
+func footstep_material_at(x: float, z: float) -> String:
+	if terrain == null:
+		return "grass"
+	var h := terrain.height(x, z)
+	var surface := terrain.water_surface_height(x, z)
+	if surface > -99999.0 and h < surface - 0.30:
+		return "water"
+	if h < Terrain.SEA_LEVEL + 1.15:
+		return "sand"
+	var sl := terrain.slope(x, z)
+	var biome := terrain.dominant_s(x, z, h, sl)
+	if biome == Terrain.B_SNOW:
+		return "snow"
+	if biome == Terrain.B_ROCK or sl > 0.58:
+		return "stone"
+	if biome == Terrain.B_MARSH or biome == Terrain.B_MUD:
+		return "mud"
+	if biome == Terrain.B_SAND or biome == Terrain.B_DESERT:
+		return "sand"
+	if biome == Terrain.B_DIRT or biome == Terrain.B_BADLANDS:
+		return "dirt"
+	if terrain.path_distance(x, z) < 2.2:
+		return "dirt"
+	# Terra exposta por escavação/declive: o solo aparece debaixo da relva.
+	if terrain.geology != null:
+		var geo: Dictionary = terrain.geology.sample(x, z)
+		if float(geo.get("hardness", 0.5)) > 0.82 and sl > 0.42:
+			return "stone"
+	return "grass"
+
+
 func water_surface_height(x: float, z: float) -> float:
 	return terrain.water_surface_height(x, z)
 
@@ -653,7 +698,7 @@ func _apply_settings() -> void:
 			viewer.set("view_distance", int(view_distance))
 	if sun:
 		sun.shadow_enabled = shadows_enabled
-		sun.directional_shadow_max_distance = [60.0, 120.0, 200.0][clampi(int(Game.settings["shadows"]), 0, 2)]
+		sun.directional_shadow_max_distance = [48.0, 80.0, 140.0][clampi(int(Game.settings["shadows"]), 0, 2)]
 	if environment:
 		environment.fog_enabled = true
 		environment.fog_mode = Environment.FOG_MODE_DEPTH

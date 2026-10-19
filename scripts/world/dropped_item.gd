@@ -16,12 +16,22 @@ var _display: Node3D
 var _frozen := false
 var _bob_t := 0.0
 
-const PICKUP_DISTANCE := 0.95
-const MAX_PICKUP_HEIGHT := 1.9
+const PICKUP_DISTANCE := 1.15
+const MAX_PICKUP_HEIGHT := 2.2
 ## Íman: o item é atraído a partir daqui. Sem isto, o jogador tinha de acertar
 ## com o corpo no item (`1,08 m`) — e um recurso que cai num arbusto ou na
 ## encosta era praticamente impossível de apanhar.
-const MAGNET_DISTANCE := 2.1
+##
+## 2,6 m (era 2,1) parece pouco, mas é a diferença entre um arbusto colhido a
+## andar e uma caça aos pickups: o arremesso inicial do item pode levá-lo para
+## fora do alcance antigo antes de ele assentar. O raio maior não "puxa" itens
+## do outro lado de uma parede — o íman só age depois de 0,25 s e a recolha
+## continua a exigir linha de proximidade.
+const MAGNET_DISTANCE := 2.6
+## A partir deste tempo, um item já perto não espera que a física o deixe
+## assentar: é levado diretamente ao peito. É o que faz a recolha parecer
+## imediata em vez de "o item decidiu fugir".
+const VACUUM_TIME := 0.55
 ## Depois do arremesso inicial, o item assenta e passa a girar devagar
 ## (modelo do Minecraft): deixa de rolar por aí e de se perder em buracos.
 const SETTLE_TIME := 1.1
@@ -95,7 +105,7 @@ func _ready() -> void:
 	visual.add_child(_label)
 	if launch_direction.length_squared() < 0.01:
 		launch_direction = Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0))
-	linear_velocity = launch_direction.normalized() * randf_range(1.3, 2.3) + Vector3.UP * randf_range(1.6, 2.4)
+	linear_velocity = launch_direction.normalized() * randf_range(0.9, 1.6) + Vector3.UP * randf_range(1.3, 2.0)
 	angular_velocity = Vector3(randf_range(-2.5, 2.5), randf_range(-2.5, 2.5), randf_range(-2.5, 2.5))
 
 
@@ -157,17 +167,20 @@ func _physics_process(delta: float) -> void:
 		_display.position.y = lerpf(_display.position.y, bob, 1.0 - exp(-8.0 * delta))
 
 	# 4) íman + recolha
-	if player_node != null and _age > 0.35 and _attempt_t <= 0.0:
+	if player_node != null and _age > 0.25 and _attempt_t <= 0.0:
 		var chest := player_node.global_position + Vector3(0.0, 0.9, 0.0)
 		var to_player := chest - global_position
 		var dist := to_player.length()
 		if dist < MAGNET_DISTANCE and dist > 0.02:
-			var pull := to_player.normalized() * (2.0 + (MAGNET_DISTANCE - dist) * 2.4) * delta
-			if _frozen:
-				global_position += pull
+			var pull := to_player.normalized() * (3.0 + (MAGNET_DISTANCE - dist) * 3.2) * delta
+			if _frozen or _age > VACUUM_TIME:
+				# Sem física pelo meio: o item é aspirado. `global_position` num
+				# RigidBody congelado é seguro; num corpo ainda livre é o que dá
+				# a sensação de íman em vez de "empurrão".
+				global_position += pull * 1.8
 			else:
-				linear_velocity = linear_velocity.lerp(to_player.normalized() * 4.0, 0.22)
-	if player_node != null and _age >= 0.32 and _attempt_t <= 0.0:
+				linear_velocity = linear_velocity.lerp(to_player.normalized() * 5.5, 0.35)
+	if player_node != null and _age >= 0.30 and _attempt_t <= 0.0:
 		var horizontal := Vector2(global_position.x - player_node.global_position.x,
 			global_position.z - player_node.global_position.z).length()
 		if horizontal <= PICKUP_DISTANCE \

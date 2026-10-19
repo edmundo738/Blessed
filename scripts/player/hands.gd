@@ -18,6 +18,13 @@ var swing_t := -1.0
 var swing_speed := 1.0
 var bob_t := 0.0
 var recoil := 0.0
+var move_speed := 0.0
+var swimming := false
+var _two_handed := false
+var _pitch := 0.0
+var _sway := Vector3.ZERO
+
+signal swung
 
 
 func _ready() -> void:
@@ -33,57 +40,82 @@ func _ready() -> void:
 	_trim.roughness = 0.78
 	position = Vector3(0.0, -0.07, -0.30)
 	arm_r = _make_arm(1)
-	arm_r.position = Vector3(0.43, -0.34, -0.03)
-	arm_r.rotation_degrees = Vector3(-16, 10, -12)
-	arm_r.scale = Vector3.ONE * 0.76
+	arm_r.position = Vector3(0.40, -0.33, -0.04)
+	arm_r.rotation_degrees = Vector3(-18, 8, -9)
+	arm_r.scale = Vector3.ONE * 0.68
 	add_child(arm_r)
 	arm_l = _make_arm(-1)
-	arm_l.position = Vector3(-0.43, -0.36, -0.12)
-	arm_l.rotation_degrees = Vector3(-20, -10, 12)
-	arm_l.scale = Vector3.ONE * 0.70
+	arm_l.position = Vector3(-0.36, -0.34, -0.16)
+	arm_l.rotation_degrees = Vector3(-26, -14, 16)
+	arm_l.scale = Vector3.ONE * 0.74
 	arm_l.visible = false
 	add_child(arm_l)
 	held = MeshInstance3D.new()
-	held.position = Vector3(0.06, -0.08, -0.47)
+	held.position = Vector3(0.02, -0.12, -0.50)
+	held.rotation_degrees = Vector3(0, 0, -5)
 	arm_r.add_child(held)
 
 
 func _make_arm(side: int) -> Node3D:
 	var n := Node3D.new()
+	# Ombro: uma pequena massa de tecido antes da manga. Sem isto o braço
+	# nascia de um tubo cortado no ar.
+	var shoulder := _ellipsoid(Vector3(0.095, 0.075, 0.10), _cloth)
+	shoulder.position = Vector3(0.0, -0.005, -0.025)
+	n.add_child(shoulder)
 	var sleeve := MeshInstance3D.new()
 	var sleeve_mesh := CapsuleMesh.new()
-	sleeve_mesh.radius = 0.074
-	sleeve_mesh.height = 0.38
-	sleeve_mesh.radial_segments = 8
-	sleeve_mesh.rings = 3
+	sleeve_mesh.radius = 0.070
+	sleeve_mesh.height = 0.36
+	sleeve_mesh.radial_segments = 10
+	sleeve_mesh.rings = 4
 	sleeve.mesh = sleeve_mesh
 	sleeve.material_override = _cloth
 	sleeve.rotation.x = PI * 0.5
-	sleeve.position = Vector3(0.0, 0.015, -0.15)
+	sleeve.position = Vector3(0.0, 0.012, -0.17)
 	n.add_child(sleeve)
+	# Punho dobrado: a manga aperta e o antebraço de pele continua.
 	var cuff := MeshInstance3D.new()
 	var cuff_mesh := CylinderMesh.new()
-	cuff_mesh.top_radius = 0.075
-	cuff_mesh.bottom_radius = 0.075
-	cuff_mesh.height = 0.070
-	cuff_mesh.radial_segments = 8
+	cuff_mesh.top_radius = 0.073
+	cuff_mesh.bottom_radius = 0.068
+	cuff_mesh.height = 0.060
+	cuff_mesh.radial_segments = 10
 	cuff.mesh = cuff_mesh
 	cuff.material_override = _trim
 	cuff.rotation.x = PI * 0.5
-	cuff.position = Vector3(0.0, 0.0, -0.37)
+	cuff.position = Vector3(0.0, 0.012, -0.345)
 	n.add_child(cuff)
-	var palm := _ellipsoid(Vector3(0.105, 0.062, 0.13), _skin)
-	palm.position = Vector3(0.0, -0.012, -0.45)
+	var forearm := MeshInstance3D.new()
+	var fm := MeshKit.tapered(rng, 0.105, 0.054, 0.046, 8, 2, 0.0, false,
+		Color.WHITE)
+	forearm.mesh = fm
+	forearm.material_override = _skin
+	forearm.rotation.x = -PI * 0.5
+	forearm.position = Vector3(0.0, 0.010, -0.350)
+	n.add_child(forearm)
+	var wrist := _ellipsoid(Vector3(0.052, 0.046, 0.040), _skin)
+	wrist.position = Vector3(0.0, 0.008, -0.456)
+	n.add_child(wrist)
+	# Palma ligeiramente côncava, com a base dos dedos marcada.
+	var palm := _ellipsoid(Vector3(0.098, 0.058, 0.115), _skin)
+	palm.position = Vector3(0.0, -0.010, -0.510)
 	n.add_child(palm)
 	for finger in 4:
-		var len := 0.105 - absf(float(finger) - 1.5) * 0.012
-		var x := (float(finger) - 1.5) * 0.046
-		var f := _ellipsoid(Vector3(0.019, 0.022, len), _skin)
-		f.position = Vector3(x, -0.022, -0.53 - len * 0.30)
+		var length := 0.105 - absf(float(finger) - 1.5) * 0.010
+		var x := (float(finger) - 1.5) * 0.043
+		var knuckle := _ellipsoid(Vector3(0.020, 0.020, 0.026), _skin)
+		knuckle.position = Vector3(x, -0.006, -0.565)
+		n.add_child(knuckle)
+		var f := _ellipsoid(Vector3(0.017, 0.019, length), _skin)
+		f.position = Vector3(x, -0.024, -0.585 - length * 0.22)
+		# Dedos fechados em volta do cabo: a mão agarra, não aponta.
+		f.rotation.x = -0.62
 		n.add_child(f)
-	var thumb := _ellipsoid(Vector3(0.028, 0.026, 0.075), _skin)
-	thumb.position = Vector3(0.105 * float(side), -0.003, -0.47)
-	thumb.rotation.y = -0.5 * float(side)
+	var thumb := _ellipsoid(Vector3(0.027, 0.025, 0.078), _skin)
+	thumb.position = Vector3(0.093 * float(side), -0.004, -0.515)
+	thumb.rotation.y = -0.62 * float(side)
+	thumb.rotation.x = -0.35
 	n.add_child(thumb)
 	return n
 
@@ -106,11 +138,16 @@ func set_held(mesh: ArrayMesh, mat: Material = null) -> void:
 	held.mesh = mesh
 	held.material_override = mat
 	held.visible = mesh != null
-	arm_l.visible = mesh != null
+	# A mão de apoio foi escondida: o rig de duas mãos ainda não está bom o
+	# suficiente para aparecer (o antebraço ficava um toco a flutuar). Uma mão
+	# firme no cabo é melhor do que duas a fingir.
+	arm_l.visible = false
 
 
 ## Gera uma silhueta clara para o item equipado, visível na 1.ª pessoa.
 func set_item(item_id: String) -> void:
+	_two_handed = item_id in ["axe", "pickaxe", "rod", "primitive_axe",
+		"primitive_pickaxe"]
 	if is_instance_valid(_asset_root):
 		_asset_root.queue_free()
 	_asset_root = null
@@ -124,14 +161,18 @@ func set_item(item_id: String) -> void:
 		if model != null:
 			_asset_root = model
 			_asset_root.name = "BlenderTool_" + item_id
-			_asset_root.scale = Vector3.ONE * 0.72
-			_asset_root.rotation_degrees = Vector3(0.0, 0.0, -16.0)
-			_asset_root.position = Vector3(0.0, -0.12, 0.0)
+			# Escala e inclinação de EMPUNHADURA: o modelo do Blender cresce em
+			# Y, por isso sem inclinação a cabeça do machado ficava em pé à
+			# altura dos olhos e parecia um totem. Rodado para a frente, o cabo
+			# entra na mão e a cabeça lê-se na diagonal.
+			_asset_root.scale = Vector3.ONE * 0.55
+			_asset_root.rotation_degrees = Vector3(-18.0, 8.0, 22.0)
+			_asset_root.position = Vector3(0.0, -0.10, -0.08)
 			held.add_child(_asset_root)
 			held.mesh = null
 			# MeshInstance visibility hides its whole subtree, including the GLB tool.
 			held.visible = true
-			arm_l.visible = true
+			arm_l.visible = false
 			return
 	held.visible = true
 	var parts: Array = []
@@ -195,17 +236,30 @@ func swing(duration: float = 0.34) -> void:
 	swing_t = 0.0
 	swing_speed = 1.0 / maxf(duration, 0.05)
 	recoil = 1.0
+	swung.emit()
 
 
 func recoil_kick(amount: float = 0.25) -> void:
 	recoil = maxf(recoil, amount)
 
 
+## Movimento do corpo chega aqui: as mãos têm de saber se estão a andar, a
+## correr ou a nadar. Sem isto ficavam sempre na pose de repouso enquanto o
+## mundo passava — o clássico "braços de papelão" da primeira pessoa.
+func set_motion(speed: float, is_swimming: bool, pitch: float) -> void:
+	move_speed = speed
+	swimming = is_swimming
+	_pitch = pitch
+
+
 func _process(delta: float) -> void:
 	# mola de respiração + balanço dos passos
-	bob_t += delta * 1.6
+	bob_t += delta * (1.6 + move_speed * 0.55)
 	var breathe := sin(bob_t) * 0.006
-	var sway := Vector3(sin(bob_t * 0.8) * 0.008, breathe, cos(bob_t * 0.6) * 0.006)
+	var walk := clampf(move_speed / 6.2, 0.0, 1.2)
+	var sway := Vector3(sin(bob_t * 0.8) * 0.008, breathe + sin(bob_t * 3.1) * 0.012 * walk,
+		cos(bob_t * 0.6) * 0.006)
+	_sway = _sway.lerp(sway, 1.0 - exp(-10.0 * delta))
 	if swing_t >= 0.0:
 		swing_t += delta * swing_speed
 		if swing_t > 1.0:
@@ -215,10 +269,30 @@ func _process(delta: float) -> void:
 	if s >= 0.0:
 		# curva de balanço: sobe rápido, desce com peso
 		arc = sin(clampf(s, 0.0, 1.0) * PI)
-	arm_r.position = Vector3(0.43, -0.34, -0.03) + sway + Vector3(0, -arc * 0.10, arc * 0.13)
-	arm_r.rotation_degrees = Vector3(-8 - arc * 55.0, 6 + arc * 8.0, arc * 6.0)
-	arm_l.position = Vector3(-0.43, -0.36, -0.12) + sway * 0.7 \
-		+ Vector3(0, -arc * 0.03, arc * 0.05)
-	arm_l.rotation_degrees = Vector3(-6 - arc * 14.0, -8, 0)
+
+	# Correr inclina as mãos para trás e aperta o gesto; nadar leva-as à frente
+	# e alterna as braçadas. A ferramenta continua a ser o centro da ação.
+	var run_dip := walk * 0.055
+	var swim_x := 0.0
+	var swim_y := 0.0
+	var swim_rot := 0.0
+	if swimming:
+		var stroke := sin(bob_t * 3.0)
+		swim_x = -0.10
+		swim_y = 0.02 + absf(stroke) * 0.08
+		swim_rot = -0.85 + stroke * 0.45
+	arm_r.position = Vector3(0.40 + _sway.x + swim_x, -0.33 + _sway.y + run_dip + swim_y,
+		-0.04 + _sway.z + walk * 0.05)
+	arm_r.rotation_degrees = Vector3(-18 - arc * 58.0 - walk * 5.0 + rad_to_deg(swim_rot),
+		6 + arc * 8.0, -9 + arc * 6.0 + sin(bob_t * 2.2) * 1.4)
+	if arm_l.visible:
+		arm_l.position = Vector3(-0.10 + _sway.x * 0.6, -0.30 + _sway.y * 0.7,
+			-0.38 + _sway.z + arc * 0.02)
+		arm_l.rotation_degrees = Vector3(-58 - arc * 12.0, -10, 28 - arc * 4.0)
 	recoil = maxf(0.0, recoil - delta * 3.0)
-	position.z = -0.42 + recoil * 0.04
+	# O recuo empurra a arma para o jogador e levanta-a ligeiramente: é a mão
+	# a absorver o choque, não a câmara a teleportar.
+	position.z = -0.42 + recoil * 0.055 + (0.06 if swimming else 0.0)
+	position.y = -0.07 + sin(bob_t * 2.1) * 0.004 + walk * 0.012
+	held.position = Vector3(0.02, -0.12, -0.50 + recoil * 0.02)
+	held.rotation_degrees = Vector3(-4.0 - _pitch * 7.0, 0.0, -5.0 + arc * 10.0)

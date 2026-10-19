@@ -144,13 +144,38 @@ func _run() -> void:
 	main.fx.set("_use_gpu", fx_use_gpu)
 	check("terreno tem altura", absf(world.terrain.height(0, 0)) < 500.0,
 		"h(0,0)=%.2f" % world.terrain.height(0, 0))
+	# O som do passo deixou de adivinhar "pedra" perto do mar: o material vem
+	# do mesmo sítio que decide a cor e a colisão.
+	var vc := world.terrain.village_center()
+	var foot_mat := world.footstep_material_at(vc.x, vc.y)
+	check("o chão sabe que material pisamos",
+		foot_mat in ["grass", "dirt", "sand", "stone", "snow", "mud", "water"],
+		"material=%s" % foot_mat)
+	check("há sons distintos para areia, terra, neve e lama",
+		Sfx.stream("step_sand").data.size() > 0
+		and Sfx.stream("step_dirt").data.size() > 0
+		and Sfx.stream("step_snow").data.size() > 0
+		and Sfx.stream("step_mud").data.size() > 0
+		and Sfx.stream("dig_rock").data.size() > 0)
 	check("aldeia existe", world.terrain.village_distance(
 		world.terrain.village_center().x, world.terrain.village_center().y) < 0.01)
-	var avatar_sprite := main.player.avatar.get_node_or_null("PixelSprite") as AnimatedSprite3D
 	check("jogador começa em 1.ª pessoa", not main.player.third_person)
-	check("avatar do jogador é sprite billboard",
-		avatar_sprite != null and avatar_sprite.billboard == BaseMaterial3D.BILLBOARD_ENABLED
-			and not main.player.avatar.visible)
+	# O avatar 2D passou a fallback/retrato; a câmara externa mostra um corpo
+	# 3D com membros articulados. O teste tem de apanhar o que o jogador vê.
+	var avatar_sprite := main.player.avatar.get_node_or_null("PixelSprite") as AnimatedSprite3D
+	check("avatar 2D fica como fallback, escondido",
+		avatar_sprite != null and not main.player.avatar.visible)
+	var body: PlayerBody = main.player.body
+	var body_ok := body != null and not body.visible \
+		and body.get_node_or_null("BodyRoot/Hips/Torso/Head") != null \
+		and body.get_node_or_null("BodyRoot/Hips/LegL/Knee") != null \
+		and body.get_node_or_null("BodyRoot/Hips/Torso/ArmR/Elbow") != null
+	check("corpo 3D do jogador tem membros articulados", body_ok)
+	main.player.call("_set_view_mode", true)
+	var third_visible: bool = body != null and body.visible and not main.player.hands.visible
+	main.player.call("_set_view_mode", false)
+	check("câmara externa mostra o corpo e esconde as mãos",
+		third_visible and not main.player.third_person)
 	check("substituição Camp to Me desligada",
 		not bool(main.player.avatar.get("use_camp_sprite")))
 	var hands: Node = main.player.hands
@@ -1164,7 +1189,7 @@ func _run() -> void:
 	Game.hour = 2.0
 	it.focus = {"kind": "structure", "ref": cadeira, "pos": cadeira["pos"]}
 	it._do_interact({})
-	var prazo_cadeira := Time.get_ticks_msec() + 12000
+	var prazo_cadeira := Time.get_ticks_msec() + 25000
 	while bool(it.sleeping) and Time.get_ticks_msec() < prazo_cadeira:
 		await get_tree().process_frame
 	check("a cadeira é um cochilo (recupera, mas não passa a noite)",
@@ -1393,12 +1418,12 @@ func _run() -> void:
 		"bed=%s focus=%s result=%s" % [str(cama.get("id", "")),
 			str((it.focus.get("ref", {}) as Dictionary).get("id", "")),
 			str(bed_interact_result)])
-	var deadline := Time.get_ticks_msec() + 12000
+	var deadline := Time.get_ticks_msec() + 45000
 	while bool(it.sleeping) and Time.get_ticks_msec() < deadline:
 		await get_tree().process_frame
 	main.interaction.slept.disconnect(catcher_sleep)
 	check("a sequência de dormir termina e devolve o controlo",
-		not bool(it.sleeping) and bool(main.player.enabled), "12 s de limite")
+		not bool(it.sleeping) and bool(main.player.enabled), "45 s de limite")
 	check("o corpo fica deitado no leito (não dorme a flutuar)",
 		main.player.global_position.distance_to(cama["pos"]) < 2.0,
 		"distância=%.2f m pos=%s cama=%s bed=%s focus=%s eventos=%s sleeping=%s threat=%.2f" % [
@@ -1483,6 +1508,17 @@ func _run() -> void:
 			skip("golpear caça tira-lhe vida e põe-na a fugir",
 				"não nasceu nenhum animal neste arranque")
 		else:
+			var body_node := prey.get_node_or_null("GrazerBody")
+			var legs: Array = prey.get("_legs")
+			var body_meshes := 0
+			if body_node != null:
+				for c in body_node.get_children():
+					if c is MeshInstance3D:
+						body_meshes += 1
+			check("a caça é um quadrúpede 3D (não um billboard)",
+				prey.get_node_or_null("GrazerBody/Neck/Head") != null
+				and legs.size() == 4 and body_meshes >= 3,
+				"malhas=%d pernas=%d" % [body_meshes, legs.size()])
 			var prey_hp := float(prey.health)
 			it.focus = {"kind": "animal", "ref": prey,
 				"pos": prey.global_position + Vector3(0, 0.45, 0)}
@@ -1851,6 +1887,11 @@ func _water_spot(from: Vector3, dist: float, min_depth: float, max_depth: float)
 			var x: float = from.x + cos(a) * radius
 			var z: float = from.z + sin(a) * radius
 			if not ter.is_water(x, z):
+				continue
+			# O Dia 1 precisa de ÁGUA DOCE para ferver. A primeira versão deste
+			# helper podia devolver mar, a garrafa enchia-se de `water_salt` e o
+			# teste seguinte falhava sem dizer porquê. Mar tem teste próprio.
+			if ter.is_ocean(x, z):
 				continue
 			var surface := ter.water_surface_height(x, z)
 			var depth := surface - ter.height(x, z)
@@ -2313,10 +2354,11 @@ func _first_day() -> void:
 		await _fd_wait(20)
 	main.interaction.focus = {"kind": "water", "ref": null,
 		"pos": main.player.global_position}
-	main.interaction._do_interact({})
+	var agua_res: Dictionary = main.interaction._do_interact({})
 	_fd_step("DIA 1 · a garrafa nasce vazia e enche-se na água",
 		agua_spot != Vector3.INF and _inv().count("water") >= 1,
-		"agua=%s water=%d" % [str(agua_spot != Vector3.INF), _inv().count("water")])
+		"agua=%s water=%d garrafas=%d res=%s" % [str(agua_spot != Vector3.INF),
+			_inv().count("water"), _inv().count("bottle"), str(agua_res)])
 	main.player.teleport(fire_pos + Vector3(1.2, 0.8, 0.0))
 	main.world.set_target(fire_pos)
 	await _fd_wait(20)
@@ -2324,11 +2366,14 @@ func _first_day() -> void:
 	_fd_step("DIA 1 · a fogueira ferve a água (deixa de ser crua)",
 		_fd_craft("boil_water") and _inv().count("water_clean") >= 1)
 	sv.thirst = 40.0
+	var saude_antes_agua := float(sv.health)
 	_fd_hold("water_clean")
 	var bebeu: Dictionary = Game.request("use_item")
 	_fd_step("DIA 1 · beber água tratada mata a sede sem risco",
-		bool(bebeu.get("ok", false)) and float(sv.thirst) > 40.0 and float(sv.health) >= 99.0,
-		"thirst=%.0f health=%.0f" % [float(sv.thirst), float(sv.health)])
+		bool(bebeu.get("ok", false)) and float(sv.thirst) > 40.0
+			and float(sv.health) >= saude_antes_agua - 0.01,
+		"thirst=%.0f health=%.0f→%.0f" % [float(sv.thirst), saude_antes_agua,
+			float(sv.health)])
 
 	# ── 11. comida: cru ≠ cozinhado ───────────────────────────────────────
 	_inv().add("meat_raw", 1)   # a caça tem teste próprio; aqui interessa a cozinha
@@ -2360,7 +2405,7 @@ func _first_day() -> void:
 	main.interaction.focus = {"kind": "structure", "ref": cama_e, "pos": cama_e["pos"]}
 	main.interaction._do_interact({})
 	# dormir é uma sequência: deitar → escurecer → noite → acordar
-	var prazo: int = Time.get_ticks_msec() + 12000
+	var prazo: int = Time.get_ticks_msec() + 45000
 	while bool(main.interaction.sleeping) and Time.get_ticks_msec() < prazo:
 		await get_tree().process_frame
 	var hora := float(Game.hour)

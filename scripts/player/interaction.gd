@@ -162,8 +162,10 @@ func _update_focus() -> void:
 	for a in get_tree().get_nodes_in_group("animals"):
 		if not (a is Node3D) or not bool(a.get("alive")):
 			continue
-		var ap := (a as Node3D).global_position + Vector3(0, 0.45, 0)
-		var ta := _ray_sphere(from, dir, ap, 0.75, r)
+		var ap: Vector3 = (a as Node3D).global_position + Vector3(0, 0.95, 0)
+		if a.has_method("aim_point"):
+			ap = a.call("aim_point")
+		var ta := _ray_sphere(from, dir, ap, 0.82, r)
 		if ta < best_t:
 			best_t = ta
 			best = {"kind": "animal", "ref": a, "pos": ap}
@@ -866,6 +868,7 @@ func _strike_animal() -> void:
 	animal.call("hurt", damage)
 	player.hands.swing(0.3)
 	player.hands.recoil_kick(0.3)
+	player.camera_kick(0.18)
 	fx.burst(focus["pos"], Color(0.75, 0.35, 0.32), 10)
 	if not bool(animal.get("alive")):
 		Bus.ui_message.emit(Loc.t("msg.hunted", [Db.item_name("meat_raw")]), 2.5)
@@ -880,16 +883,25 @@ func _hit_feedback() -> void:
 			var id := str(focus["ref"]["kind"])
 			if id.begins_with("tree"):
 				Sfx.play_at("chop", p, -8.0, randf_range(0.95, 1.08))
+				# Duas leituras no mesmo golpe: lascas de madeira e folhas a
+				# tremer. O som e a cor dizem que aquilo é uma árvore, não uma
+				# parede de madeira maciça.
 				fx.burst(p, Color(0.55, 0.38, 0.24), 8)
+				fx.burst(p + Vector3(0, 0.45, 0), Color(0.30, 0.52, 0.24), 5)
+				Sfx.play_at("leaf_rustle", p + Vector3(0, 0.45, 0), -17.0,
+					randf_range(0.9, 1.15))
+				player.camera_kick(0.10 if float(focus["ref"].get("hp", 1.0)) > 0.0 else 0.18)
 			elif id == "rock":
 				Sfx.play_at("mine", p, -8.0, randf_range(0.95, 1.1))
 				fx.burst(p, Color(0.7, 0.7, 0.76), 10)
+				player.camera_kick(0.14)
 			else:
 				Sfx.play_at("pick", p, -12.0)
 				fx.burst(p, Color(0.45, 0.7, 0.35), 6)
 		"structure":
 			Sfx.play_at("chop", p, -10.0, 1.2)
 			fx.burst(p, Color(0.6, 0.42, 0.28), 6)
+			player.camera_kick(0.08)
 
 
 func _harvest_done() -> void:

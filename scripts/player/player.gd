@@ -37,6 +37,7 @@ var lean_node: Node3D
 var hands: Node3D
 var collider: CollisionShape3D
 var avatar: Node3D
+var body: PlayerBody
 var third_person := false
 
 var yaw := 0.0
@@ -49,6 +50,10 @@ var target_lean := 0.0
 var bob_t := 0.0
 var bob_amp := 0.0
 var tremor := 0.0
+## Traumas de câmara (0..1). Soma-se ao tremor da fome, mas decai depressa:
+## o golpe faz a câmara "sentir" o impacto sem tirar o controlo ao jogador.
+var trauma := 0.0
+var _trauma_t := 0.0
 ## Esforço acumulado (correr, saltar, trepar). O sono lê-o para decidir
 ## quanto cansaço houve nesse dia; não é uma barra, é um histórico.
 var exertion := 0.0
@@ -133,11 +138,21 @@ func _build_tree() -> void:
 	# Associar o script antes de entrar na árvore garante que _ready() cria
 	# braços e malha do item; sem esta ordem, a primeira pessoa fica vazia.
 	camera.add_child(hands)
+	if hands.has_signal("swung"):
+		hands.connect("swung", func() -> void:
+			if body != null:
+				body.attack())
 
 	avatar = Node3D.new()
 	avatar.name = "Avatar2D"
 	avatar.set_script(load("res://scripts/player/pixel_avatar.gd"))
 	add_child(avatar)
+	# O avatar 2D fica como fallback/retrato, mas a câmara externa passa a
+	# mostrar o corpo 3D. O billboard era o que fazia o jogador parecer um
+	# cartaz e impedia-o de ler o próprio peso no mundo.
+	avatar.visible = false
+	body = PlayerBody.new()
+	add_child(body)
 	# A primeira pessoa é a experiência padrão; V continua a permitir a câmara externa.
 	_set_view_mode(false)
 
@@ -161,9 +176,11 @@ func _physics_process(delta: float) -> void:
 		return
 	_smooth_look(delta)
 	mantle_cooldown = maxf(0.0, mantle_cooldown - delta)
+	trauma = maxf(0.0, trauma - delta * 2.9)
 	if dev_fly:
 		_move_fly()
 		move_and_slide()
+		_update_body()
 		return
 	_swim_check()
 	var wish := _wish_direction()
@@ -176,6 +193,15 @@ func _physics_process(delta: float) -> void:
 	_surface_probe()
 	if avatar != null and avatar.has_method("update_pose"):
 		avatar.call("update_pose", velocity, yaw, camera.global_position)
+	_update_body()
+
+
+func _update_body() -> void:
+	if hands != null and hands.has_method("set_motion"):
+		hands.call("set_motion", Vector2(velocity.x, velocity.z).length(), swimming, pitch)
+	if body == null:
+		return
+	body.update_pose(velocity, is_on_floor(), crouching, swimming, pitch)
 
 
 # ── apresentação do jogador ────────────────────────────────────────────────
@@ -188,7 +214,9 @@ func _set_view_mode(use_third_person: bool) -> void:
 	if hands != null:
 		hands.visible = not third_person
 	if avatar != null:
-		avatar.visible = third_person
+		avatar.visible = false
+	if body != null:
+		body.set_body_visible(third_person)
 	if third_person:
 		camera.position = Vector3(0.0, -0.12, 4.2)
 		camera.rotation.x = -0.12
@@ -397,6 +425,7 @@ func _move_land(delta: float, wish: Vector3) -> void:
 			coyote = 0.0
 			jumped.emit()
 			Sfx.play("jump", -8.0, randf_range(0.94, 1.06))
+			camera_kick(0.06)
 	# altura de salto variavel: largar o botao cedo corta a subida (salto curto vs alto)
 	if Input.is_action_just_released("jump") and velocity.y > 0.0:
 		velocity.y *= 0.45
@@ -405,6 +434,9 @@ func _move_land(delta: float, wish: Vector3) -> void:
 	if is_on_floor() and not was_grounded:
 		var force := clampf(absf(velocity.y) / 12.0, 0.0, 1.0)
 		landed.emit(force)
+		camera_kick(0.12 + force * 0.40)
+		if body != null:
+			body.land(force)
 		if force > 0.12:
 			Sfx.play_at("step_" + surface, global_position, -8.0, 0.8)
 	was_grounded = is_on_floor()
@@ -561,6 +593,25 @@ func _head_bob(delta: float) -> void:
 		camera.fov = lerpf(camera.fov, float(Game.settings["fov"]) - 3.0 * tremor,
 			1.0 - exp(-3.0 * delta))
 
+	# ── impacto: o corpo sente o que a mão fez ───────────────────────────
+	# Curva quadrática: um toque pequeno não abana nada, um golpe a sério
+	# sente-se. As três frequências não são múltiplas umas das outras para
+	# não desenhar um padrão repetido.
+	if trauma > 0.001:
+		var s := trauma * trauma
+		_trauma_t += delta
+		var tt2 := _trauma_t
+		camera.position += Vector3(
+			sin(tt2 * 47.0) * 0.030,
+			sin(tt2 * 59.0 + 0.8) * 0.026,
+			sin(tt2 * 38.0 + 1.7) * 0.018) * s
+		lean_node.rotation.z += sin(tt2 * 41.0) * 0.035 * s
+		cam_pivot.rotation.x += sin(tt2 * 53.0 + 0.4) * 0.022 * s
+		camera.fov = lerpf(camera.fov, float(Game.settings["fov"]) + 2.4 * s,
+			1.0 - exp(-10.0 * delta))
+	else:
+		_trauma_t = 0.0
+
 	# passos no ponto certo do ciclo
 	if grounded and bob_amp > 0.12:
 		step_phase += delta * (2.0 + spd * 0.42)
@@ -578,9 +629,17 @@ func _animate_eye(h: float) -> void:
 
 
 func _surface_probe() -> void:
-	# o chão por baixo decide o som do passo
+	# Quem manda no som do passo é o mundo: o mesmo material que decidiu a cor
+	# do chão, a colisão e a água. O Player não inventa uma segunda verdade.
 	var w := get_parent()
-	if w == null or not w.has_method("ground_height"):
+	if w == null:
+		surface = "grass"
+		return
+	if w.has_method("footstep_material_at"):
+		surface = str(w.call("footstep_material_at", global_position.x, global_position.z))
+		return
+	# Fallback para mundos antigos/sem API de superfície.
+	if not w.has_method("ground_height"):
 		surface = "grass"
 		return
 	var h: float = w.call("ground_height", global_position.x, global_position.z)
@@ -591,11 +650,20 @@ func _surface_probe() -> void:
 			and h < water_height - 0.35:
 		surface = "water"
 	elif h < Terrain.SEA_LEVEL + 0.35:
-		surface = "stone"
+		surface = "sand"
 	elif global_position.y < h + 0.3:
 		surface = "grass"
-	if w.has_method("path_distance_at"):
-		pass
+
+
+## Impacto de câmara. `amount` é 0..1: 0,12 é um golpe numa árvore, 0,35 é
+## uma pedra a ceder debaixo da picareta, 0,5 é aterrar de uma altura grande.
+func camera_kick(amount: float) -> void:
+	trauma = clampf(maxf(trauma, amount), 0.0, 1.0)
+
+
+func body_attack() -> void:
+	if body != null:
+		body.attack()
 
 
 ## Teletransporte suave (spawn, respawn, viagem rápida).
