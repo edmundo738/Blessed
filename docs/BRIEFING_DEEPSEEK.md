@@ -77,6 +77,94 @@ sprites de uma só direção; ferramenta genérica para todos os tiers;
 animação de andar com 2 frames trocados sem peso. Se for provisório,
 diz que é provisório — nunca vendas placeholder como acabado.
 
+### O estilo dos sprites: pixel art MODERNO com tempero PSX — e África
+
+A referência não é pixel art genérica de fantasia europeia. É isto:
+
+- **Base moderna (a maior parte):** pixel clusters limpos e legíveis a
+  qualquer distância, paletas ricas mas controladas (24–48 cores por
+  personagem), sombreamento com 3–4 degraus por material, silhueta que
+  se lê em 32 px de altura no ecrã. Animação fluida para pixel art:
+  idle com vida, andar com peso (contacto → passagem → impulso).
+- **Tempero PSX (só o tempero):** um toque de *dithering* nas transições
+  de luz, paleta ligeiramente dessaturada/quente, e a aspereza charmosa
+  dos sprites de 32 bits — **sem** o jitter de vértices nem texturas a
+  nadar dos modelos 3D PSX (isso é do 3D, e o nosso 3D é estilizado
+  moderno). Se tiveres de escolher entre "moderno limpo" e "PSX sujo",
+  escolhe moderno.
+- **África (a identidade, não um filtro):** o mundo do Blessed nasce de
+  Angola/África Austral e os sprites têm de o dizer sem palavras:
+  - **Pessoas:** tons de pele variados e reais, cabelo crespo/carapinha
+    em cortes variados, roupa com **tecidos de padrões geométricos
+    (tipo samakaka)** em cores terra/ocre/vermelho/índigo, sandálias,
+    panos ao ombro. Nada de "aventureiro europeu de chapéu" como default.
+  - **Fauna desenhada das espécies reais da savana/mata:** cabrito e
+    galinha de aldeia, cão, porco, peixes de rio (tilápia/cacusso),
+    aves (galinha-do-mato, corvos, garças), e vida selvagem (macaco,
+    javali, antílopes — a **palanca** é candidata a animal-emblema).
+    Monstros: inspira-te no folclore e no medo real (escuridão, rio,
+    mata) antes de copiar bestiário europeu.
+  - **Ferramentas/itens:** picareta e machado de pedra lascada com cabo
+    de madeira e amarras de fibra, pá de madeira endurecida, lâmina de
+    pedra — objetos que parecem feitos à mão **aqui**, evoluindo para
+    ferro trabalhado nos tiers altos.
+  - **Paleta do mundo 2D:** terra vermelha, ocre, verde de savana seca
+    e de mata húmida, céu quente. A mesma família de cor dos biomas 3D
+    para os sprites nunca parecerem "colados" de outro jogo.
+  (Os IDs de espécies atuais em `data/species.json` — carvalho, bétula,
+  sakura… — são conteúdo provisório do protótipo: **não mudes IDs sem o
+  dono decidir**; a camada de arte nova pode começar pelo jogador,
+  animais domésticos e ferramentas, que não têm esse bloqueio.)
+
+**A matemática direcional certa** (a versão que circula em tutoriais
+com `signed_angle_to` entre os *forwards* da câmara e da entidade
+espelha os lados — não a uses): o que interessa é **para onde a entidade
+está virada vs. onde a câmara está em relação a ela**:
+
+```gdscript
+# no ser (Sprite3D/AnimatedSprite3D filho, billboard cilindrico no Y)
+var to_cam := (cam.global_position - global_position)
+to_cam.y = 0.0
+var rel := wrapf(atan2(to_cam.x, to_cam.z) - facing_yaw + PI, 0.0, TAU)
+var dir8 := int(round(rel / (TAU / 8.0))) % 8  # 0=frente ... 4=tras
+# toca a animacao "%s_%d" % [acao, dir8] so quando (acao, dir8) muda
+```
+
+- 8 setores de 45°; com espelho horizontal podes desenhar 5 direções e
+  espelhar 3 — mas o **desenho** tem de existir para as 5 (frente,
+  frente-lado, lado, trás-lado, trás). Ferramentas na mão e assimetrias
+  (escudo, marca da bênção) podem proibir o espelho: decide por ser e
+  documenta no asset.
+- Troca de direção com **histerese** (só muda após cruzar o centro do
+  setor vizinho) para não piscar nos limites.
+
+**Mãos/ferramentas em 1ª pessoa (viewmodel):**
+
+- Implementação: `CanvasLayer` + `AnimatedSprite2D` (simples, nunca
+  atravessa paredes) — é o caminho atual a evoluir; uma segunda
+  `Camera3D`/SubViewport só se um dia quisermos luz 3D real nas mãos.
+- Cada ferramenta: sprite próprio por tier desenhado na mão (pele/luva
+  com variantes), idle com respiração, bob de andar (seno em X/Y com
+  atraso), sway ao rodar a câmara, **swing com squash & stretch** no
+  impacto, micro-shake local ao bater em rocha e *hit-stop* de ~40 ms
+  em golpes pesados. O peso sente-se antes de se ver o dano.
+- O feedback é sincronizado com o mundo: frame de impacto do sprite =
+  frame em que a poeira/som do material acontecem (a mesma
+  `material_at` decide cor da poeira e som — ver §4.5).
+
+**Cohesão 2D↔3D (o "game taste" híbrido):**
+
+- Sprites `shaded` (a luz do mundo pinta-os: fogueira avermelha, noite
+  escurece), `cast_shadow` ligado com corte alfa (ave 2D projeta sombra
+  real no chão 3D); sem sombra, sombra-blob elíptica por baixo.
+- O 3D responde na mesma paleta: texturas/shaders toon com grão pixel
+  subtil (ver §4.4) para os dois mundos casarem; contorno escuro fino
+  nos sprites (outline de 1 px, cor da sombra mais escura do próprio
+  sprite — nunca preto puro).
+- Profundidade honesta: sprites ordenam-se pelo pé (pivot na base),
+  peixes ganham tinta azul e desfoque de cor com a profundidade, aves
+  encolhem/ganham névoa com a altura — tudo pela mesma atmosfera do 3D.
+
 ---
 
 > **E o resto deste documento continua válido**: lê-o até ao fim antes de
