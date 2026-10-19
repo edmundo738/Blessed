@@ -225,11 +225,20 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_5:
 				if build_mode:
 					_set_build_piece(4)
+			KEY_6:
+				if build_mode:
+					_set_build_piece(5)
+			KEY_7:
+				if build_mode:
+					_set_build_piece(6)
+			KEY_8:
+				if build_mode:
+					_set_build_piece(7)
 			KEY_B:
 				_toggle_build_mode()
 			KEY_R:
 				if build_mode:
-					build_rot += PI * 0.5
+					build_rot += PI * 0.25  # 45°: paredes/escadas/telhado em diagonal também entram
 	if event is InputEventMouseButton and event.pressed and _panel.visible == false:
 		if build_mode and event.button_index == MOUSE_BUTTON_LEFT:
 			_place_ghost()
@@ -332,18 +341,18 @@ func _update_ghost() -> void:
 	match build_piece:
 		"foundation":
 			y = top - 0.15
-		"wall":
+		"wall", "door", "window":
 			y = top + float(int(ev.get("level", 0))) * 2.4 + 1.2
-		"pillar":
+		"pillar", "stairs":
 			y = top + 1.2
 		"floor":
 			y = top + 2.48
 		"roof":
-			y = top + 3.6
+			y = top + 3.9
 	_ghost.position = Vector3(cx, y, cz)
 	_ghost.scale = size
-	_ghost.rotation = Vector3(0, build_rot if build_piece == "wall" else 0.0,
-		0.16 if build_piece == "roof" else 0.0)
+	_ghost.rotation = Vector3(0,
+		build_rot if build_piece in ["wall", "door", "window", "stairs", "roof"] else 0.0, 0.0)
 	var afford := scene.inv == null or scene.inv.has_all(LabScene.BUILD_PIECES[build_piece]["cost"])
 	if not bool(ev["ok"]) or not afford:
 		_ghost_mat.albedo_color = Color(1.0, 0.30, 0.22, 0.45)

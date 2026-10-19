@@ -530,11 +530,15 @@ const BUILD_CELL := 2.0
 const BUILD_PIECES := {
 	"foundation": {"label": "Fundação", "cost": {"wood": 2, "stone": 2}, "size": Vector3(2, 0.3, 2)},
 	"wall": {"label": "Parede", "cost": {"wood": 2}, "size": Vector3(2, 2.4, 0.15)},
+	"door": {"label": "Porta", "cost": {"wood": 3}, "size": Vector3(2, 2.4, 0.18)},
+	"window": {"label": "Janela", "cost": {"wood": 2}, "size": Vector3(2, 2.4, 0.15)},
 	"pillar": {"label": "Pilar", "cost": {"wood": 1}, "size": Vector3(0.25, 2.4, 0.25)},
+	"stairs": {"label": "Escadas", "cost": {"wood": 3}, "size": Vector3(1.2, 2.4, 2)},
 	"floor": {"label": "Chão", "cost": {"wood": 2}, "size": Vector3(2, 0.15, 2)},
-	"roof": {"label": "Telhado", "cost": {"wood": 3}, "size": Vector3(2.4, 0.12, 2.4)},
+	"roof": {"label": "Telhado", "cost": {"wood": 4}, "size": Vector3(2.5, 1.2, 2.5)},
 }
-const BUILD_ORDER: Array[String] = ["foundation", "wall", "pillar", "floor", "roof"]
+const BUILD_ORDER: Array[String] = ["foundation", "wall", "door", "window", "pillar", "stairs", "floor", "roof"]
+const WALL_LIKE: Array[String] = ["wall", "door", "window"]
 const BUILD_MAX_STILT := 2.6
 
 var _build_root: Node3D
@@ -556,6 +560,19 @@ func built_count() -> int:
 func _foundation_top(gx: int, gz: int) -> float:
 	var n := _built.get(_bkey(gx, gz, 0, "foundation")) as Node3D
 	return float(n.get_meta("build_top", 0.0)) if n != null else 0.0
+
+
+## Porta e janela OCUPAM o lugar da parede (mesmo nível, mesmo suporte):
+## quem sustenta um chão é "qualquer parede" — cheia, com porta ou janela.
+func _wall_like_at(gx: int, gz: int, level: int) -> String:
+	for p in WALL_LIKE:
+		if _built.has(_bkey(gx, gz, level, p)):
+			return p
+	return ""
+
+
+func _has_wall_like(gx: int, gz: int, level: int) -> bool:
+	return _wall_like_at(gx, gz, level) != ""
 
 
 ## Avalia SEM colocar: o preview e a colocação leem a mesma resposta.
@@ -590,34 +607,44 @@ func evaluate_place(piece: String, x: float, z: float) -> Dictionary:
 			out["top"] = top
 			out["stability"] = 1.0
 			out["stilt"] = top - low
-		"wall", "pillar", "floor", "roof":
+		"wall", "door", "window", "pillar", "stairs", "floor", "roof":
 			if not _built.has(_bkey(gx, gz, 0, "foundation")):
 				out["reason"] = "no_foundation"
 				return out
 			out["top"] = _foundation_top(gx, gz)
 			match piece:
-				"wall":
+				"wall", "door", "window":
 					var lv := -1
-					if not _built.has(_bkey(gx, gz, 0, "wall")):
+					if not _has_wall_like(gx, gz, 0):
 						lv = 0
-					elif not _built.has(_bkey(gx, gz, 1, "wall")):
+					elif not _has_wall_like(gx, gz, 1):
 						lv = 1
 					if lv < 0:
 						out["reason"] = "occupied"
 						return out
 					out["level"] = lv
-					out["stability"] = 0.92 - 0.18 * float(lv) \
+					var base := 0.92
+					if piece == "door":
+						base = 0.88  # a abertura enfraquece um pouco
+					elif piece == "window":
+						base = 0.84
+					out["stability"] = base - 0.18 * float(lv) \
 							+ (0.06 if _built.has(_bkey(gx, gz, 0, "pillar")) else 0.0)
 				"pillar":
 					if _built.has(_bkey(gx, gz, 0, "pillar")):
 						out["reason"] = "occupied"
 						return out
 					out["stability"] = 0.95
+				"stairs":
+					if _built.has(_bkey(gx, gz, 0, "stairs")):
+						out["reason"] = "occupied"
+						return out
+					out["stability"] = 0.90
 				"floor":
 					if _built.has(_bkey(gx, gz, 0, "floor")):
 						out["reason"] = "occupied"
 						return out
-					if not _built.has(_bkey(gx, gz, 0, "wall")):
+					if not _has_wall_like(gx, gz, 0):
 						out["reason"] = "need_wall"
 						return out
 					out["stability"] = 0.85 if _built.has(_bkey(gx, gz, 0, "pillar")) else 0.70
@@ -625,7 +652,7 @@ func evaluate_place(piece: String, x: float, z: float) -> Dictionary:
 					if _built.has(_bkey(gx, gz, 0, "roof")):
 						out["reason"] = "occupied"
 						return out
-					if not (_built.has(_bkey(gx, gz, 0, "floor")) or _built.has(_bkey(gx, gz, 1, "wall"))):
+					if not (_built.has(_bkey(gx, gz, 0, "floor")) or _has_wall_like(gx, gz, 1)):
 						out["reason"] = "need_support"
 						return out
 					out["stability"] = 0.75 if _built.has(_bkey(gx, gz, 0, "pillar")) else 0.58
@@ -690,25 +717,56 @@ func _make_piece(piece: String, ev: Dictionary, rot_y: float, level: int) -> Sta
 			body.position = Vector3(cx, top + float(level) * 2.4, cz)
 			body.rotation.y = rot_y
 			_add_box(body, size, Vector3(0, 1.2, 0), mat)
+		"door":
+			# caixilho com abertura REAL (sem colisão no vão): 2 ombreiras
+			# + lintel. O jogador atravessa o buraco, não a "parede".
+			body.position = Vector3(cx, top + float(level) * 2.4, cz)
+			body.rotation.y = rot_y
+			_add_box(body, Vector3(0.18, 2.4, 0.18), Vector3(-0.91, 1.2, 0), mat)
+			_add_box(body, Vector3(0.18, 2.4, 0.18), Vector3(0.91, 1.2, 0), mat)
+			_add_box(body, Vector3(2.0, 0.42, 0.18), Vector3(0, 2.19, 0), mat)
+		"window":
+			# peitoril + lintel + ombreiras: abre a meio, sustenta como parede
+			body.position = Vector3(cx, top + float(level) * 2.4, cz)
+			body.rotation.y = rot_y
+			_add_box(body, Vector3(2.0, 0.72, 0.15), Vector3(0, 0.36, 0), mat)
+			_add_box(body, Vector3(2.0, 0.52, 0.15), Vector3(0, 2.14, 0), mat)
+			_add_box(body, Vector3(0.18, 0.9, 0.15), Vector3(-0.91, 1.17, 0), mat)
+			_add_box(body, Vector3(0.18, 0.9, 0.15), Vector3(0.91, 1.17, 0), mat)
 		"pillar":
 			body.position = Vector3(cx + 0.8, top, cz + 0.8)
+			body.rotation.y = rot_y
 			_add_box(body, size, Vector3(0, 1.2, 0), mat)
+		"stairs":
+			# 5 degraus pisáveis (colisão por degrau), sobem 2,4 m ao
+			# longo de -Z local; a rotação escolhe o sentido da subida.
+			body.position = Vector3(cx, top, cz)
+			body.rotation.y = rot_y
+			for s in 5:
+				_add_box(body, Vector3(1.2, 0.3 + float(s) * 0.48, 0.42),
+						Vector3(0, 0.15 + float(s) * 0.24, 0.8 - float(s) * 0.4), mat)
 		"floor":
 			body.position = Vector3(cx, top + 2.4, cz)
 			_add_box(body, size, Vector3(0, 0.08, 0), mat)
 		"roof":
-			body.position = Vector3(cx, top + 3.6, cz)
-			body.rotation.z = 0.16
-			_add_box(body, size, Vector3.ZERO, mat)
+			# DUAS ÁGUAS a sério: 2 painéis inclinados + cumeeira, com
+			# beiral. A rotação escolhe a direção da cumeeira.
+			body.position = Vector3(cx, top + 3.3, cz)
+			body.rotation.y = rot_y
+			_add_box(body, Vector3(2.5, 0.12, 1.42), Vector3(0, 0.28, -0.58), mat, Vector3(0.48, 0, 0))
+			_add_box(body, Vector3(2.5, 0.12, 1.42), Vector3(0, 0.28, 0.58), mat, Vector3(-0.48, 0, 0))
+			_add_box(body, Vector3(2.6, 0.14, 0.18), Vector3(0, 0.58, 0), mat)
 	return body
 
 
-func _add_box(body: StaticBody3D, size: Vector3, off: Vector3, mat: Material) -> void:
+func _add_box(body: StaticBody3D, size: Vector3, off: Vector3, mat: Material,
+		rot: Vector3 = Vector3.ZERO) -> void:
 	var mi := MeshInstance3D.new()
 	var bm := BoxMesh.new()
 	bm.size = size
 	mi.mesh = bm
 	mi.position = off
+	mi.rotation = rot
 	mi.material_override = mat
 	body.add_child(mi)
 	var cs := CollisionShape3D.new()
@@ -716,6 +774,7 @@ func _add_box(body: StaticBody3D, size: Vector3, off: Vector3, mat: Material) ->
 	box.size = size
 	cs.shape = box
 	cs.position = off
+	cs.rotation = rot
 	body.add_child(cs)
 
 
@@ -731,18 +790,18 @@ func remove_piece(key: String) -> int:
 	var doomed: Array[String] = [key]
 	if piece == "foundation":
 		for lv in 2:
-			for p in ["wall", "pillar", "floor", "roof"]:
+			for p in ["wall", "door", "window", "pillar", "stairs", "floor", "roof"]:
 				var k := _bkey(gx, gz, lv, p)
 				if _built.has(k) and not doomed.has(k):
 					doomed.append(k)
-	elif piece == "wall" and int(parts[2]) == 0:
+	elif piece in WALL_LIKE and int(parts[2]) == 0:
 		for p in ["floor", "roof"]:
 			var k := _bkey(gx, gz, 0, p)
 			if _built.has(k):
 				doomed.append(k)
-		var k1 := _bkey(gx, gz, 1, "wall")
-		if _built.has(k1):
-			doomed.append(k1)
+		var upper := _wall_like_at(gx, gz, 1)
+		if upper != "":
+			doomed.append(_bkey(gx, gz, 1, upper))
 	elif piece == "floor":
 		var kr := _bkey(gx, gz, 0, "roof")
 		if _built.has(kr):

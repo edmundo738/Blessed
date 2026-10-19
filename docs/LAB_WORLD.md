@@ -179,3 +179,21 @@ migrado depois de aprovado aqui):
   Remover devolve metade dos materiais; colocar consome do inventário.
 - Prova (labscene 30–37): recusas certas, empilhamento com suporte,
   contagem de peças, colapso ao tirar a fundação, custo debitado.
+
+### Mais peças e telhados (2026-10-19)
+
+- **Porta e janela ocupam o lugar da parede** (mesmo nível e suporte):
+  porta = caixilho com vão real sem colisão (atravessa-se o buraco);
+  janela = peitoril + lintel. Ambas sustentam chão/telhado como parede
+  cheia, com estabilidade um pouco menor (0,88/0,84) — a abertura paga-se.
+- **Escadas**: 5 degraus com colisão própria, sobem os 2,4 m até ao chão;
+  a rotação escolhe o sentido da subida.
+- **Telhado de duas águas**: 2 painéis inclinados + cumeeira com beiral
+  (adeus placa plana torta). A rotação escolhe a direção da cumeeira.
+- **Rotação em 45°** (tecla R): parede/porta/janela/escadas/telhado
+  também entram em diagonal. Teclas 1–8 escolhem as 8 peças.
+- Colapso coerente: tirar uma janela/porta de baixo derruba chão e
+  telhado; a fundação continua a arrastar a célula toda.
+- Prova (labscene 38–44): porta no nível 0 com rotação de 45°, parede
+  sobre porta só no nível 1, janela sustenta e ao sair derruba, telhado
+  com ≥6 peças, escadas com ≥10 corpos (degraus + colisões).

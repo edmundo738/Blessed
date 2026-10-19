@@ -1,17 +1,16 @@
-BLESSED - pack unico do laboratorio (construcao inteligente incluida)
+BLESSED - pack unico do laboratorio (construcao expandida)
 
 COMO USAR: extrai e copia as pastas por cima da tua pasta Blessed.
 Abre scenes/lab.tscn e carrega F5.
 
-NOVO - CONSTRUIR (tecla B no laboratorio):
-- B entra/sai do modo construir. Roda do rato ou 1-5 escolhe a peca:
-  1 Fundacao, 2 Parede, 3 Pilar, 4 Chao, 5 Telhado. R roda a parede.
-- O fantasma pinta a estabilidade: verde firme, amarelo estica,
-  laranja fraco, vermelho nao entra (sem suporte/agua/declive/material).
-- LMB coloca (consome madeira/pedra), RMB remove (devolve metade;
-  tirar a fundacao derruba a casa).
-- A fundacao nivela sozinha: as estacas descem ate ao chao nos declives.
+CONSTRUIR (tecla B):
+- Roda ou 1-8 escolhe: 1 Fundacao 2 Parede 3 Porta 4 Janela 5 Pilar
+  6 Escadas 7 Chao 8 Telhado (duas aguas). R roda 45 graus.
+- Fantasma: verde firme, amarelo estica, laranja fraco, vermelho nao entra.
+- LMB coloca (consome materiais), RMB remove (devolve metade).
+- Fundacao nivela por estacas; tirar suporte derruba o que ele segurava.
+- Porta tem vao real (atravessa-se); escadas sobem ao chao de cima.
 
-E O RESTO: escavar (roda/1-3 ferramentas fora do modo construir),
-reliquia na zona de escavacao, relva que recresce, arvores que caem.
-Provas: LABSCENE_PASS 37 - LABTEST_PASS 18 - selftest 245 ok.
+E O RESTO: escavar com ferramentas por camadas, reliquia enterrada,
+relva que recresce, arvores que caem, agua soldada a costa.
+Provas: LABSCENE_PASS 44 - LABTEST_PASS 18 - selftest 245 ok.

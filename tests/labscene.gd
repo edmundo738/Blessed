@@ -213,6 +213,38 @@ func _ready() -> void:
 	_check(bool(paid["ok"]) and scene.inv.count("wood") == w_before - 2,
 			"construção: colocar consome materiais (madeira -2)")
 
+	# mais peças: porta/janela ocupam o lugar da parede, escadas e telhado
+	var door_at := Vector2(3.0, -20.0)
+	scene.try_place("foundation", door_at.x, door_at.y)
+	var door1: Dictionary = scene.try_place("door", door_at.x, door_at.y, PI * 0.25)
+	_check(bool(door1["ok"]) and int(door1["level"]) == 0,
+			"construção: porta entra no nível 0 (lugar da parede)")
+	var above_door: Dictionary = scene.evaluate_place("wall", door_at.x, door_at.y)
+	_check(bool(above_door["ok"]) and int(above_door["level"]) == 1,
+			"construção: sobre a porta só entra parede no nível 1")
+	var door_node := scene._built.get(str(door1["key"])) as Node3D
+	_check(door_node != null and absf(door_node.rotation.y - PI * 0.25) < 0.01,
+			"construção: peças rodam em 45° (R)")
+	var win_at := Vector2(11.0, -20.0)
+	scene.try_place("foundation", win_at.x, win_at.y)
+	var win1: Dictionary = scene.try_place("window", win_at.x, win_at.y)
+	var floor_on_window: Dictionary = scene.try_place("floor", win_at.x, win_at.y)
+	_check(bool(win1["ok"]) and bool(floor_on_window["ok"]),
+			"construção: janela sustenta o chão como uma parede")
+	var roof1: Dictionary = scene.try_place("roof", win_at.x, win_at.y)
+	var roof_node := scene._built.get(str(roof1["key"])) as Node3D
+	_check(bool(roof1["ok"]) and roof_node != null and roof_node.get_child_count() >= 6,
+			"construção: telhado de duas águas (2 painéis + cumeeira)")
+	var fell_window := scene.remove_piece(str(win1["key"]))
+	_check(fell_window >= 3 and not scene._built.has(str(floor_on_window["key"])),
+			"construção: tirar a janela derruba chão e telhado")
+	var stairs_at := Vector2(19.0, -20.0)
+	scene.try_place("foundation", stairs_at.x, stairs_at.y)
+	var stairs1: Dictionary = scene.try_place("stairs", stairs_at.x, stairs_at.y, PI)
+	var stairs_node := scene._built.get(str(stairs1["key"])) as Node3D
+	_check(bool(stairs1["ok"]) and stairs_node != null and stairs_node.get_child_count() >= 10,
+			"construção: escadas com degraus pisáveis (5 degraus com colisão)")
+
 	# grelha para o PNG da etapa (render por software a partir dos dados reais)
 	var bytes := PackedByteArray()
 	bytes.resize(LabWorld.N * LabWorld.N * 2)
