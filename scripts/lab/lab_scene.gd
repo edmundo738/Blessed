@@ -268,11 +268,30 @@ func rebuild_area(x: float, z: float, radius_m: float) -> void:
 		for ci in range(ci0, ci1 + 1):
 			_grass_growth[Vector2i(ci, cj)] = 0.15  # relva perturbada: recresce
 			_rebuild_chunk(ci, cj)
-	_build_water()
+	# EFICIÊNCIA: reconstruir a água inteira (81×81) a cada escavadela
+	# era o custo escondido de cavar. Longe de água, o nível não muda:
+	# só reconstrói quando há água na área tocada.
+	if _near_water(x, z, radius_m):
+		_build_water()
 	reseat_props(x, z, radius_m + 10.0)
 
 
+## Há água (ou terreno abaixo do nível dela) na área? Amostra centro e
+## extremos — barato, em vez de varrer a grelha toda.
+func _near_water(x: float, z: float, r: float) -> bool:
+	for p in [Vector2(x, z), Vector2(x - r, z), Vector2(x + r, z),
+			Vector2(x, z - r), Vector2(x, z + r)]:
+		var s := lab.sample(p.x, p.y)
+		if int(s["water_kind"]) != 0:
+			return true
+		var wl := float(s["water_level"])
+		if wl > -50000.0 and float(s["height"]) < wl:
+			return true
+	return false
+
+
 func _build_water() -> void:
+	_water_builds += 1
 	if _water_inst != null and is_instance_valid(_water_inst):
 		_water_inst.queue_free()
 	var data := LabMesh.build_water(lab)
@@ -284,11 +303,12 @@ func _build_water() -> void:
 	_water_inst = MeshInstance3D.new()
 	_water_inst.name = "LabWater"
 	_water_inst.mesh = mesh
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.roughness = 0.35
-	_water_inst.material_override = mat
+	if _water_mat == null:
+		_water_mat = StandardMaterial3D.new()
+		_water_mat.vertex_color_use_as_albedo = true
+		_water_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_water_mat.roughness = 0.35
+	_water_inst.material_override = _water_mat
 	_water_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_water_inst)
 
@@ -544,6 +564,35 @@ const BUILD_MAX_STILT := 2.6
 
 var _build_root: Node3D
 var _built: Dictionary = {}  # "gx:gz:level:piece" -> StaticBody3D
+# EFICIÊNCIA (base HD2D media primitivas, nós também): materiais e
+# malhas de caixa são PARTILHADOS por todas as peças — antes cada peça
+# criava material+BoxMesh novos (centenas de recursos gémeos).
+var _piece_mats: Dictionary = {}  # piece -> StandardMaterial3D
+var _box_meshes: Dictionary = {}  # "x:y:z" -> BoxMesh
+var _water_mat: StandardMaterial3D = null
+var _water_builds := 0  # contador p/ prova: escavar longe de água não reconstrói a água
+
+
+func _piece_mat(piece: String) -> StandardMaterial3D:
+	if _piece_mats.has(piece):
+		return _piece_mats[piece]
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.55, 0.42, 0.28)  # madeira
+	if piece == "foundation":
+		mat.albedo_color = Color(0.50, 0.50, 0.52)  # pedra
+	elif piece == "roof":
+		mat.albedo_color = Color(0.42, 0.28, 0.20)
+	_piece_mats[piece] = mat
+	return mat
+
+
+func _box_mesh(size: Vector3) -> BoxMesh:
+	var key := "%s:%s:%s" % [size.x, size.y, size.z]
+	if not _box_meshes.has(key):
+		var bm := BoxMesh.new()
+		bm.size = size
+		_box_meshes[key] = bm
+	return _box_meshes[key]
 
 
 func _bkey(gx: int, gz: int, level: int, piece: String) -> String:
@@ -576,6 +625,19 @@ func _has_wall_like(gx: int, gz: int, level: int) -> bool:
 	return _wall_like_at(gx, gz, level) != ""
 
 
+## Construção LIGADA é mais forte: cada fundação vizinha amarra a peça
+## (+0,015) e uma parede vizinha na mesma linha amarra mais (+0,02).
+## Uma cabana isolada aguenta-se; uma aldeia ligada aguenta melhor.
+func _connection_bonus(gx: int, gz: int, piece: String) -> float:
+	var bonus := 0.0
+	for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		if _built.has(_bkey(gx + d.x, gz + d.y, 0, "foundation")):
+			bonus += 0.015
+		if piece in WALL_LIKE and _has_wall_like(gx + d.x, gz + d.y, 0):
+			bonus += 0.02
+	return minf(bonus, 0.10)
+
+
 ## Avalia SEM colocar: o preview e a colocação leem a mesma resposta.
 ## Devolve ok, razão (para dev), célula, topo nivelado e estabilidade.
 func evaluate_place(piece: String, x: float, z: float) -> Dictionary:
@@ -604,6 +666,16 @@ func evaluate_place(piece: String, x: float, z: float) -> Dictionary:
 			if top - low > BUILD_MAX_STILT:
 				out["reason"] = "too_steep"  # nem com estacas: procura outro chão
 				return out
+			# Fundação VIZINHA manda no nível: casas ligadas partilham o
+			# piso em vez de cada célula nivelar sozinha (degraus entre
+			# divisões eram o erro clássico). Só adota se as estacas
+			# aguentarem o nível do vizinho.
+			for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				if _built.has(_bkey(gx + d.x, gz + d.y, 0, "foundation")):
+					var nt := _foundation_top(gx + d.x, gz + d.y)
+					if nt - low <= BUILD_MAX_STILT and nt >= low:
+						top = nt
+					break
 			out["ok"] = true
 			out["top"] = top
 			out["stability"] = 1.0
@@ -657,6 +729,8 @@ func evaluate_place(piece: String, x: float, z: float) -> Dictionary:
 						out["reason"] = "need_support"
 						return out
 					out["stability"] = 0.75 if _built.has(_bkey(gx, gz, 0, "pillar")) else 0.58
+			out["stability"] = minf(0.99, float(out["stability"]) \
+					+ _connection_bonus(gx, gz, piece))
 			out["ok"] = true
 	return out
 
@@ -731,12 +805,7 @@ func _make_piece(piece: String, ev: Dictionary, rot_y: float, level: int) -> Sta
 	body.collision_layer = 1
 	body.collision_mask = 0
 	body.set_meta("lab_kind", "build_" + piece)
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.55, 0.42, 0.28)  # madeira
-	if piece == "foundation":
-		mat.albedo_color = Color(0.50, 0.50, 0.52)  # pedra
-	elif piece == "roof":
-		mat.albedo_color = Color(0.42, 0.28, 0.20)
+	var mat := _piece_mat(piece)  # partilhado: 1 material por tipo de peça
 	var size: Vector3 = BUILD_PIECES[piece]["size"]
 	match piece:
 		"foundation":
@@ -796,9 +865,7 @@ func _make_piece(piece: String, ev: Dictionary, rot_y: float, level: int) -> Sta
 func _add_box(body: StaticBody3D, size: Vector3, off: Vector3, mat: Material,
 		rot: Vector3 = Vector3.ZERO) -> void:
 	var mi := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = size
-	mi.mesh = bm
+	mi.mesh = _box_mesh(size)  # partilhada por tamanho
 	mi.position = off
 	mi.rotation = rot
 	mi.material_override = mat

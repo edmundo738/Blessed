@@ -456,3 +456,15 @@ céu e testes estão no marco mais recente no topo e em `docs/AUDIT_2026-10-14.m
   `docs/SPRITES_LUCIA.md`. Falta: recorte Pixelorama p/ grelha final.
 - **Verificação: selftest 250 ok, LABSCENE_PASS 46/46, LABTEST_PASS
   18/18.**
+
+## Eficiência + construção ligada (2026-10-19)
+
+- Base HD2D completa na branch: `.gitignore`, LEIA-ME, guia de escala
+  com LOD medido (42/85/135 m), `tests/shot.gd`.
+- Eficiência: materiais/BoxMesh partilhados por peça, material de
+  água em cache, água só reconstruída perto de água (contador prova).
+- Gameplay: fundação alinha nível com a vizinha; bónus de estabilidade
+  por ligação (fundações/paredes vizinhas). Sprites: cancelados por
+  agora a pedido do dono (ficam arquivados em content/characters/lucia).
+- **Verificação: LABSCENE_PASS 50/50, LABTEST_PASS 18/18, selftest
+  250 ok / 0 falhas / 30 saltadas.** PNG: `docs/shots/09_lab_3d.png`.

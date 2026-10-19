@@ -1,0 +1,13 @@
+BLESSED — pack essencial do laboratorio (escavacao/relva/estacao)
+
+COMO USAR
+1. Extrai este zip.
+2. Copia as pastas (scripts/, scenes/, data/, locale/, tests/, tools/)
+   para dentro da tua pasta Blessed, substituindo os ficheiros.
+3. Abre scenes/lab.tscn no Godot e carrega F5.
+
+TESTE RAPIDO
+- Roda do rato ou 1/2/3: Mao / Pa / Picareta. LMB escava, RMB aterra.
+- Na zona de escavacao (disco em 30,30): pa ate parar na rocha,
+  picareta ate a reliquia emergir (poeira dourada = perto).
+- F voa, F1 painel deus.

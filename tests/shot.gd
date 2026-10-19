@@ -104,6 +104,23 @@ func _run() -> void:
 
 	var yaw := deg_to_rad(float(_opt("--yaw", "-35")))
 	var pitch := deg_to_rad(float(_opt("--pitch", "-8")))
+	# --third: mostra o corpo 3D do jogador. A vista é sintética (a câmara do
+	# jogador é a primeira pessoa), por isso o enquadramento tem de vir de fora:
+	# atrás e acima dos ombros, a olhar para a bacia.
+	if _args.has("--third") and player != null:
+		player.call("_set_view_mode", true)
+		for _i in 3:
+			await get_tree().process_frame
+		if not _args.has("--view"):
+			var base := player.global_position
+			var target := base + Vector3(0, 1.05, 0)
+			eye = base + Vector3(0.8, 2.15, 3.6)
+			var d := target - eye
+			yaw = atan2(-d.x, -d.z)
+			pitch = atan2(d.y, Vector2(d.x, d.z).length())
+			print("SHOT_THIRD: body=%s eye=(%.2f, %.2f, %.2f)" % [
+				"sim" if player.get("body") != null else "nao",
+				eye.x, eye.y, eye.z])
 	var lk := _opt("--look", "")
 	if lk != "":
 		var lps := lk.split(",")

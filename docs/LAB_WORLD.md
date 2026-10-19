@@ -210,3 +210,21 @@ migrado depois de aprovado aqui):
   para ver o colapso: tira-lhe a fundação.
 - Prova (labscene 45–46): casinha de pé com porta/telhado/escadas nos
   slots certos; streams de som sintetizados existem.
+
+### Eficiência e construção ligada (2026-10-19, base HD2D)
+
+- **Materiais/malhas partilhados**: 1 material por tipo de peça e 1
+  BoxMesh por tamanho, em cache — acabou a criação de recursos gémeos
+  por peça colocada. Material da água também é único e reutilizado.
+- **Água preguiçosa**: escavar reconstruía a malha de água inteira
+  (81×81) a cada golpe. Agora só reconstrói quando há água (ou terreno
+  abaixo do nível dela) na área tocada — `_near_water` amostra 5
+  pontos em vez de varrer a grelha. Prova com contador `_water_builds`.
+- **Fundação que conversa com a vizinha**: fundação nova ao lado de
+  outra adota o nível dela (se as estacas aguentarem) — casas ligadas
+  partilham o piso em vez de nascerem com degraus entre divisões.
+- **Construção ligada é mais forte**: +0,015 de estabilidade por
+  fundação vizinha e +0,02 por parede vizinha na mesma linha (máx.
+  +0,10). Isolar sai mais fraco; ligar a aldeia compensa.
+- Provas (labscene 47–50): alinhamento de nível, bónus de ligação,
+  material partilhado entre peças, água não reconstruída em terra seca.

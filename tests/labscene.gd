@@ -254,6 +254,31 @@ func _ready() -> void:
 			and Sfx.stream("collapse") != null,
 			"polimento: sons de construção sintetizados (madeira/pedra/colapso)")
 
+	# eficiência + construção ligada (base HD2D)
+	var fa: Dictionary = scene.try_place("foundation", 25.0, -20.0)
+	var ev_b: Dictionary = scene.evaluate_place("foundation", 27.0, -20.0)
+	_check(bool(fa["ok"]) and absf(float(ev_b["top"]) - float(fa["top"])) < 0.01,
+			"eficiência: fundação nova ALINHA o nível com a vizinha (piso partilhado)")
+	scene.try_place("foundation", 27.0, -20.0)
+	var wa: Dictionary = scene.try_place("wall", 25.0, -20.0)
+	var s_iso: Dictionary = scene.evaluate_place("wall", 25.0, -20.0)
+	scene.try_place("wall", 27.0, -20.0)
+	var s_lig: Dictionary = scene.evaluate_place("wall", 25.0, -20.0)
+	_check(float(s_lig["stability"]) > float(s_iso["stability"]) + 0.015,
+			"eficiência: construção LIGADA é mais estável (bónus de vizinhança)")
+	var wall_a := scene._built.get(str(wa["key"])) as Node3D
+	var wall_b_key := scene._bkey(14, -10, 0, "wall")
+	var wall_b := scene._built.get(wall_b_key) as Node3D
+	_check(wall_a != null and wall_b != null and wall_a.get_child(0).get("material_override") != null
+			and wall_a.get_child(0).get("material_override") == wall_b.get_child(0).get("material_override"),
+			"eficiência: peças partilham material (sem recursos gémeos)")
+	var builds0: int = scene._water_builds
+	scene.rebuild_area(30.0, -60.0, 8.0)  # bosque alto e seco: longe de rios/lago/oceano
+	var inland_ok: bool = scene._water_builds == builds0
+	scene.rebuild_area(170.0, 170.0, 8.0)
+	_check(inland_ok and scene._water_builds > builds0,
+			"eficiência: escavar longe de água NÃO reconstrói a água; junto dela sim")
+
 	# grelha para o PNG da etapa (render por software a partir dos dados reais)
 	var bytes := PackedByteArray()
 	bytes.resize(LabWorld.N * LabWorld.N * 2)
