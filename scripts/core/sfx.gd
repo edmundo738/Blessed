@@ -152,6 +152,24 @@ func _build(name: String) -> AudioStreamWAV:
 		"place":
 			a = _buf(0.2); _noise_into(a, 0.5); _one_pole(a, 700.0); _decay(a, 0.15)
 			_tone_into(a, 140.0, 0.3, 0, int(0.1 * RATE))
+		"build_wood":
+			# batida de madeira que encaixa: toque seco + corpo grave,
+			# com um segundo toque curto (a peça assenta)
+			a = _buf(0.22); _noise_into(a, 0.45); _one_pole(a, 950.0); _decay(a, 0.13)
+			_tone_into(a, 165.0, 0.38, 0, int(0.07 * RATE))
+			_tone_into(a, 230.0, 0.16, int(0.055 * RATE), int(0.11 * RATE))
+		"build_stone":
+			# pedra sobre pedra: baque surdo e pesado, quase sem agudos
+			a = _buf(0.26); _noise_into(a, 0.55); _one_pole(a, 480.0); _decay(a, 0.19)
+			_tone_into(a, 82.0, 0.42, 0, int(0.13 * RATE))
+			_tone_into(a, 58.0, 0.25, int(0.02 * RATE), int(0.16 * RATE))
+		"collapse":
+			# estrondo de estrutura a cair: ruído grave longo + queda
+			# de frequência + baque final (o que segurava cedeu)
+			a = _buf(0.95); _noise_into(a, 0.85); _one_pole(a, 430.0)
+			_sweep_into(a, 150.0, 36.0, 0.55)
+			_tone_into(a, 52.0, 0.4, int(0.10 * RATE), int(0.5 * RATE))
+			_decay(a, 0.85)
 		"eat":
 			a = _buf(0.2); _noise_into(a, 0.4); _one_pole(a, 500.0); _decay(a, 0.16)
 		"drink":

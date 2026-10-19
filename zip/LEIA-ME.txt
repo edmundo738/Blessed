@@ -1,16 +1,16 @@
-BLESSED - pack unico do laboratorio (construcao expandida)
+BLESSED - pack unico do laboratorio (construcao polida)
 
 COMO USAR: extrai e copia as pastas por cima da tua pasta Blessed.
 Abre scenes/lab.tscn e carrega F5.
 
-CONSTRUIR (tecla B):
-- Roda ou 1-8 escolhe: 1 Fundacao 2 Parede 3 Porta 4 Janela 5 Pilar
-  6 Escadas 7 Chao 8 Telhado (duas aguas). R roda 45 graus.
-- Fantasma: verde firme, amarelo estica, laranja fraco, vermelho nao entra.
-- LMB coloca (consome materiais), RMB remove (devolve metade).
-- Fundacao nivela por estacas; tirar suporte derruba o que ele segurava.
-- Porta tem vao real (atravessa-se); escadas sobem ao chao de cima.
+NOVO NESTE PACK:
+- Sons de construcao: batida de madeira, baque de pedra, estrondo
+  quando uma estrutura colapsa. Poeira da cor do material em cada peca.
+- Uma casinha-exemplo ja construida junto a clareira (porta, janela,
+  telhado de duas aguas, escadas). Remove-lhe a fundacao e ve o colapso.
 
-E O RESTO: escavar com ferramentas por camadas, reliquia enterrada,
-relva que recresce, arvores que caem, agua soldada a costa.
-Provas: LABSCENE_PASS 44 - LABTEST_PASS 18 - selftest 245 ok.
+CONSTRUIR (tecla B): roda ou 1-8 escolhe a peca, R roda 45 graus,
+LMB coloca (consome materiais), RMB remove (devolve metade).
+Fantasma: verde firme, amarelo estica, laranja fraco, vermelho nao entra.
+
+Provas: LABSCENE_PASS 46 - LABTEST_PASS 18 - selftest 245 ok.

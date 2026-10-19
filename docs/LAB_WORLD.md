@@ -197,3 +197,16 @@ migrado depois de aprovado aqui):
 - Prova (labscene 38–44): porta no nível 0 com rotação de 45°, parede
   sobre porta só no nível 1, janela sustenta e ao sair derruba, telhado
   com ≥6 peças, escadas com ≥10 corpos (degraus + colisões).
+
+### Polimento da construção (2026-10-19)
+
+- **Feedback sensorial sem texto**: colocar uma peça = poeira da cor do
+  material + batida sintetizada posicional (madeira aguda `build_wood`,
+  pedra surda `build_stone`); remover = poeira peça a peça; colapso em
+  cascata = estrondo `collapse`. A estabilidade também se OUVE.
+- **Casinha-exemplo** nasce construída pelas regras normais junto à
+  clareira: parede+pilar, porta com vão, janela, andares, telhados de
+  duas águas e escadas para a porta (15 peças). É também o alvo ideal
+  para ver o colapso: tira-lhe a fundação.
+- Prova (labscene 45–46): casinha de pé com porta/telhado/escadas nos
+  slots certos; streams de som sintetizados existem.

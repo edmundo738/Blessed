@@ -174,6 +174,7 @@ func _ready() -> void:
 	_build_grass_all()
 	_build_props()
 	_build_stations()
+	build_demo_house()
 	_spawn_player()
 	var dev := LabDev.new()
 	dev.name = "LabDev"
@@ -660,6 +661,38 @@ func evaluate_place(piece: String, x: float, z: float) -> Dictionary:
 	return out
 
 
+## Feedback sensorial da construção (sem texto): poeira da cor do
+## material + som sintetizado posicional. Colocar = batida (madeira
+## aguda, pedra surda); colapsar = estrondo. Quem joga OUVE e VÊ o
+## peso de cada peça — a estabilidade lê-se também no ouvido.
+func _build_fx(piece: String, at: Vector3, collapse: bool) -> void:
+	var p := CPUParticles3D.new()
+	p.amount = 46 if collapse else 22
+	p.one_shot = true
+	p.explosiveness = 0.92
+	p.lifetime = 0.95 if collapse else 0.55
+	p.direction = Vector3(0, 1, 0)
+	p.spread = 48.0 if collapse else 36.0
+	p.initial_velocity_min = 2.2 if collapse else 1.4
+	p.initial_velocity_max = 5.0 if collapse else 3.2
+	p.gravity = Vector3(0, -5.5, 0)
+	p.scale_amount_min = 0.06
+	p.scale_amount_max = 0.18 if collapse else 0.13
+	p.color = Color(0.55, 0.55, 0.58) if piece == "foundation" \
+			else Color(0.62, 0.48, 0.30)
+	add_child(p)
+	p.global_position = at + Vector3(0, 0.35, 0)
+	p.emitting = true
+	var t := get_tree().create_timer(1.5)
+	t.timeout.connect(p.queue_free)
+	if collapse:
+		Sfx.play_at("collapse", at, -4.0, randf_range(0.9, 1.1))
+	elif piece == "foundation":
+		Sfx.play_at("build_stone", at, -5.0, randf_range(0.95, 1.05))
+	else:
+		Sfx.play_at("build_wood", at, -6.0, randf_range(0.92, 1.12))
+
+
 func try_place(piece: String, x: float, z: float, rot_y: float = 0.0,
 		payer: Inventory = null) -> Dictionary:
 	var ev := evaluate_place(piece, x, z)
@@ -681,6 +714,7 @@ func try_place(piece: String, x: float, z: float, rot_y: float = 0.0,
 	node.set_meta("lab_piece_key", key)
 	_built[key] = node
 	_build_root.add_child(node)
+	_build_fx(piece, node.global_position, false)
 	ev["key"] = key
 	print("LABBUILD ", piece, " em celula ", gx, ",", gz, " estabilidade ", ev["stability"])
 	return ev
@@ -810,10 +844,41 @@ func remove_piece(key: String) -> int:
 		var n := _built[k] as Node3D
 		_built.erase(k)
 		if n != null and is_instance_valid(n):
+			# poeira em CADA peça que cai, antes de sair de cena: o
+			# colapso vê-se peça a peça, não é um desaparecer limpo
+			_build_fx(k.split(":")[3], n.global_position, doomed.size() > 1)
 			n.queue_free()
 	if doomed.size() > 1:
 		print("LABCOLLAPSE ", key, " arrastou ", doomed.size() - 1, " pecas")
 	return doomed.size()
+
+
+## Casinha-exemplo: nasce JÁ construída junto à clareira de construção,
+## com as regras normais (try_place, sem batota) — quem chega vê o que
+## o sistema faz: porta com vão, janela, andares, telhado de duas águas
+## e escadas a subir para a porta. Também serve de alvo: remover-lhe a
+## fundação mostra o colapso ao vivo.
+func build_demo_house() -> int:
+	var door_cell := build_cell_of(-14.0, -30.0)
+	if _built.has(_bkey(door_cell.x, door_cell.y, 0, "foundation")):
+		return 0
+	var plan: Array = [
+		["foundation", -16.0, -30.0, 0.0], ["wall", -16.0, -30.0, 0.0],
+		["pillar", -16.0, -30.0, 0.0], ["floor", -16.0, -30.0, 0.0],
+		["roof", -16.0, -30.0, 0.0],
+		["foundation", -14.0, -30.0, 0.0], ["door", -14.0, -30.0, 0.0],
+		["floor", -14.0, -30.0, 0.0], ["roof", -14.0, -30.0, 0.0],
+		["foundation", -12.0, -30.0, 0.0], ["window", -12.0, -30.0, 0.0],
+		["floor", -12.0, -30.0, 0.0], ["roof", -12.0, -30.0, 0.0],
+		["foundation", -14.0, -28.0, 0.0], ["stairs", -14.0, -28.0, 0.0],
+	]
+	var placed := 0
+	for step in plan:
+		var res: Dictionary = try_place(str(step[0]), float(step[1]), float(step[2]), float(step[3]))
+		if bool(res.get("ok", false)):
+			placed += 1
+	print("LABDEMO casinha-exemplo: ", placed, "/", plan.size(), " pecas")
+	return placed
 
 
 # ── vegetação e pedras: nós reais, colhíveis pelo raycast do LabDev ───────

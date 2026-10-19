@@ -375,7 +375,6 @@ func _place_ghost() -> void:
 	var at: Vector3 = hit.get("position", Vector3.ZERO)
 	var res: Dictionary = scene.try_place(build_piece, at.x, at.z, build_rot, scene.inv)
 	if bool(res.get("ok", false)):
-		_dust(at + Vector3(0, 0.4, 0), false, LabWorld.M_DIRT)
 		_refresh_inv()
 	else:
 		_denial(at, LabWorld.M_ROCK)
@@ -396,7 +395,6 @@ func _remove_aimed() -> void:
 		var cost: Dictionary = LabScene.BUILD_PIECES[piece]["cost"]
 		for id in cost.keys():
 			scene.inv.add(str(id), maxi(1, int(cost[id]) / 2))
-		_dust((collider as Node3D).global_position, false, LabWorld.M_DIRT)
 		_refresh_inv()
 
 

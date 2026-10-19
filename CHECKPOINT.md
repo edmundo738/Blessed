@@ -431,3 +431,11 @@ céu e testes estão no marco mais recente no topo e em `docs/AUDIT_2026-10-14.m
   degraus pisáveis; telhado de duas águas com cumeeira; rotação em 45°.
 - **Verificação: LABSCENE_PASS 44/44, LABTEST_PASS 18/18, selftest
   245 ok / 0 falhas / 30 saltadas.** PNG: `docs/shots/09_lab_3d.png`.
+
+## Polimento da construção (2026-10-19)
+
+- Poeira por material + sons sintetizados ao colocar (madeira/pedra),
+  poeira peça a peça e estrondo no colapso; casinha-exemplo de 15 peças
+  nasce pronta junto à clareira de construção.
+- **Verificação: LABSCENE_PASS 46/46, LABTEST_PASS 18/18, selftest
+  245 ok / 0 falhas / 30 saltadas.** PNG: `docs/shots/09_lab_3d.png`.

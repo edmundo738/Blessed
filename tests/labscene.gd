@@ -245,6 +245,15 @@ func _ready() -> void:
 	_check(bool(stairs1["ok"]) and stairs_node != null and stairs_node.get_child_count() >= 10,
 			"construção: escadas com degraus pisáveis (5 degraus com colisão)")
 
+	# polimento: casinha-exemplo nasce construída + sons sintetizados
+	_check(scene.built_count() >= 15 and scene._built.has(scene._bkey(-7, -15, 0, "door"))
+			and scene._built.has(scene._bkey(-7, -15, 0, "roof"))
+			and scene._built.has(scene._bkey(-7, -14, 0, "stairs")),
+			"polimento: casinha-exemplo de pé (porta, telhado, escadas)")
+	_check(Sfx.stream("build_wood") != null and Sfx.stream("build_stone") != null
+			and Sfx.stream("collapse") != null,
+			"polimento: sons de construção sintetizados (madeira/pedra/colapso)")
+
 	# grelha para o PNG da etapa (render por software a partir dos dados reais)
 	var bytes := PackedByteArray()
 	bytes.resize(LabWorld.N * LabWorld.N * 2)
