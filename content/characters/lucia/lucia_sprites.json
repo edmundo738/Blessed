@@ -1,0 +1,27 @@
+{
+  "_comment": "Lúcia — sprites multidirecionais HD-2D (8-Way / Multi-directional Billboarding). v2 = biblioteca de poses nas 8 direções para RECORTAR no Pixelorama para a grelha final 8 linhas (direções) x 6 colunas (frames). v1 em sprites/ ficou errada (direções misturadas) — arquivada como rascunho, NÃO usar.",
+  "character": {
+    "id": "lucia",
+    "name": "Lúcia Luckombo",
+    "base": "100% na Lúcia das imagens do dono: menina afro normal (versão humana, NÃO a deusa)",
+    "look": "afro-angolana, 26 anos, pele castanha quente, box braids longas até à cintura, argolas douradas, colar de cruz pequena, tank top preto, cargo verde-azeitona com cinto, botas castanhas",
+    "style": "pixel art moderno (clusters limpos, silhueta legível), tempero PSX quente, identidade Angola; proporções anime semi-realistas ~6 cabeças"
+  },
+  "target_grid": {"rows": "8 direções por folha, ordem fixa: S, SE, E, NE, N, NW, W, SW", "cols": "frames da animação (ver groups)", "cell": "recortar cada pose, alinhar pelos PÉS (linha de chão comum), exportar folha final uniforme"},
+  "groups": {
+    "idle_walk": {"v2": "sprites_v2/lucia_01_idle_walk_8dir.png", "clean": "sprites_v2/lucia_01_idle_walk_8dir_clean.png", "anims": {"idle": {"frames": 4, "fps": 5, "loop": true}, "walk": {"frames": 6, "fps": 8, "loop": true, "notes": "ciclo segue velocidade real (pés não deslizam)"}}},
+    "run_jump": {"v2": "sprites_v2/lucia_02_run_jump_8dir.png", "clean": "sprites_v2/lucia_02_run_jump_8dir_clean.png", "anims": {"run": {"frames": 6, "fps": 11, "loop": true}, "jump": {"frames": 3, "fps": 8, "loop": false, "notes": "frame por vy: sobe/apice/cai; aterragem 1 frame agachado 90ms"}}},
+    "combat_reactions": {"v2": "sprites_v2/lucia_03_combat_8dir.png", "clean": "sprites_v2/lucia_03_combat_8dir_clean.png", "anims": {"comb1": {"frames": 3, "fps": 12, "loop": false, "notes": "soco direto; janela de combo 0.25s"}, "comb2": {"frames": 3, "fps": 12, "loop": false, "notes": "gancho; só entra de comb1"}, "comb3": {"frames": 4, "fps": 10, "loop": false, "notes": "pontapé alto; fecha cadeia 1->2->3"}, "dano": {"frames": 2, "fps": 8, "loop": false, "notes": "interrompe tudo 220ms; flash 80ms"}, "medo": {"frames": 2, "fps": 6, "loop": true, "notes": "ameaça < 6m; sobrepõe idle/walk"}, "defesa": {"frames": 1, "fps": 6, "loop": true}}},
+    "swim": {"v2": "sprites_v2/lucia_04_swim_8dir.png", "clean": "sprites_v2/lucia_04_swim_8dir_clean.png", "anims": {"swim": {"frames": 4, "fps": 6, "loop": true, "notes": "superfície; profundidade > 0.9m"}, "fast_swim": {"frames": 4, "fps": 10, "loop": true, "notes": "consome stamina"}, "deep_swim": {"frames": 4, "fps": 7, "loop": true, "notes": "cabeça submersa; tranças flutuam"}}},
+    "life_actions": {"v2": "sprites_v2/lucia_05_life_8dir.png", "clean": "sprites_v2/lucia_05_life_8dir_clean.png", "anims": {"sit": {"frames": 2, "fps": 4, "loop": true}, "sleep": {"frames": 2, "fps": 3, "loop": true}, "coleta": {"frames": 3, "fps": 8, "loop": false, "notes": "item na mão no frame 2"}, "drag": {"frames": 2, "fps": 6, "loop": true}, "drop": {"frames": 3, "fps": 8, "loop": false, "notes": "inverso da coleta"}, "carry": {"frames": 2, "fps": 8, "loop": true, "notes": "pernas do walk + tronco carry"}}}
+  },
+  "transitions": {
+    "idle->walk": "velocidade > 0.4 m/s por 80ms",
+    "walk<->run": "3.2 m/s com histerese 0.4",
+    "jump": "por vy, nunca por tempo",
+    "combo": "comb1 -(janela)-> comb2 -(janela)-> comb3 -> idle",
+    "swim": "ground->swim profundidade; swim->deep cabeça submersa",
+    "overrides": "dano 220ms; medo enquanto ameaça perto"
+  },
+  "directions_rule": "vetor entidade->câmara contra facing da entidade; 8 setores de 45°; histerese 6° na fronteira (não piscar entre diagonais). Em 1ª pessoa: mãos/ferramenta em viewmodel; o sprite 8-dir é o corpo visto por outros/3ª pessoa."
+}

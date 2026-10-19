@@ -439,3 +439,20 @@ céu e testes estão no marco mais recente no topo e em `docs/AUDIT_2026-10-14.m
   nasce pronta junto à clareira de construção.
 - **Verificação: LABSCENE_PASS 46/46, LABTEST_PASS 18/18, selftest
   245 ok / 0 falhas / 30 saltadas.** PNG: `docs/shots/09_lab_3d.png`.
+
+## Base HD2D + sprites da Lúcia v2 (2026-10-19)
+
+- Decisão do dono: `agent/hd2d-art-pass` é a base superior. Integrada
+  na branch de trabalho (af7a573): player/corpo/mãos, animais, mundo,
+  sfx com vozes limitadas + os nossos sons de construção, testes
+  novos, perf/gpushot/labshot, AUDIT. Preservado o que ela não tinha:
+  construção inteligente do laboratório, briefing, pack.
+- Do lab HD2D: malha com pesos de material (UV/UV2, contrato do shader
+  do mundo) e `footstep_material_at` (passos por material no lab).
+- Lúcia v2: poses nas 8 direções por grupos (idle/walk, run/jump,
+  comb1-3/dano/medo/defesa, swim/fast/deep, sit/sleep/coleta/drag/
+  drop/carry) + versões sem fundo. v1 arquivada como rascunho errado.
+  Manifesto `content/characters/lucia/lucia_sprites.json`; guia
+  `docs/SPRITES_LUCIA.md`. Falta: recorte Pixelorama p/ grelha final.
+- **Verificação: selftest 250 ok, LABSCENE_PASS 46/46, LABTEST_PASS
+  18/18.**

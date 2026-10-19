@@ -1074,6 +1074,22 @@ func ground_height(x: float, z: float) -> float:
 	return lab.height(x, z)
 
 
+## Material debaixo dos pés (vem da branch HD2D): o Player pergunta por
+## duck-typing e toca o passo certo — relva/areia/pedra/água também no lab.
+func footstep_material_at(x: float, z: float) -> String:
+	var s := lab.sample(x, z)
+	if int(s["water_kind"]) != 0 and float(s["height"]) < float(s["water_level"]) - 0.30:
+		return "water"
+	match int(s["material"]):
+		LabWorld.M_SAND:
+			return "sand"
+		LabWorld.M_ROCK:
+			return "stone"
+		LabWorld.M_DIRT:
+			return "dirt" if float(s["depth_dug"]) > 0.12 else "grass"
+	return "grass"
+
+
 func water_surface_height(x: float, z: float) -> float:
 	var s := lab.sample(x, z)
 	return float(s["water_level"]) if int(s["water_kind"]) > 0 else -100000.0

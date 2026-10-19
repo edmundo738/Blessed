@@ -55,6 +55,8 @@ static func build_chunk(lab: LabWorld, ci: int, cj: int) -> Dictionary:
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var colors := PackedColorArray()
+	var uvs := PackedVector2Array()
+	var uv2s := PackedVector2Array()
 	var idx := PackedInt32Array()
 	var faces := PackedVector3Array()
 	var i0 := ci * CHUNK_CELLS
@@ -71,7 +73,14 @@ static func build_chunk(lab: LabWorld, ci: int, cj: int) -> Dictionary:
 					2.0 * e,
 					lab.height(p.x, p.y - e) - lab.height(p.x, p.y + e)).normalized()
 			normals.append(n)
-			colors.append(_color_at(lab, p.x, p.y, h))
+			# COLOR.a = neve no shader do mundo. O laboratório não tem neve,
+			# por isso o alfa fica a zero em vez de transformar a ilha inteira
+			# num campo branco quando o material partilhado entra.
+			var c := _color_at(lab, p.x, p.y, h)
+			colors.append(Color(c.r, c.g, c.b, 0.0))
+			var w := _weights_at(lab, p.x, p.y, h)
+			uvs.append(Vector2(w.x, w.y))
+			uv2s.append(Vector2(w.z, w.w))
 	for j in seg:
 		for i in seg:
 			var a := j * (seg + 1) + i
@@ -91,8 +100,41 @@ static func build_chunk(lab: LabWorld, ci: int, cj: int) -> Dictionary:
 	arrays[Mesh.ARRAY_VERTEX] = verts
 	arrays[Mesh.ARRAY_NORMAL] = normals
 	arrays[Mesh.ARRAY_COLOR] = colors
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_TEX_UV2] = uv2s
 	arrays[Mesh.ARRAY_INDEX] = idx
 	return {"arrays": arrays, "faces": faces, "verts": verts.size()}
+
+
+## Pesos das quatro classes do shader do mundo: (relva, terra, areia, estratos).
+## O laboratório tem materiais explícitos, por isso a conversão é direta e não
+## uma segunda opinião inventada: areia é areia, rocha é estrato, terra exposta
+## é terra, e a relva só existe onde a humidade e o declive a deixam nascer.
+static func _weights_at(lab: LabWorld, x: float, z: float, _h: float) -> Vector4:
+	var s := lab.sample(x, z)
+	if int(s["water_kind"]) != 0:
+		return Vector4(0.0, 0.0, 1.0, 0.0)
+	var mat := int(s["material"])
+	var dug := float(s["depth_dug"])
+	var slope := float(s["slope"])
+	if mat == LabWorld.M_SAND:
+		return Vector4(0.0, 0.0, 1.0, 0.0)
+	if mat == LabWorld.M_ROCK or slope > 0.55 or dug > 0.24:
+		return Vector4(0.0, 0.0, 0.0, 1.0)
+	if dug > 0.10:
+		return Vector4(0.0, 1.0, 0.0, 0.0)
+	var moisture := clampf(float(s["moisture"]), 0.0, 1.0)
+	var grass := clampf((moisture - 0.18) * 1.55, 0.0, 1.0)
+	# Bosque/prado segura mais relva que a savana seca.
+	match int(s["biome"]):
+		LabWorld.B_MEADOW, LabWorld.B_FOREST, LabWorld.B_GROVE, LabWorld.B_MARSH:
+			grass = maxf(grass, 0.72)
+		LabWorld.B_DRY:
+			grass *= 0.55
+		LabWorld.B_BEACH, LabWorld.B_ROCK:
+			grass = 0.0
+	var dirt := 1.0 - grass
+	return Vector4(grass, dirt, 0.0, 0.0)
 
 
 static func _color_at(lab: LabWorld, x: float, z: float, h: float) -> Color:
@@ -146,13 +188,25 @@ static func build_water(lab: LabWorld) -> Dictionary:
 				c = Color(0.20, 0.55, 0.70, 0.82)
 			var signed := -1.0
 			var level := h - 1.0
+			var depth := 0.0
 			if wl > -50000.0:
 				signed = wl - h
 				level = wl
-			pts[j * n + i] = {"xz": p, "level": level, "signed": signed, "col": c}
+				depth = maxf(wl - h, 0.0)
+			# UV2 = (profundidade, salinidade). COLOR = (velocidade, turvação,
+			# corrente x, corrente z em 0..1). É o mesmo contrato do mundo
+			# grande: um shader, três águas.
+			var salt := 1.0 if kind == 1 else 0.0
+			var speed := 0.42 if kind == 2 else (0.05 if kind == 3 else 0.55)
+			var turb := 0.30 if kind == 2 else (0.22 if kind == 1 else 0.40)
+			var uv2 := Vector2(depth, salt)
+			var run := Color(speed, turb, 0.5, 0.5)
+			pts[j * n + i] = {"xz": p, "level": level, "signed": signed,
+				"col": run, "uv2": uv2}
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var colors := PackedColorArray()
+	var uv2s := PackedVector2Array()
 	var idx := PackedInt32Array()
 	for j in n - 1:
 		for i in n - 1:
@@ -160,13 +214,14 @@ static func build_water(lab: LabWorld) -> Dictionary:
 			var b := a + 1
 			var c := a + n
 			var d := a + n + 1
-			_clip_water_tri(pts, [a, b, d], verts, normals, colors, idx)
-			_clip_water_tri(pts, [a, d, c], verts, normals, colors, idx)
+			_clip_water_tri(pts, [a, b, d], verts, normals, colors, uv2s, idx)
+			_clip_water_tri(pts, [a, d, c], verts, normals, colors, uv2s, idx)
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = verts
 	arrays[Mesh.ARRAY_NORMAL] = normals
 	arrays[Mesh.ARRAY_COLOR] = colors
+	arrays[Mesh.ARRAY_TEX_UV2] = uv2s
 	arrays[Mesh.ARRAY_INDEX] = idx
 	return {"arrays": arrays, "quads": idx.size() / 6}
 
@@ -175,7 +230,7 @@ static func _water_vert(pts: Array, k: int) -> Dictionary:
 	var p: Dictionary = pts[k]
 	var xz: Vector2 = p["xz"]
 	return {"pos": Vector3(xz.x, float(p["level"]), xz.y),
-			"signed": float(p["signed"]), "col": p["col"]}
+			"signed": float(p["signed"]), "col": p["col"], "uv2": p["uv2"]}
 
 
 ## Recorta um triangulo pelo semiplano molhado (signed > 0), interpolando
@@ -183,7 +238,7 @@ static func _water_vert(pts: Array, k: int) -> Dictionary:
 ## de entrada (a,b,d / a,d,c — frontal de cima, convencao do repo).
 static func _clip_water_tri(pts: Array, tri: Array, verts: PackedVector3Array,
 		normals: PackedVector3Array, colors: PackedColorArray,
-		idx: PackedInt32Array) -> void:
+		uv2s: PackedVector2Array, idx: PackedInt32Array) -> void:
 	var poly: Array[Dictionary] = []
 	for k in tri:
 		poly.append(_water_vert(pts, int(k)))
@@ -203,6 +258,7 @@ static func _clip_water_tri(pts: Array, tri: Array, verts: PackedVector3Array,
 				"pos": (cur["pos"] as Vector3).lerp(nxt["pos"], f),
 				"signed": 0.0,
 				"col": (cur["col"] as Color).lerp(nxt["col"], f),
+				"uv2": (cur["uv2"] as Vector2).lerp(nxt["uv2"], f),
 			})
 	if clipped.size() < 3:
 		return
@@ -211,5 +267,6 @@ static func _clip_water_tri(pts: Array, tri: Array, verts: PackedVector3Array,
 		verts.append(v["pos"])
 		normals.append(Vector3.UP)
 		colors.append(v["col"])
+		uv2s.append(v["uv2"])
 	for t in range(1, clipped.size() - 1):
 		idx.append_array([base, base + t, base + t + 1])
