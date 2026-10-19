@@ -20,6 +20,12 @@ var _mat_label: Label
 var _aim_timer := 0.0
 var _denial_timer := 0.0
 var _relic_seen := false
+var build_mode := false
+var build_piece := "foundation"
+var build_rot := 0.0
+var _ghost: MeshInstance3D
+var _ghost_mat: StandardMaterial3D
+var _ghost_timer := 0.0
 
 
 func setup(p_scene: LabScene) -> void:
@@ -183,7 +189,7 @@ func _refresh_inv() -> void:
 
 func _update_status() -> void:
 	var fly := scene != null and scene.player != null and scene.player.dev_fly
-	_status.text = "LAB DEV%s · LMB escavar · RMB aterrar · roda/1-3 ferramenta · F voar · F1 painel" % (" [VOAR]" if fly else "")
+	_status.text = "LAB DEV%s%s · LMB escavar/colocar · RMB aterrar/remover · roda escolhe · B construir · F voar · F1 painel" % [" [VOAR]" if fly else "", " [CONSTRUIR]" if build_mode else ""]
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -199,16 +205,46 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_E:
 				_strike_prop()
 			KEY_1:
-				_set_tool("hand")
+				if build_mode:
+					_set_build_piece(0)
+				else:
+					_set_tool("hand")
 			KEY_2:
-				_set_tool("shovel")
+				if build_mode:
+					_set_build_piece(1)
+				else:
+					_set_tool("shovel")
 			KEY_3:
-				_set_tool("pickaxe")
+				if build_mode:
+					_set_build_piece(2)
+				else:
+					_set_tool("pickaxe")
+			KEY_4:
+				if build_mode:
+					_set_build_piece(3)
+			KEY_5:
+				if build_mode:
+					_set_build_piece(4)
+			KEY_B:
+				_toggle_build_mode()
+			KEY_R:
+				if build_mode:
+					build_rot += PI * 0.5
 	if event is InputEventMouseButton and event.pressed and _panel.visible == false:
-		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			_cycle_tool(1)
+		if build_mode and event.button_index == MOUSE_BUTTON_LEFT:
+			_place_ghost()
+		elif build_mode and event.button_index == MOUSE_BUTTON_RIGHT:
+			_remove_aimed()
+		elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			if build_mode:
+				_cycle_build_piece(1)
+			else:
+				_cycle_tool(1)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			_cycle_tool(-1)
+			if build_mode:
+				_cycle_build_piece(-1)
+			else:
+				_cycle_tool(-1)
 		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
@@ -227,6 +263,12 @@ func _process(delta: float) -> void:
 	if _aim_timer <= 0.0:
 		_aim_timer = 0.12
 		_update_aim_label()
+	if build_mode:
+		_ghost_timer -= delta
+		if _ghost_timer <= 0.0:
+			_ghost_timer = 0.05
+			_update_ghost()
+		return
 	var digging := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 	var filling := Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
 	if (digging or filling) and _dig_timer <= 0.0:
@@ -234,10 +276,139 @@ func _process(delta: float) -> void:
 		_apply_tool(filling)
 
 
+## ── construção: preview fantasma que pinta a estabilidade ─────────────
+## Verde = firme, amarelo = estica, vermelho = nao entra (sem suporte,
+## agua, declive ou material). A cor ENSINA — nao ha texto de tutorial.
+func _toggle_build_mode() -> void:
+	build_mode = not build_mode
+	if _ghost != null:
+		_ghost.visible = build_mode
+	_update_status()
+	_update_aim_label()
+
+
+func _set_build_piece(i: int) -> void:
+	build_piece = LabScene.BUILD_ORDER[clampi(i, 0, LabScene.BUILD_ORDER.size() - 1)]
+
+
+func _cycle_build_piece(dir: int) -> void:
+	var i := LabScene.BUILD_ORDER.find(build_piece)
+	_set_build_piece(posmod(i + dir, LabScene.BUILD_ORDER.size()))
+
+
+func _ensure_ghost() -> void:
+	if _ghost != null or scene == null:
+		return
+	_ghost_mat = StandardMaterial3D.new()
+	_ghost_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_ghost_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_ghost_mat.albedo_color = Color(0.4, 1.0, 0.5, 0.45)
+	_ghost_mat.no_depth_test = false
+	_ghost = MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3.ONE
+	_ghost.mesh = bm
+	_ghost.material_override = _ghost_mat
+	_ghost.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_ghost.visible = false
+	scene.add_child(_ghost)
+
+
+func _update_ghost() -> void:
+	_ensure_ghost()
+	if _ghost == null:
+		return
+	var hit := _ray_hit(36.0)
+	if hit.is_empty():
+		_ghost.visible = false
+		return
+	var at: Vector3 = hit.get("position", Vector3.ZERO)
+	var ev := scene.evaluate_place(build_piece, at.x, at.z)
+	var cx := float(int(ev["gx"])) * LabScene.BUILD_CELL
+	var cz := float(int(ev["gz"])) * LabScene.BUILD_CELL
+	var top := float(ev["top"])
+	var size: Vector3 = LabScene.BUILD_PIECES[build_piece]["size"]
+	var y := top
+	match build_piece:
+		"foundation":
+			y = top - 0.15
+		"wall":
+			y = top + float(int(ev.get("level", 0))) * 2.4 + 1.2
+		"pillar":
+			y = top + 1.2
+		"floor":
+			y = top + 2.48
+		"roof":
+			y = top + 3.6
+	_ghost.position = Vector3(cx, y, cz)
+	_ghost.scale = size
+	_ghost.rotation = Vector3(0, build_rot if build_piece == "wall" else 0.0,
+		0.16 if build_piece == "roof" else 0.0)
+	var afford := scene.inv == null or scene.inv.has_all(LabScene.BUILD_PIECES[build_piece]["cost"])
+	if not bool(ev["ok"]) or not afford:
+		_ghost_mat.albedo_color = Color(1.0, 0.30, 0.22, 0.45)
+	elif float(ev["stability"]) >= 0.8:
+		_ghost_mat.albedo_color = Color(0.35, 1.0, 0.45, 0.45)
+	elif float(ev["stability"]) >= 0.62:
+		_ghost_mat.albedo_color = Color(1.0, 0.85, 0.30, 0.45)
+	else:
+		_ghost_mat.albedo_color = Color(1.0, 0.55, 0.20, 0.45)
+	_ghost.visible = true
+
+
+func _place_ghost() -> void:
+	_update_ghost()
+	if _ghost == null or not _ghost.visible:
+		return
+	var hit := _ray_hit(36.0)
+	if hit.is_empty():
+		return
+	var at: Vector3 = hit.get("position", Vector3.ZERO)
+	var res: Dictionary = scene.try_place(build_piece, at.x, at.z, build_rot, scene.inv)
+	if bool(res.get("ok", false)):
+		_dust(at + Vector3(0, 0.4, 0), false, LabWorld.M_DIRT)
+		_refresh_inv()
+	else:
+		_denial(at, LabWorld.M_ROCK)
+	_update_ghost()
+
+
+func _remove_aimed() -> void:
+	var hit := _ray_hit(36.0)
+	if hit.is_empty():
+		return
+	var collider: Object = hit.get("collider")
+	if collider == null or not (collider as Node).has_meta("lab_piece_key"):
+		return
+	var key := str((collider as Node).get_meta("lab_piece_key"))
+	var piece := key.split(":")[3]
+	var removed := scene.remove_piece(key)
+	if removed > 0:
+		var cost: Dictionary = LabScene.BUILD_PIECES[piece]["cost"]
+		for id in cost.keys():
+			scene.inv.add(str(id), maxi(1, int(cost[id]) / 2))
+		_dust((collider as Node3D).global_position, false, LabWorld.M_DIRT)
+		_refresh_inv()
+
+
 ## Material sob a mira (leitura dev): nome + dureza + se a ferramenta
 ## atual entra. No jogo isto sera efeito (som/poeira/recuo), nao texto.
 func _update_aim_label() -> void:
 	if _mat_label == null:
+		return
+	if build_mode:
+		var hit := _ray_hit(36.0)
+		if hit.is_empty():
+			_mat_label.text = "CONSTRUIR — %s" % str(LabScene.BUILD_PIECES[build_piece]["label"])
+			return
+		var at: Vector3 = hit.get("position", Vector3.ZERO)
+		var ev := scene.evaluate_place(build_piece, at.x, at.z)
+		var cost: Dictionary = LabScene.BUILD_PIECES[build_piece]["cost"]
+		var afford := scene.inv != null and scene.inv.has_all(cost)
+		_mat_label.text = "%s · %s · %s" % [
+			str(LabScene.BUILD_PIECES[build_piece]["label"]),
+			("estabilidade %d%%" % int(float(ev["stability"]) * 100.0)) if bool(ev["ok"]) else str(ev["reason"]),
+			"materiais ok" if afford else "FALTA material"]
 		return
 	var hit := _ray_hit(36.0)
 	if hit.is_empty():

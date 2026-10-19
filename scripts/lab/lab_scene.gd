@@ -165,6 +165,9 @@ const SPECIES_COLOR := {
 func _ready() -> void:
 	name = "LabScene"
 	lab = LabWorld.new(seed_value)
+	_build_root = Node3D.new()
+	_build_root.name = "LabBuilt"
+	add_child(_build_root)
 	_build_environment()
 	_build_terrain()
 	_build_water()
@@ -510,6 +513,248 @@ func _fell_tree(body: Node3D) -> void:
 		for id in yields.keys():
 			DroppedItem.spawn(self, str(id), int(yields[id]), at, inv, player)
 	print("LABFELL ", kind, " em ", body.global_position, " -> ", yields)
+
+
+# ── construção inteligente (estação build_pad) ─────────────────────────────
+# O sistema antigo era colocar caixas onde o raio batia. Este é procedural
+# e intuitivo:
+#   SNAP: grelha de 2 m — a peça salta para a célula, sem meio-pixel.
+#   FUNDACAO ADAPTATIVA: o topo nivela pelo canto mais alto e as estacas
+#     descem até ao chão em cada canto (declive lê-se nas pernas).
+#   ESTABILIDADE (como Valheim): cada peça herda apoio da que está por
+#     baixo; o preview pinta verde->amarelo->vermelho com o valor.
+#   NADA FLUTUA: parede sem fundação não entra; teto sem parede não entra;
+#     tirar o suporte derruba o que ele segurava (colapso em cascata).
+#   CUSTO REAL: consome do inventário (Db), remover devolve metade.
+const BUILD_CELL := 2.0
+const BUILD_PIECES := {
+	"foundation": {"label": "Fundação", "cost": {"wood": 2, "stone": 2}, "size": Vector3(2, 0.3, 2)},
+	"wall": {"label": "Parede", "cost": {"wood": 2}, "size": Vector3(2, 2.4, 0.15)},
+	"pillar": {"label": "Pilar", "cost": {"wood": 1}, "size": Vector3(0.25, 2.4, 0.25)},
+	"floor": {"label": "Chão", "cost": {"wood": 2}, "size": Vector3(2, 0.15, 2)},
+	"roof": {"label": "Telhado", "cost": {"wood": 3}, "size": Vector3(2.4, 0.12, 2.4)},
+}
+const BUILD_ORDER: Array[String] = ["foundation", "wall", "pillar", "floor", "roof"]
+const BUILD_MAX_STILT := 2.6
+
+var _build_root: Node3D
+var _built: Dictionary = {}  # "gx:gz:level:piece" -> StaticBody3D
+
+
+func _bkey(gx: int, gz: int, level: int, piece: String) -> String:
+	return "%d:%d:%d:%s" % [gx, gz, level, piece]
+
+
+func build_cell_of(x: float, z: float) -> Vector2i:
+	return Vector2i(int(round(x / BUILD_CELL)), int(round(z / BUILD_CELL)))
+
+
+func built_count() -> int:
+	return _built.size()
+
+
+func _foundation_top(gx: int, gz: int) -> float:
+	var n := _built.get(_bkey(gx, gz, 0, "foundation")) as Node3D
+	return float(n.get_meta("build_top", 0.0)) if n != null else 0.0
+
+
+## Avalia SEM colocar: o preview e a colocação leem a mesma resposta.
+## Devolve ok, razão (para dev), célula, topo nivelado e estabilidade.
+func evaluate_place(piece: String, x: float, z: float) -> Dictionary:
+	var cell := build_cell_of(x, z)
+	var gx := cell.x
+	var gz := cell.y
+	var cx := float(gx) * BUILD_CELL
+	var cz := float(gz) * BUILD_CELL
+	var out := {"ok": false, "reason": "", "gx": gx, "gz": gz, "stability": 0.0, "top": 0.0}
+	if not BUILD_PIECES.has(piece):
+		out["reason"] = "unknown_piece"
+		return out
+	match piece:
+		"foundation":
+			if _built.has(_bkey(gx, gz, 0, "foundation")):
+				out["reason"] = "occupied"
+				return out
+			var s := lab.sample(cx, cz)
+			if int(s["water_kind"]) != 0:
+				out["reason"] = "in_water"
+				return out
+			var cs := [lab.height(cx - 1.0, cz - 1.0), lab.height(cx + 1.0, cz - 1.0),
+					lab.height(cx - 1.0, cz + 1.0), lab.height(cx + 1.0, cz + 1.0)]
+			var top: float = cs.max()
+			var low: float = cs.min()
+			if top - low > BUILD_MAX_STILT:
+				out["reason"] = "too_steep"  # nem com estacas: procura outro chão
+				return out
+			out["ok"] = true
+			out["top"] = top
+			out["stability"] = 1.0
+			out["stilt"] = top - low
+		"wall", "pillar", "floor", "roof":
+			if not _built.has(_bkey(gx, gz, 0, "foundation")):
+				out["reason"] = "no_foundation"
+				return out
+			out["top"] = _foundation_top(gx, gz)
+			match piece:
+				"wall":
+					var lv := -1
+					if not _built.has(_bkey(gx, gz, 0, "wall")):
+						lv = 0
+					elif not _built.has(_bkey(gx, gz, 1, "wall")):
+						lv = 1
+					if lv < 0:
+						out["reason"] = "occupied"
+						return out
+					out["level"] = lv
+					out["stability"] = 0.92 - 0.18 * float(lv) \
+							+ (0.06 if _built.has(_bkey(gx, gz, 0, "pillar")) else 0.0)
+				"pillar":
+					if _built.has(_bkey(gx, gz, 0, "pillar")):
+						out["reason"] = "occupied"
+						return out
+					out["stability"] = 0.95
+				"floor":
+					if _built.has(_bkey(gx, gz, 0, "floor")):
+						out["reason"] = "occupied"
+						return out
+					if not _built.has(_bkey(gx, gz, 0, "wall")):
+						out["reason"] = "need_wall"
+						return out
+					out["stability"] = 0.85 if _built.has(_bkey(gx, gz, 0, "pillar")) else 0.70
+				"roof":
+					if _built.has(_bkey(gx, gz, 0, "roof")):
+						out["reason"] = "occupied"
+						return out
+					if not (_built.has(_bkey(gx, gz, 0, "floor")) or _built.has(_bkey(gx, gz, 1, "wall"))):
+						out["reason"] = "need_support"
+						return out
+					out["stability"] = 0.75 if _built.has(_bkey(gx, gz, 0, "pillar")) else 0.58
+			out["ok"] = true
+	return out
+
+
+func try_place(piece: String, x: float, z: float, rot_y: float = 0.0,
+		payer: Inventory = null) -> Dictionary:
+	var ev := evaluate_place(piece, x, z)
+	if not bool(ev["ok"]):
+		return ev
+	var cost: Dictionary = BUILD_PIECES[piece]["cost"]
+	if payer != null:
+		if not payer.has_all(cost):
+			ev["ok"] = false
+			ev["reason"] = "materials"
+			return ev
+		for id in cost.keys():
+			payer.remove(str(id), int(cost[id]))
+	var gx := int(ev["gx"])
+	var gz := int(ev["gz"])
+	var level := int(ev.get("level", 0))
+	var key := _bkey(gx, gz, level, piece)
+	var node := _make_piece(piece, ev, rot_y, level)
+	node.set_meta("lab_piece_key", key)
+	_built[key] = node
+	_build_root.add_child(node)
+	ev["key"] = key
+	print("LABBUILD ", piece, " em celula ", gx, ",", gz, " estabilidade ", ev["stability"])
+	return ev
+
+
+func _make_piece(piece: String, ev: Dictionary, rot_y: float, level: int) -> StaticBody3D:
+	var gx := int(ev["gx"])
+	var gz := int(ev["gz"])
+	var cx := float(gx) * BUILD_CELL
+	var cz := float(gz) * BUILD_CELL
+	var top := float(ev["top"])
+	var body := StaticBody3D.new()
+	body.name = "Built_" + piece
+	body.collision_layer = 1
+	body.collision_mask = 0
+	body.set_meta("lab_kind", "build_" + piece)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.55, 0.42, 0.28)  # madeira
+	if piece == "foundation":
+		mat.albedo_color = Color(0.50, 0.50, 0.52)  # pedra
+	elif piece == "roof":
+		mat.albedo_color = Color(0.42, 0.28, 0.20)
+	var size: Vector3 = BUILD_PIECES[piece]["size"]
+	match piece:
+		"foundation":
+			body.position = Vector3(cx, top, cz)
+			body.set_meta("build_top", top)
+			_add_box(body, size, Vector3(0, -0.15, 0), mat)
+			for c in [Vector2(-0.85, -0.85), Vector2(0.85, -0.85), Vector2(-0.85, 0.85), Vector2(0.85, 0.85)]:
+				var gh := lab.height(cx + c.x, cz + c.y)
+				var len := (top - 0.3) - gh + 0.3
+				_add_box(body, Vector3(0.18, len, 0.18), Vector3(c.x, -0.3 - len * 0.5 + 0.15, c.y), mat)
+		"wall":
+			body.position = Vector3(cx, top + float(level) * 2.4, cz)
+			body.rotation.y = rot_y
+			_add_box(body, size, Vector3(0, 1.2, 0), mat)
+		"pillar":
+			body.position = Vector3(cx + 0.8, top, cz + 0.8)
+			_add_box(body, size, Vector3(0, 1.2, 0), mat)
+		"floor":
+			body.position = Vector3(cx, top + 2.4, cz)
+			_add_box(body, size, Vector3(0, 0.08, 0), mat)
+		"roof":
+			body.position = Vector3(cx, top + 3.6, cz)
+			body.rotation.z = 0.16
+			_add_box(body, size, Vector3.ZERO, mat)
+	return body
+
+
+func _add_box(body: StaticBody3D, size: Vector3, off: Vector3, mat: Material) -> void:
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = size
+	mi.mesh = bm
+	mi.position = off
+	mi.material_override = mat
+	body.add_child(mi)
+	var cs := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = size
+	cs.shape = box
+	cs.position = off
+	body.add_child(cs)
+
+
+## Remover suporte derruba o que ele segurava: fundação arrasta a célula
+## toda; parede de baixo arrasta a de cima, o chão e o telhado.
+func remove_piece(key: String) -> int:
+	if not _built.has(key):
+		return 0
+	var parts := key.split(":")
+	var gx := int(parts[0])
+	var gz := int(parts[1])
+	var piece := parts[3]
+	var doomed: Array[String] = [key]
+	if piece == "foundation":
+		for lv in 2:
+			for p in ["wall", "pillar", "floor", "roof"]:
+				var k := _bkey(gx, gz, lv, p)
+				if _built.has(k) and not doomed.has(k):
+					doomed.append(k)
+	elif piece == "wall" and int(parts[2]) == 0:
+		for p in ["floor", "roof"]:
+			var k := _bkey(gx, gz, 0, p)
+			if _built.has(k):
+				doomed.append(k)
+		var k1 := _bkey(gx, gz, 1, "wall")
+		if _built.has(k1):
+			doomed.append(k1)
+	elif piece == "floor":
+		var kr := _bkey(gx, gz, 0, "roof")
+		if _built.has(kr):
+			doomed.append(kr)
+	for k in doomed:
+		var n := _built[k] as Node3D
+		_built.erase(k)
+		if n != null and is_instance_valid(n):
+			n.queue_free()
+	if doomed.size() > 1:
+		print("LABCOLLAPSE ", key, " arrastou ", doomed.size() - 1, " pecas")
+	return doomed.size()
 
 
 # ── vegetação e pedras: nós reais, colhíveis pelo raycast do LabDev ───────

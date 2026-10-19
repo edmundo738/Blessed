@@ -415,3 +415,12 @@ céu e testes estão no marco mais recente no topo e em `docs/AUDIT_2026-10-14.m
   245 ok / 0 falhas / 30 saltadas.** PNG: `docs/shots/09_lab_3d.png`.
 - Entrega: UM pack cumulativo `Blessed_Lab_Tudo_pack.zip` (pedido do dono:
   nada de mini-zips por implementação).
+
+## Construção inteligente no laboratório (2026-10-19)
+
+- Snap 2 m, fundação adaptativa com estacas (até 2,6 m), estabilidade
+  1,0→0,58 com preview verde/amarelo/laranja/vermelho, regras de suporte,
+  colapso em cascata, custo em materiais e reembolso de 50% ao remover.
+  Modo construir no LabDev: tecla B, roda/1-5 escolhe peça, R roda parede.
+- **Verificação: LABSCENE_PASS 37/37, LABTEST_PASS 18/18, selftest
+  245 ok / 0 falhas / 30 saltadas.** PNG: `docs/shots/09_lab_3d.png`.

@@ -182,6 +182,37 @@ func _ready() -> void:
 		_check(scene.relic_found(), "picareta atravessa a rocha e desenterra a relíquia")
 		_check(scene.relic_node() != null, "relíquia visível e luminosa no mundo")
 
+	# construção inteligente: snap, suporte, estabilidade, colapso
+	var pad := Vector2(-5.0, -20.0)
+	var no_foundation: Dictionary = scene.try_place("wall", pad.x, pad.y)
+	_check(not bool(no_foundation["ok"]) and str(no_foundation["reason"]) == "no_foundation",
+			"construção: parede sem fundação NÃO entra")
+	var in_water: Dictionary = scene.evaluate_place("foundation", 170.0, 170.0)
+	_check(not bool(in_water["ok"]) and str(in_water["reason"]) == "in_water",
+			"construção: fundação na água NÃO entra")
+	var built0 := scene.built_count()
+	var f1: Dictionary = scene.try_place("foundation", pad.x, pad.y)
+	_check(bool(f1["ok"]) and absf(float(f1["stability"]) - 1.0) < 0.01,
+			"construção: fundação adaptativa coloca (estabilidade 1.0)")
+	var dup: Dictionary = scene.try_place("foundation", pad.x, pad.y)
+	_check(not bool(dup["ok"]), "construção: célula ocupada recusa segunda fundação")
+	var w1: Dictionary = scene.try_place("wall", pad.x, pad.y)
+	var fl: Dictionary = scene.try_place("floor", pad.x, pad.y)
+	var rf: Dictionary = scene.try_place("roof", pad.x, pad.y)
+	_check(bool(w1["ok"]) and bool(fl["ok"]) and bool(rf["ok"]),
+			"construção: parede -> chão -> telhado empilham com suporte")
+	_check(scene.built_count() == built0 + 4, "construção: 4 peças registadas")
+	var fell := scene.remove_piece(str(f1["key"]))
+	_check(fell >= 4 and scene.built_count() == built0,
+			"construção: tirar a fundação DERRUBA a casa (colapso em cascata)")
+	# custo real: colocar consome materiais do inventário
+	scene.inv.add("wood", 10)
+	scene.inv.add("stone", 10)
+	var w_before := scene.inv.count("wood")
+	var paid: Dictionary = scene.try_place("foundation", pad.x + 4.0, pad.y, 0.0, scene.inv)
+	_check(bool(paid["ok"]) and scene.inv.count("wood") == w_before - 2,
+			"construção: colocar consome materiais (madeira -2)")
+
 	# grelha para o PNG da etapa (render por software a partir dos dados reais)
 	var bytes := PackedByteArray()
 	bytes.resize(LabWorld.N * LabWorld.N * 2)

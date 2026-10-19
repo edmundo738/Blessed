@@ -156,3 +156,26 @@ terra/rocha com cores próprias, cinzenta na negação), ritmo por ferramenta
 seca), pista por intensificação sensorial (glint) e recompensa com
 espetáculo curto (burst + flash + objeto emissivo). O ecrã continua
 limpo: a barra dev mostra só ferramenta e material sob a mira.
+
+## Construção inteligente (2026-10-19)
+
+A estação `build_pad` prova o sistema novo (o do mundo grande será
+migrado depois de aprovado aqui):
+
+- **Snap de 2 m**: a peça salta para a célula — sem meio-pixel nem
+  rotações tortas (R roda a parede em 90°).
+- **Fundação adaptativa**: o topo nivela pelo canto mais alto; 4 estacas
+  descem até ao chão real em cada canto. Declive até 2,6 m de estaca;
+  além disso recusa (`too_steep`). Água recusa (`in_water`).
+- **Estabilidade (tipo Valheim)**: fundação 1,0 → parede 0,92/0,74 →
+  chão 0,70 (0,85 com pilar) → telhado 0,58 (0,75 com pilar). O preview
+  fantasma pinta **verde ≥0,8 · amarelo ≥0,62 · laranja <0,62 ·
+  vermelho = não entra** — a cor ensina, sem texto de tutorial.
+- **Nada flutua**: `evaluate_place()` é a única porta (preview e
+  colocação leem a mesma resposta). Parede sem fundação, chão sem
+  parede e telhado sem apoio são recusados.
+- **Colapso em cascata**: remover a fundação derruba a célula toda;
+  remover a parede de baixo derruba a de cima, o chão e o telhado.
+  Remover devolve metade dos materiais; colocar consome do inventário.
+- Prova (labscene 30–37): recusas certas, empilhamento com suporte,
+  contagem de peças, colapso ao tirar a fundação, custo debitado.
