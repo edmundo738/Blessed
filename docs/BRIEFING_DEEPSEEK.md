@@ -1,6 +1,86 @@
 # BRIEFING COMPLETO — projeto BLESSED (para o agente DeepSeek Flash)
 
-> **Lê isto até ao fim antes de tocar em código.** Este documento diz-te
+---
+
+## ⚠️ LEITURA OBRIGATÓRIA ANTES DE TUDO — veredito e direção de arte do dono
+
+**1. Nada neste jogo está bom só porque existe.** Veredito do dono, que já
+jogou tudo: *"nada nesse jogo está bom, desde a gameplay até aos modelos.
+Os modelos são figuras geométricas que não fazem sentido."* Portanto:
+código que corre, teste que passa ou modelo que carrega **não** significa
+"bom" — significa, no máximo, "provisório". Se vires uma árvore feita de
+cilindro + esferas, um animal feito de caixas ou um personagem-cápsula,
+isso é um **placeholder por substituir**, não um asset aprovado. Nunca
+apresentes uma figura geométrica estranha como trabalho acabado.
+
+**2. A direção de arte é HD-2D / 2.5D — duas técnicas combinadas:**
+
+| O quê | Técnica |
+|---|---|
+| **Pessoas, animais, peixes, aves, monstros** | **Billboarding direcional** (sprites 2D em 8 direções que rodam para a câmara) |
+| **Ferramentas e armas** (picareta, machado, pá, lâmina…), **mãos em 1ª pessoa**, **itens** (na mão e largados no mundo) | **Sprites** — nas mãos como *viewmodel* 2D animado; no mundo como billboards |
+| **Todo o resto**: terreno, água, árvores, rochas, vegetação, paredes, tijolos, madeira, estruturas, aldeia | **3D estilizado** (toon low-poly, como os shaders atuais) |
+
+Esta divisão **substitui** qualquer instrução anterior deste documento
+sobre "criar modelos 3D para o jogador/animais". Personagens 3D com rig
+**não** são o caminho. O projeto já tem uma semente disto:
+`scripts/player/pixel_avatar.gd` e os frames em
+`content/characters/camp_to_me/` (pastas por direção) — hoje pobres e
+incompletos; a técnica está certa, a arte está má.
+
+**Especificação dos sprites (o que tens de desenhar/gerar):**
+
+- **Personagem desenhado a sério**: silhueta legível (cabeça, tronco,
+  braços, pernas, roupa/cor própria), não um boneco de palitos nem uma
+  cápsula com olhos. Cada ser com identidade por espécie (o carvalho
+  anda igual? não — cada animal/NPC com as suas cores e proporções).
+- **8 direções** por ser (frente, frente-direita, direita, trás-direita,
+  trás, trás-esquerda, esquerda, frente-esquerda). A troca é matemática:
+  `ângulo_relativo = wrapf(yaw_da_câmara − yaw_do_ser, 0, TAU)`,
+  `linha = round(ângulo_relativo / (TAU/8)) % 8`. Billboard **cilíndrico**
+  (roda só no eixo Y, sempre de pé — nunca esférico a tombar para trás).
+  No Godot: `Sprite3D`/`AnimatedSprite3D` com billboard em Y, `shaded`
+  ligado (para a luz do mundo o pintar), `alpha_cut` por corte, filtro
+  **Nearest** (pixel art nítida), `pixel_size` consistente com a escala
+  do `MODEL_SCALE_GUIDE.md` (personagem ≈ 1,7 m no mundo).
+- **Animações por ação, em cada direção relevante**: parado (idle, 2–4
+  frames com respiração), andar (6–8 frames), correr se existir, e as
+  ações de gameplay do ser: para o jogador/NPC — cortar, escavar/minerar,
+  colher/apanhar, atacar, magoar-se, dormir; para animais — pastar/
+  espreitar, andar, fugir, atacar, dormir; peixes — nadar (com ondulação,
+  e tinta azulada debaixo de água); aves — voar (asas em 2–3 posições) e
+  pousar. Ação sem sprite = ação que não se lê = não está feita.
+- **Mãos em 1ª pessoa**: sprite 2D sobreposto (estilo *viewmodel* de
+  DOOM): mão vazia, e **cada ferramenta desenhada na mão** (picareta de
+  pedra ≠ picareta trabalhada ≠ machado ≠ pá). Animações: idle com
+  balanço de andar (bob), golpe (swing com arco e recuperação), escavar,
+  bloquear/magoar. A ferramenta na mão tem de ser a mesma que o inventário
+  diz — sprite por ferramenta e por tier.
+- **Itens**: cada item do `Db.ITEMS` com sprite próprio (já existem
+  ícones procedurais em `ui/item_icon.gd` — são a referência de forma/cor,
+  não o produto final). No mundo, o item largado é um billboard que
+  flutua/roda suavemente; na mão, o sprite da ferramenta.
+- **Variações**: por espécie/cor (palette swaps contam como variação
+  barata), por tier de ferramenta, e 2–3 variantes de postura/frame para
+  não haver exércitos de clones.
+- **Sombras e chão**: sprite com sombra projetada quando o motor aceitar
+  (material com corte alfa) ou sombra-blob (decal escura elíptica) por
+  baixo — um ser sem sombra parece flutuar e isso reprova o asset.
+- **LOD de sprites**: de perto, animação completa; longe (>60 m), frame
+  estático da direção certa (trocar de animação a essa distância é custo
+  invisível); muito longe, pode cair para o LOD do mundo. Peixes/aves
+  seguem a mesma regra dentro de água/ar.
+
+**Critério de reprovação imediata**: cápsulas, caixas, esferas ou
+"bonecos" geométricos apresentados como personagens/animais/ferramentas;
+sprites de uma só direção; ferramenta genérica para todos os tiers;
+animação de andar com 2 frames trocados sem peso. Se for provisório,
+diz que é provisório — nunca vendas placeholder como acabado.
+
+---
+
+> **E o resto deste documento continua válido**: lê-o até ao fim antes de
+> tocar em código. Ele diz-te
 > o que estamos a construir, porquê, onde queremos chegar, **o que está
 > mal e porquê**, e as tecnologias que tens de implementar/melhorar.
 > O dono do projeto considera o estado atual **fraco em quase tudo** —
@@ -262,28 +342,32 @@ gerados por scripts em `tools/generate_*`), respeitando o
 
 ## 4. Tecnologias a implementar / melhorar / lapidar (o coração do pedido)
 
-### 4.1 Modelos 3D novos (prioridade máxima)
+### 4.1 Arte nova (prioridade máxima) — sprites direcionais + 3D estilizado
 
-Criar/substituir, por esta ordem de impacto:
+⚠️ **Lê primeiro a "LEITURA OBRIGATÓRIA" no topo deste documento.** Em
+resumo: seres e ferramentas são **sprites billboarding 8-direções**
+(desenhados, animados por ação, com variações); mundo e construções são
+**3D estilizado**. Por ordem de impacto:
 
-1. **Jogador:** corpo 3D simples mas com presença + mãos em primeira
-   pessoa que comuniquem a ação (mão vazia, ferramenta, golpe, nadar).
-   Manter a cápsula de colisão (1,78 m, raio 0,34, olhos a 1,62 m) como
-   referência de escala. Animações podem ser procedurais (ossos por
-   código/tweens) — o estilo é toon/low-poly, não realista.
-2. **Árvores por espécie com silhueta própria** (carvalho largo, bétula
-   esguia e clara, pinheiro cónico alto, sakura torta e rosada, salgueiro
-   pendente): tronco com afunilamento e ramos, copa em 2–3 massas com
-   leitura de luz. Cada espécie liga ao seu `id` em `data/species.json`
-   e aos seus materiais/colheitas em `Db.HARVEST` — **mudar a geometria
-   nunca muda os ids**.
-3. **Rochas por geologia:** formas que leiam o estrato (arenito em
+1. **Jogador e seres em sprites**: personagem principal desenhado (8
+   direções × idle/andar/cortar/escavar/colher/atacar/magoar/dormir),
+   mãos em 1ª pessoa como viewmodel 2D com **cada ferramenta desenhada**,
+   e cada espécie animal/NPC/monstro/peixe/ave com o seu conjunto.
+   Evoluir `pixel_avatar.gd` e o formato de frames por direção em vez de
+   inventar outro sistema. Manter a cápsula de colisão (1,78 m, raio
+   0,34, olhos a 1,62 m) como referência física e de escala.
+2. **Árvores por espécie com silhueta própria, em 3D estilizado**
+   (carvalho largo, bétula esguia e clara, pinheiro cónico alto, sakura
+   torta e rosada, salgueiro pendente): tronco com afunilamento e ramos,
+   copa em 2–3 massas com leitura de luz. Cada espécie liga ao seu `id`
+   em `data/species.json` e aos seus materiais/colheitas em `Db.HARVEST`
+   — **mudar a geometria nunca muda os ids**.
+3. **Rochas por geologia, em 3D:** formas que leiam o estrato (arenito em
    camadas, granito maciço, basalto colunar…) ligadas a
    `geology.gd`/`flint_node`, em vez de um cluster genérico.
-4. **Animais/NPCs:** corpos low-poly com locomoção básica credível
-   (pernas que mexem, cabeça que orienta), dentro da cadeia de 7 passos.
-5. **Estruturas e props:** kit modular (fogueira, mesa, cama, cofre,
-   fundações/paredes/telhado) com silhuetas distintas e encaixe legível.
+4. **Estruturas e props em 3D estilizado:** kit modular (fogueira, mesa,
+   cama, cofre, fundações/paredes/telhado) com silhuetas distintas e
+   encaixe legível. Paredes/tijolos/madeira são sempre 3D — nunca sprites.
 
 **Regras de produção (obrigatórias):**
 - 1 unidade = 1 metro; **não** compensar eixos à mão (Blender→Godot já
@@ -304,4 +388,187 @@ Criar/substituir, por esta ordem de impacto:
   descodifica glTF** — modelos têm de funcionar também pelo fallback de
   código (`Assets` faz essa deteção). Testa os dois caminhos.
 - No laboratório, os props são primitiv
-...[truncated 8184 chars]
+...[truncated 8184 chars]os crus de propósito — o laboratório prova mecânicas, não arte final;
+  não "melhores" os props do laboratório como se fossem o produto.
+
+### 4.2 Água — física e presença (lapidar, não substituir)
+
+O sistema atual (`water.gd` + `shaders/stylized_water.gdshader` +
+recorte por campo assinado nos chunks) **está a ir na forma certa**:
+hidrologia causal real, lagos por priority-flood, rios escavados,
+costa soldada sem serrilhado. O teu trabalho:
+
+- **Espuma de costa** a partir do campo assinado (distância à linha
+  onde nível == altura), animada e com quebra nas margens — nunca um
+  anel duro colado.
+- **Flutuação**: pickups e troncos flutuam com balanço suave e derivam
+  com a corrente (`sample()` já devolve direção/velocidade de fluxo);
+  nada de arrastar nem prender o jogador — a água acompanha, não agarra.
+- **Jogador na água**: resistência suave, salpico ao entrar/sair,
+  câmara submersa com tinta e som filtrado; natação legível pelas
+  mãos em sprite (braçadas).
+- **Maré e hora**: nível do mar com ciclo lento ligado à lua; rios com
+  caudal que responde à chuva; cachoeiras como quedas finitas entre
+  cotas (com reservatório a jusante), nunca água infinita.
+- **Leitura de material**: profundidade/turbidez/salinidade já existem
+  em `sample()` — torna-os visíveis (cor, transparência, espuma) sem
+  superfícies transparentes extra (só UMA superfície transparente no
+  projeto: ver `DECISIONS.md`).
+- Sentinela de "seco": `-100000` (DRY). `water_info` devolve
+  `Vector2(nível, profundidade)`. Não quebres estes contratos.
+
+### 4.3 Terra e escavação — física das camadas
+
+O laboratório já provou (e o mundo grande ainda não tem):
+
+- **Deltas, não destruição da base**: escavar grava `_dig_delta` sobre
+  a grelha e recompõe água/fluxo; a superfície original fica consultável
+  (`original_height`/`depth_dug`). Migrar este desenho para o mundo
+  grande por fatias (primeiro uma área de teste, não o mapa todo).
+- **Camadas com significado**: areia (margem/leito) → solo → subsolo →
+  rocha a >2,3 m ou em afloramento; dureza 1–3; ferramentas com papéis
+  (mão superficial, pá larga e rápida no mole, picareta curta e lenta
+  na rocha). Rendimento por material: `sand`/`soil`/`stone`.
+- **Desmoronamento**: o que falta — terra escavada por baixo deve poder
+  colapsar por ângulo de repouso (células acima do declive estável
+  deslizam), com poeira e som; árvores/objetos sem chão caem (já provado
+  no laboratório com `reseat_props`).
+- **Cavernas (CavePatch)**: só locais e onde a geologia permite; SDF +
+  Surface Nets com anel de borda, colisão orçamentada, entrada/saída
+  navegável. Marching Cubes clássico (tabela de 256 casos) é alternativa
+  válida para o patch — o que reprova é voxel no mundo inteiro.
+- **Perfil do furo**: queda co-seno (tangente horizontal no centro e na
+  orla) — sem degraus onde a água encosta.
+
+### 4.4 Texturas e materiais — dar grão sem esticar
+
+- Procedural primeiro (o projeto evita assets importados): voronoi/
+  ruído isotrópico em espaço de mundo para rocha; estratos horizontais
+  por altitude+ruído para arenito; grão fino de areia; terra com manchas
+  de humidade ligadas aos campos (a mesma humidade que decide biomas).
+- Se gerares PNGs (ferramentas em `tools/`), têm de ser pequenos,
+  tileable, com mipmaps, e lidos em espaço de mundo/triplanar — **nunca**
+  uma textura esticada por face nem UVs que mudam por chunk (costuras).
+- O terreno já traz pesos por vértice (relva/terra/areia/estratos/neve):
+  estende esse contrato em vez de o substituir; a cor da relva vem do
+  bioma, a lâmina só acrescenta a rampa base→ponta (ver `DECISIONS.md`).
+
+### 4.5 Sons — feedback por material (a tecnologia atual é síntese)
+
+Tudo é sintetizado em `scripts/core/sfx.gd` (ruído + filtros one-pole +
+tons → WAV). Melhora **dentro** deste desenho (ou propõe amostras
+geradas por script, nunca ficheiros descarregados sem licença clara):
+
+- **Por material, com a mesma fonte de verdade do gameplay**:
+  cavar/minerar lê `material_at`/`material_hardness` — areia (fofo,
+  grave filtrado), terra (baque surdo), rocha (clac metálico + faísca
+  sonora), negação (tink seco e curto). Dureza ouve-se.
+- **Passos por superfície** (areia/terra/rocha/relva/madeira/água) com
+  variação de pitch/ritmo para não repetir.
+- **Água**: salpico por velocidade de entrada, natação, submerso com
+  lowpass + bolhas raras; ambiente por bioma/hora (vento, insetos de
+  dia, silêncio tenso à noite) em camadas de baixo volume.
+- Pools de `AudioStreamPlayer3D/2D` já existem — reutiliza; distância e
+  oclusão simples antes de quantidade de sons.
+
+### 4.6 LOD e desempenho — medir primeiro
+
+- Faixas: LOD0 <60 m / LOD1 <120 m / LOD2 <180 m / LOD3 horizonte (só
+  terreno), histerese de 8 m, colisão e sombras só no LOD0. Sprites:
+  animação completa perto, frame estático longe (ver especificação no
+  topo). Relva some ~50 m e continua na cor do terreno.
+- **Antes de otimizar, mede**: FPS, tempo de geração de chunk e VRAM em
+  pontos fixos, em Forward+ e em Compatibility/Web, e regista no PR.
+  Sem números, qualquer "otimização" é chute.
+- Alvos de lapidação: zero pop visível de árvores/sprites, sombras que
+  não desaparecem ao tocar no chão, mar contínuo entre chunks, e custo
+  de reconstrução proporcional à área tocada (nunca a ilha inteira).
+
+### 4.7 Relva e vegetação — derivada dos campos
+
+- MultiMesh por chunk, densidade de `moisture/biome/slope/material/
+  depth_dug` da superfície **atual** (o laboratório já faz isto —
+  porta o desenho). Cavar expõe camada e a relva some; aterrar +
+  tempo = recresce. Vento nos shaders de folhagem/relva existentes.
+- Nada de relva verde sobre areia seca nem dentro de água; transições
+  por humidade contínua, não por fronteira de bioma.
+
+---
+
+## 5. Método de trabalho e armadilhas (não repetir os nossos erros)
+
+**Método:** (1) lê os docs da §2.4; (2) implementa primeiro numa
+estação do laboratório; (3) prova com os testes (`-- selftest`,
+`-- labtest`, `-- labscene`; nova `class_name` ⇒ `gen_class_cache.py`);
+(4) gera o PNG da etapa; (5) atualiza `CHECKPOINT.md`; (6) commit +
+push + **link direto do GitHub**. Pergunta ao dono quando uma decisão
+for de gosto/arte — não adivinhes o gosto dele.
+
+**Armadilhas já pagas por nós (não repetir):**
+
+1. **Winding**: no Godot a face frontal é a de winding **HORÁRIA**; a
+   convenção que funciona está em `scripts/world/chunk.gd`
+   (`a,b,c / a,c,d`). Winding espelhada = face de cima descartada por
+   backface culling (só se vê por baixo) — já nos custou uma etapa.
+   `cull_disabled` é diagnóstico, nunca solução.
+2. **Normais ≠ winding**: declarar normais "para cima" com triângulos
+   virados é contradição que a auditoria de winding apanha — usa-a.
+3. **Altura analítica ≠ malha**: o jogador anda sobre triângulos; testes
+   de spawn/colisão medem-se contra a malha (raycast), não contra
+   `height()` com tolerância apertada.
+4. **Receitas em dois sítios**: `Db` e `data/recipes.json` têm de dizer
+   o mesmo (há teste). Itens novos entram nos dois + locales PT/EN.
+5. **GDScript**: chave duplicada em Dictionary = Parse Error; índices de
+   grelha derivados de iteração precisam de tipo explícito (`: int`);
+   ternário com array literal pode devolver vazio ao converter tipos.
+6. **Build web**: sem `GLTFDocument` no template — todo o modelo precisa
+   de caminho de código alternativo; shaders compatíveis com
+   Compatibility **e** Forward+.
+7. **Não faças `git checkout --` sobre edições não commitadas** nem
+   `json.dumps` sobre os locales (destrói a formatação).
+8. **Priority-flood, não "levantar o mínimo"**, para bacias/lagos: lago
+   é `filled − base > 0,5`. Distância a água doce (`_fresh_dist`) é
+   separada da distância ao oceano — não as mistures.
+
+---
+
+## 6. Ordem de trabalho sugerida
+
+```text
+P0  Sprites direcionais: jogador + 3 animais completos (8 dir × ações),
+    mãos/viewmodel com as ferramentas por tier — provados no laboratório
+P0b Árvores/rochas 3D estilizadas por espécie/geologia (LOD1/2 incluídos)
+P1  Sons por material (escavar, passos, negação) com material_at
+P2  Água: espuma de costa, flutuação de pickups, salpico/submerso, maré
+P3  Texturas procedurais do terreno (rocha/areia/terra por campos)
+P4  Medição de desempenho (Forward+ vs Web) e lapidação de LOD com números
+P5  Escavação do laboratório migrada para uma área do mundo grande
+P6  CavePatch SDF/Surface Nets (carste) — só depois de P5 estar sólido
+```
+
+Em cada passo: laboratório primeiro, teste a provar gameplay, PNG,
+checkpoint, link. Se algo desta lista contradisser o gosto do dono em
+teste real, **o teste do dono ganha** — este documento é a nossa melhor
+intenção, não uma lei acima dos olhos dele.
+
+---
+
+## 7. Glossário rápido de ficheiros
+
+| Quero… | Vai a… |
+|---|---|
+| Regras de arte/sprites | Topo deste documento + `docs/MODEL_SCALE_GUIDE.md` |
+| Visão e desenho do jogo | `docs/DESIGN.md`, `docs/GAMEPLAY_ARCHITECTURE.md` |
+| Arquitetura do mundo | `docs/WORLD_SYSTEMS.md`, `scripts/world/terrain.gd` |
+| Laboratório (provar mecânicas) | `docs/LAB_WORLD.md`, `scenes/lab.tscn`, `scripts/lab/` |
+| Itens/receitas/harvest | `scripts/core/db.gd` + `data/*.json` |
+| Sons | `scripts/core/sfx.gd` |
+| Água/rios/lagos | `scripts/world/water.gd`, `shaders/stylized_water.gdshader` |
+| Bugs que não podem voltar | `KNOWN_ISSUES.md` |
+| Decisões e porquês | `DECISIONS.md` |
+| Onde parámos | `CHECKPOINT.md` (fim do ficheiro = estado mais recente) |
+
+**Última palavra:** o dono está a jogar e a reprovar coisas em tempo
+real. O teu sucesso mede-se pelo que ele vê e sente no ecrã — silhuetas
+que se leem, poeira que ensina, água que se sente, sons que explicam —
+e não por testes verdes sobre figuras geométricas. Não o dececiones.
